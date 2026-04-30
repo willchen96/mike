@@ -52,8 +52,16 @@ chatRouter.get("/", requireAuth, async (req, res) => {
 // POST /chat/create
 chatRouter.post("/create", requireAuth, async (req, res) => {
     const userId = res.locals.userId as string;
+    const userEmail = res.locals.userEmail as string | undefined;
     const projectId: string | null = req.body.project_id ?? null;
     const db = createServerSupabase();
+
+    if (projectId) {
+        const access = await checkProjectAccess(projectId, userId, userEmail, db);
+        if (!access.ok)
+            return void res.status(404).json({ detail: "Project not found" });
+    }
+
     const { data, error } = await db
         .from("chats")
         .insert({ user_id: userId, project_id: projectId ?? undefined })
