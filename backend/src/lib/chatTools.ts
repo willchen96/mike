@@ -126,6 +126,24 @@ When a user message begins with a [Workflow: <title> (id: <id>)] marker, the use
 DOCUMENT NAMING IN PROSE:
 The chat-local labels ("doc-0", "doc-1", "doc-N", …) are internal handles for tool calls and citation JSON ONLY. NEVER write them in your prose response or in any text the user reads — not in body text, not in headings, not in lists, not in tool-activity descriptions. The user does not know what "doc-0" means and seeing it is jarring. When referring to a document in prose, always use its filename (e.g. "the NDA draft" or "nda_v1.docx"). This rule applies to every word streamed back to the user; the only places "doc-N" identifiers are allowed are inside tool-call arguments and inside the <CITATIONS> JSON block's "doc_id" field.
 
+EXTERNAL SEARCH:
+When the user asks about case law, statutes, regulations, sanctions checks, company filings, or any information that may not be in the uploaded documents, use the search_external tool to query live external sources.
+Prefer search_external over relying on your training knowledge for legal research, as case law and regulatory data changes frequently.
+After receiving results, always cite the source URL inline in your prose — do not reproduce large excerpts, just summarise the finding and link to the source.
+If search_external is unavailable (returns a configuration error), tell the user that external search is not configured and answer from your training knowledge with an appropriate caveat.
+When the user asks to add, import, save, or pull a specific search result into the project, call import_document with the url (and content_url and provider_id if present) from that result. After a successful import, tell the user the document has been added and is ready to use.
+CRITICAL: If you have already shown the user a numbered list of search results in this conversation, and they ask to import one of them (e.g. "import #1", "yes", "the first one", "import the Finance copy"), you MUST use the URL from your previous response — do NOT call search_external again. The URLs are already in context. Re-running the search wastes time and may return results in a different order, causing you to import the wrong document.
+
+MICROSOFT 365 SEARCH:
+The external search backend includes Microsoft 365 sources (OneDrive, SharePoint, Outlook, Teams). You can scope a search to a specific M365 source by prefixing the query with the source name followed by a colon. Use these prefixes whenever the user is looking for internal company documents, emails, or files stored in Microsoft 365:
+- onedrive:<query>  — files stored in the user's OneDrive
+- sharepoint:<query> — SharePoint sites and document libraries
+- outlook:<query>   — Outlook email messages
+- teams:<query>     — Microsoft Teams messages and files
+- microsoft:<query> — all configured M365 sources at once
+Examples: "onedrive:cyber insurance policy 2025", "sharepoint:Q3 board minutes", "outlook:contract renewal notice"
+When the user says things like "search my files", "look in our SharePoint", "find the email about X", or "check OneDrive for Y", automatically use the appropriate prefix rather than searching all sources.
+
 GENERAL GUIDANCE:
 - Be precise and professional
 - Cite the specific document and quote when making claims about document content
@@ -254,6 +272,217 @@ export const WORKFLOW_TOOLS = [
         },
     },
 ];
+
+// ---------------------------------------------------------------------------
+// SWIRL federated search helper
+// ---------------------------------------------------------------------------
+
+function swirlAuthHeader(): string | null {
+    const token    = process.env.SWIRL_TOKEN;
+    const username = process.env.SWIRL_USERNAME;
+    const password = process.env.SWIRL_PASSWORD;
+    if (username && password) {
+        return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+    }
+    if (token) return `Token ${token}`;
+    return null;
+}
+
+async function callSwirlSearch(
+    query: string,
+    providers?: string[],
+    maxResults = 10,
+): Promise<string> {
+    const swirlUrl = process.env.SWIRL_URL;
+
+    if (!swirlUrl) {
+        return JSON.stringify({ error: "External search is not configured (SWIRL_URL missing)." });
+    }
+
+    const params = new URLSearchParams({ qs: query, results: String(maxResults) });
+    if (providers && providers.length > 0) {
+        params.set("providers", providers.join(","));
+    }
+
+    try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        const auth = swirlAuthHeader();
+        if (auth) headers["Authorization"] = auth;
+
+        const resp = await fetch(`${swirlUrl}/swirl/search/?${params}`, {
+            headers,
+            signal: AbortSignal.timeout(30_000),
+        });
+        if (!resp.ok) {
+            return JSON.stringify({ error: `SWIRL returned HTTP ${resp.status}` });
+        }
+
+        const data = await resp.json() as {
+            results?: Array<{
+                title?: string;
+                body?: string;
+                url?: string;
+                content_url?: string;
+                provider_id?: number;
+                searchprovider?: string;
+                date_published?: string;
+                swirl_rank?: number;
+            }>;
+        };
+
+        if (!data.results || data.results.length === 0) {
+            return JSON.stringify({ results: [], message: "No results found." });
+        }
+
+        const formatted = data.results.slice(0, maxResults).map((r, i) => ({
+            rank: i + 1,
+            title: r.title ?? "(no title)",
+            snippet: r.body ?? "",
+            url: r.url ?? "",
+            content_url: r.content_url ?? null,
+            provider_id: r.provider_id ?? null,
+            source: r.searchprovider ?? "unknown",
+            date: r.date_published ?? null,
+        }));
+
+        return JSON.stringify({ results: formatted });
+    } catch (err) {
+        return JSON.stringify({ error: `Search failed: ${String(err)}` });
+    }
+}
+
+const IMPORTABLE_TYPES = new Set(["pdf", "docx", "doc"]);
+
+async function fetchAndImportDocument(opts: {
+    fetchUrl: string;
+    providerId?: number;
+    filename: string;
+    userId: string;
+    projectId: string | null;
+    db: ReturnType<typeof import("./supabase").createServerSupabase>;
+}): Promise<unknown> {
+    const { fetchUrl, providerId, filename, userId, projectId, db } = opts;
+    const swirlUrl = process.env.SWIRL_URL;
+
+    // Determine file extension.
+    const suffix = filename.includes(".")
+        ? filename.split(".").pop()!.toLowerCase()
+        : "";
+    if (!IMPORTABLE_TYPES.has(suffix)) {
+        throw new Error(`Unsupported file type: ${suffix || "(unknown)"}. Allowed: pdf, docx, doc`);
+    }
+
+    // Fetch bytes — prefer the SWIRL proxy (handles OAuth for M365/Box),
+    // fall back to a direct GET for public URLs.
+    let rawBytes: ArrayBuffer;
+    let resolvedContentType = suffix === "pdf" ? "application/pdf"
+        : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+    let fetched = false;
+    if (swirlUrl) {
+        const params = new URLSearchParams({ url: fetchUrl });
+        if (providerId) params.set("provider_id", String(providerId));
+        const proxyUrl = `${swirlUrl}/swirl/fetch-document/?${params}`;
+        const headers: Record<string, string> = {};
+        const auth = swirlAuthHeader();
+        if (auth) headers["Authorization"] = auth;
+        console.log(`[fetchAndImportDocument] SWIRL proxy: GET ${proxyUrl} auth=${!!auth}`);
+        try {
+            const resp = await fetch(proxyUrl, {
+                headers,
+                signal: AbortSignal.timeout(60_000),
+            });
+            console.log(`[fetchAndImportDocument] SWIRL proxy response: ${resp.status} ${resp.statusText}`);
+            if (resp.ok) {
+                const ct = resp.headers.get("content-type");
+                if (ct) resolvedContentType = ct.split(";")[0].trim();
+                rawBytes = await resp.arrayBuffer();
+                fetched = true;
+            } else {
+                const body = await resp.text().catch(() => "");
+                throw new Error(`SWIRL fetch-document returned HTTP ${resp.status}: ${body.slice(0, 200)}`);
+            }
+        } catch (err) {
+            console.error(`[fetchAndImportDocument] SWIRL proxy failed:`, err);
+            throw err; // surface the real error rather than falling back to a no-auth direct fetch
+        }
+    }
+
+    if (!fetched) {
+        // No SWIRL URL configured — attempt a direct (unauthenticated) fetch.
+        const resp = await fetch(fetchUrl, { signal: AbortSignal.timeout(60_000) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching ${fetchUrl}`);
+        const ct = resp.headers.get("content-type");
+        if (ct) resolvedContentType = ct.split(";")[0].trim();
+        rawBytes = await resp.arrayBuffer();
+    }
+
+    // Import via the existing upload pipeline.
+    const { uploadFile, storageKey } = await import("./storage");
+    const { docxToPdf, convertedPdfKey } = await import("./convert");
+
+    const sizeBytes = rawBytes!.byteLength;
+    const { data: doc, error: insertErr } = await db
+        .from("documents")
+        .insert({
+            project_id: projectId,
+            user_id: userId,
+            filename,
+            file_type: suffix,
+            size_bytes: sizeBytes,
+            status: "processing",
+        })
+        .select("*")
+        .single();
+    if (insertErr || !doc) throw new Error(`Failed to create document record: ${insertErr?.message}`);
+
+    const docId = doc.id as string;
+    const key = storageKey(userId, docId, filename);
+    await uploadFile(key, rawBytes!, resolvedContentType);
+
+    let pdfStoragePath: string | null = null;
+    if (suffix === "docx" || suffix === "doc") {
+        try {
+            const pdfBuf = await docxToPdf(Buffer.from(rawBytes!));
+            const pdfKey = convertedPdfKey(userId, docId);
+            await uploadFile(
+                pdfKey,
+                pdfBuf.buffer.slice(pdfBuf.byteOffset, pdfBuf.byteOffset + pdfBuf.byteLength) as ArrayBuffer,
+                "application/pdf",
+            );
+            pdfStoragePath = pdfKey;
+        } catch {
+            // conversion failure is non-fatal
+        }
+    } else if (suffix === "pdf") {
+        pdfStoragePath = key;
+    }
+
+    const { data: versionRow, error: verErr } = await db
+        .from("document_versions")
+        .insert({
+            document_id: docId,
+            storage_path: key,
+            pdf_storage_path: pdfStoragePath,
+            source: "upload",
+            version_number: 1,
+            display_name: filename,
+        })
+        .select("id")
+        .single();
+    if (verErr || !versionRow) throw new Error(`Failed to record version: ${verErr?.message}`);
+
+    await db
+        .from("documents")
+        .update({
+            current_version_id: versionRow.id,
+            status: "ready",
+            updated_at: new Date().toISOString(),
+        })
+        .eq("id", docId);
+
+    return { ok: true, document_id: docId, filename, doc_id: `doc-${docId}` };
+}
 
 export const TOOLS = [
     {
@@ -410,6 +639,81 @@ export const TOOLS = [
                     },
                 },
                 required: ["doc_id", "edits"],
+            },
+        },
+    },
+    {
+        type: "function",
+        function: {
+            name: "search_external",
+            description:
+                "Search external legal and compliance data sources for information not present in the uploaded documents. " +
+                "Use this to look up case law, statutes, sanctions lists, company filings, regulatory guidance, or any live data source. " +
+                "Returns ranked results with title, snippet, source, and URL. " +
+                "Always cite the source URL in your response when using results from this tool.",
+            parameters: {
+                type: "object",
+                properties: {
+                    query: {
+                        type: "string",
+                        description:
+                            "Natural language search query. Be specific — include jurisdiction, document type, " +
+                            "party names, or statute references when relevant. " +
+                            "To restrict to a specific Microsoft 365 source, prefix the query with the source name and a colon: " +
+                            "'onedrive:<query>', 'sharepoint:<query>', 'outlook:<query>', 'teams:<query>', or 'microsoft:<query>' for all M365 sources. " +
+                            "Example: 'onedrive:cyber insurance policy 2025'.",
+                    },
+                    providers: {
+                        type: "array",
+                        items: { type: "string" },
+                        description:
+                            "Optional list of source names to restrict the search to (e.g. ['CourtListener', 'OpenSanctions']). " +
+                            "Omit to search all configured sources.",
+                    },
+                    max_results: {
+                        type: "integer",
+                        description: "Maximum results to return (default 10, max 50).",
+                    },
+                },
+                required: ["query"],
+            },
+        },
+    },
+    {
+        type: "function",
+        function: {
+            name: "import_document",
+            description:
+                "Import a document from a URL returned by search_external into the current project. " +
+                "Use this when the user asks to add, import, or save a specific search result to the project. " +
+                "Pass the url (and content_url and provider_id if present) exactly as returned by search_external.",
+            parameters: {
+                type: "object",
+                properties: {
+                    url: {
+                        type: "string",
+                        description: "The url field from the search_external result.",
+                    },
+                    content_url: {
+                        type: "string",
+                        description:
+                            "The content_url field from the search_external result, if present. " +
+                            "This is the direct download URL for the document bytes.",
+                    },
+                    provider_id: {
+                        type: "integer",
+                        description:
+                            "The provider_id field from the search_external result, if present. " +
+                            "Used to select the correct credentials when fetching from authenticated sources.",
+                    },
+                    filename: {
+                        type: "string",
+                        description:
+                            "Optional filename for the imported document. " +
+                            "If omitted, the filename is inferred from the URL.",
+                    },
+                },
+                required: ["url"],
             },
         },
     },
@@ -2195,6 +2499,57 @@ export async function runToolCalls(
                 tool_call_id: tc.id,
                 content: JSON.stringify(toolResultPayload),
             });
+        } else if (tc.function.name === "search_external") {
+            const { query, providers, max_results } = args as {
+                query: string;
+                providers?: string[];
+                max_results?: number;
+            };
+            write(`data: ${JSON.stringify({ type: "content", text: "" })}\n\n`);
+            const content = await callSwirlSearch(query, providers, max_results ?? 10);
+            toolResults.push({ role: "tool", tool_call_id: tc.id, content });
+
+        } else if (tc.function.name === "import_document") {
+            const { url, content_url, provider_id, filename } = args as {
+                url: string;
+                content_url?: string;
+                provider_id?: number;
+                filename?: string;
+            };
+            const fetchUrl = content_url || url;
+            const inferredFilename = filename || fetchUrl.split("?")[0].split("/").filter(Boolean).pop() || "document";
+            write(`data: ${JSON.stringify({ type: "content", text: "" })}\n\n`);
+            try {
+                const importResult = await fetchAndImportDocument({
+                    fetchUrl,
+                    providerId: provider_id,
+                    filename: inferredFilename,
+                    userId,
+                    projectId: projectId ?? null,
+                    db,
+                });
+                // Emit doc_created_start then doc_created to the SSE stream so
+                // the frontend project mutation signal fires and the document
+                // sidebar refreshes automatically (same two-step pattern as
+                // generate_docx). Also push to docsCreated so the event is
+                // persisted in chat_messages for future page loads.
+                const ir = importResult as { document_id?: string; filename?: string };
+                const importedFilename = ir.filename ?? inferredFilename;
+                write(`data: ${JSON.stringify({ type: "doc_created_start", filename: importedFilename })}\n\n`);
+                write(`data: ${JSON.stringify({ type: "doc_created", filename: importedFilename, download_url: "", document_id: ir.document_id })}\n\n`);
+                docsCreated.push({
+                    filename: importedFilename,
+                    download_url: "",
+                    document_id: ir.document_id,
+                });
+                toolResults.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(importResult) });
+            } catch (err) {
+                toolResults.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: JSON.stringify({ error: `Import failed: ${String(err)}` }),
+                });
+            }
         }
     }
 
