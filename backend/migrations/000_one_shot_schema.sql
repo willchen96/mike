@@ -82,6 +82,36 @@ create index if not exists idx_projects_user
 create index if not exists projects_shared_with_idx
   on public.projects using gin (shared_with);
 
+alter table public.projects enable row level security;
+
+drop policy if exists projects_select_owner_or_shared on public.projects;
+create policy projects_select_owner_or_shared
+  on public.projects for select
+  using (
+    user_id = auth.uid()::text
+    or exists (
+      select 1
+      from jsonb_array_elements_text(coalesce(shared_with, '[]'::jsonb)) as member(email)
+      where lower(member.email) = lower(coalesce(auth.jwt()->>'email', ''))
+    )
+  );
+
+drop policy if exists projects_insert_owner_only on public.projects;
+create policy projects_insert_owner_only
+  on public.projects for insert
+  with check (user_id = auth.uid()::text);
+
+drop policy if exists projects_update_owner_only on public.projects;
+create policy projects_update_owner_only
+  on public.projects for update
+  using (user_id = auth.uid()::text)
+  with check (user_id = auth.uid()::text);
+
+drop policy if exists projects_delete_owner_only on public.projects;
+create policy projects_delete_owner_only
+  on public.projects for delete
+  using (user_id = auth.uid()::text);
+
 create table if not exists public.project_subfolders (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
@@ -242,6 +272,65 @@ create index if not exists idx_chats_user
 create index if not exists idx_chats_project
   on public.chats(project_id);
 
+alter table public.chats enable row level security;
+
+drop policy if exists chats_select_owner_or_project_member on public.chats;
+create policy chats_select_owner_or_project_member
+  on public.chats for select
+  using (
+    user_id = auth.uid()::text
+    or (
+      project_id is not null
+      and exists (
+        select 1
+        from public.projects p
+        where p.id = chats.project_id
+          and (
+            p.user_id = auth.uid()::text
+            or exists (
+              select 1
+              from jsonb_array_elements_text(coalesce(p.shared_with, '[]'::jsonb)) as member(email)
+              where lower(member.email) = lower(coalesce(auth.jwt()->>'email', ''))
+            )
+          )
+      )
+    )
+  );
+
+drop policy if exists chats_insert_user_and_project_access on public.chats;
+create policy chats_insert_user_and_project_access
+  on public.chats for insert
+  with check (
+    user_id = auth.uid()::text
+    and (
+      project_id is null
+      or exists (
+        select 1
+        from public.projects p
+        where p.id = chats.project_id
+          and (
+            p.user_id = auth.uid()::text
+            or exists (
+              select 1
+              from jsonb_array_elements_text(coalesce(p.shared_with, '[]'::jsonb)) as member(email)
+              where lower(member.email) = lower(coalesce(auth.jwt()->>'email', ''))
+            )
+          )
+      )
+    )
+  );
+
+drop policy if exists chats_update_owner_only on public.chats;
+create policy chats_update_owner_only
+  on public.chats for update
+  using (user_id = auth.uid()::text)
+  with check (user_id = auth.uid()::text);
+
+drop policy if exists chats_delete_owner_only on public.chats;
+create policy chats_delete_owner_only
+  on public.chats for delete
+  using (user_id = auth.uid()::text);
+
 create table if not exists public.chat_messages (
   id uuid primary key default gen_random_uuid(),
   chat_id uuid not null references public.chats(id) on delete cascade,
@@ -254,6 +343,68 @@ create table if not exists public.chat_messages (
 
 create index if not exists idx_chat_messages_chat
   on public.chat_messages(chat_id);
+
+alter table public.chat_messages enable row level security;
+
+drop policy if exists chat_messages_select_by_chat_access on public.chat_messages;
+create policy chat_messages_select_by_chat_access
+  on public.chat_messages for select
+  using (
+    exists (
+      select 1
+      from public.chats c
+      where c.id = chat_messages.chat_id
+        and (
+          c.user_id = auth.uid()::text
+          or (
+            c.project_id is not null
+            and exists (
+              select 1
+              from public.projects p
+              where p.id = c.project_id
+                and (
+                  p.user_id = auth.uid()::text
+                  or exists (
+                    select 1
+                    from jsonb_array_elements_text(coalesce(p.shared_with, '[]'::jsonb)) as member(email)
+                    where lower(member.email) = lower(coalesce(auth.jwt()->>'email', ''))
+                  )
+                )
+            )
+          )
+        )
+    )
+  );
+
+drop policy if exists chat_messages_insert_by_chat_access on public.chat_messages;
+create policy chat_messages_insert_by_chat_access
+  on public.chat_messages for insert
+  with check (
+    exists (
+      select 1
+      from public.chats c
+      where c.id = chat_messages.chat_id
+        and (
+          c.user_id = auth.uid()::text
+          or (
+            c.project_id is not null
+            and exists (
+              select 1
+              from public.projects p
+              where p.id = c.project_id
+                and (
+                  p.user_id = auth.uid()::text
+                  or exists (
+                    select 1
+                    from jsonb_array_elements_text(coalesce(p.shared_with, '[]'::jsonb)) as member(email)
+                    where lower(member.email) = lower(coalesce(auth.jwt()->>'email', ''))
+                  )
+                )
+            )
+          )
+        )
+    )
+  );
 
 do $$
 begin
