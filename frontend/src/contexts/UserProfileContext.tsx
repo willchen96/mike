@@ -21,6 +21,7 @@ interface UserProfile {
     tabularModel: string;
     claudeApiKey: string | null;
     geminiApiKey: string | null;
+    openrouterApiKey: string | null;
 }
 
 interface UserProfileContextType {
@@ -33,7 +34,7 @@ interface UserProfileContextType {
         value: string,
     ) => Promise<boolean>;
     updateApiKey: (
-        provider: "claude" | "gemini",
+        provider: "claude" | "gemini" | "openrouter",
         value: string | null,
     ) => Promise<boolean>;
     reloadProfile: () => Promise<void>;
@@ -77,6 +78,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                     tabularModel: "gemini-3-flash-preview",
                     claudeApiKey: null,
                     geminiApiKey: null,
+                    openrouterApiKey: null,
                 });
                 return;
             }
@@ -111,6 +113,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                         data.tabular_model || "gemini-3-flash-preview",
                     claudeApiKey: data.claude_api_key ?? null,
                     geminiApiKey: data.gemini_api_key ?? null,
+                    openrouterApiKey: data.openrouter_api_key ?? null,
                 });
 
                 // 2. Update database in background if needed
@@ -148,6 +151,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                 tabularModel: "gemini-3-flash-preview",
                 claudeApiKey: null,
                 geminiApiKey: null,
+                openrouterApiKey: null,
             });
         } finally {
             setLoading(false);
@@ -245,14 +249,22 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
     const updateApiKey = useCallback(
         async (
-            provider: "claude" | "gemini",
+            provider: "claude" | "gemini" | "openrouter",
             value: string | null,
         ): Promise<boolean> => {
             if (!user) return false;
-            const dbField =
-                provider === "claude" ? "claude_api_key" : "gemini_api_key";
-            const stateField =
-                provider === "claude" ? "claudeApiKey" : "geminiApiKey";
+            const dbFieldMap: Record<string, string> = {
+                claude: "claude_api_key",
+                gemini: "gemini_api_key",
+                openrouter: "openrouter_api_key",
+            };
+            const stateFieldMap: Record<string, string> = {
+                claude: "claudeApiKey",
+                gemini: "geminiApiKey",
+                openrouter: "openrouterApiKey",
+            };
+            const dbField = dbFieldMap[provider];
+            const stateField = stateFieldMap[provider];
             const normalized = value?.trim() ? value.trim() : null;
             try {
                 const { error } = await supabase
