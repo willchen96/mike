@@ -16,59 +16,64 @@ const ALLOWED_TYPES = new Set(["pdf", "docx", "doc"]);
 
 // GET /projects
 projectsRouter.get("/", requireAuth, async (req, res) => {
-  const userId = res.locals.userId as string;
-  const userEmail = res.locals.userEmail as string;
-  const db = createServerSupabase();
+  try {
+    const userId = res.locals.userId as string;
+    const userEmail = res.locals.userEmail as string;
+    const db = createServerSupabase();
 
-  const { data: ownProjects, error: ownError } = await db
-    .from("projects")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-  if (ownError) return void res.status(500).json({ detail: ownError.message });
+    const { data: ownProjects, error: ownError } = await db
+      .from("projects")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+    if (ownError) return void res.status(500).json({ detail: ownError.message });
 
-  const { data: sharedProjects, error: sharedError } = userEmail
-    ? await db
-        .from("projects")
-        .select("*")
-        .contains("shared_with", [userEmail])
-        .neq("user_id", userId)
-        .order("created_at", { ascending: false })
-    : { data: [], error: null };
-  if (sharedError)
-    return void res.status(500).json({ detail: sharedError.message });
+    const { data: sharedProjects, error: sharedError } = userEmail
+      ? await db
+          .from("projects")
+          .select("*")
+          .filter("shared_with", "cs", JSON.stringify([userEmail]))
+          .neq("user_id", userId)
+          .order("created_at", { ascending: false })
+      : { data: [], error: null };
+    if (sharedError)
+      return void res.status(500).json({ detail: sharedError.message });
 
-  const projects = [...(ownProjects ?? []), ...(sharedProjects ?? [])].sort(
-    (a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
+    const projects = [...(ownProjects ?? []), ...(sharedProjects ?? [])].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
 
-  const result = await Promise.all(
-    projects.map(async (p) => {
-      const [docs, chats, reviews] = await Promise.all([
-        db
-          .from("documents")
-          .select("id", { count: "exact", head: true })
-          .eq("project_id", p.id),
-        db
-          .from("chats")
-          .select("id", { count: "exact", head: true })
-          .eq("project_id", p.id),
-        db
-          .from("tabular_reviews")
-          .select("id", { count: "exact", head: true })
-          .eq("project_id", p.id),
-      ]);
-      return {
-        ...p,
-        is_owner: p.user_id === userId,
-        document_count: docs.count ?? 0,
-        chat_count: chats.count ?? 0,
-        review_count: reviews.count ?? 0,
-      };
-    }),
-  );
-  res.json(result);
+    const result = await Promise.all(
+      projects.map(async (p) => {
+        const [docs, chats, reviews] = await Promise.all([
+          db
+            .from("documents")
+            .select("id", { count: "exact", head: true })
+            .eq("project_id", p.id),
+          db
+            .from("chats")
+            .select("id", { count: "exact", head: true })
+            .eq("project_id", p.id),
+          db
+            .from("tabular_reviews")
+            .select("id", { count: "exact", head: true })
+            .eq("project_id", p.id),
+        ]);
+        return {
+          ...p,
+          is_owner: p.user_id === userId,
+          document_count: docs.count ?? 0,
+          chat_count: chats.count ?? 0,
+          review_count: reviews.count ?? 0,
+        };
+      }),
+    );
+    res.json(result);
+  } catch (err) {
+    console.error("[projects] unhandled error:", err);
+    res.status(500).json({ detail: String(err) });
+  }
 });
 
 // POST /projects
