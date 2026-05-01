@@ -9,6 +9,9 @@ import { tabularRouter } from "./routes/tabular";
 import { workflowsRouter } from "./routes/workflows";
 import { userRouter } from "./routes/user";
 import { downloadsRouter } from "./routes/downloads";
+import { assertDownloadSigningConfigured } from "./lib/downloadTokens";
+
+assertDownloadSigningConfigured();
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;

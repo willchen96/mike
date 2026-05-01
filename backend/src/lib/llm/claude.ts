@@ -10,6 +10,20 @@ import type {
 } from "./types";
 import { toClaudeTools } from "./tools";
 
+// Opt-in raw-stream debug logging. Set `DEBUG_RAW_LLM_STREAM` to one of
+// 1 / true / yes / on (case-insensitive) to mirror every Claude SSE event
+// to a file in cwd; otherwise we skip the write entirely so production
+// deployments don't accumulate an unbounded log. We parse explicitly so
+// "false" / "0" / "no" do not accidentally enable logging.
+//
+// WARNING: when enabled, the log captures whatever the model is processing
+// — for this app, that includes user-submitted legal documents. Treat the
+// log as sensitive: dev/staging only, restrictive file mode, rotate/purge
+// out of band.
+const RAW_STREAM_DEBUG = ["1", "true", "yes", "on"].includes(
+    (process.env.DEBUG_RAW_LLM_STREAM ?? "").trim().toLowerCase(),
+);
+const RAW_STREAM_LOG_MODE = 0o600;
 const RAW_STREAM_LOG_PATH = path.resolve(
     process.cwd(),
     "claude-raw-stream.log",
@@ -80,11 +94,18 @@ export async function streamClaude(
 
         let sawThinking = false;
 
-        stream.on("streamEvent", (event) => {
-            const line = JSON.stringify(event);
-            console.log("[claude raw stream]", line);
-            fs.appendFile(RAW_STREAM_LOG_PATH, line + "\n", () => {});
-        });
+        if (RAW_STREAM_DEBUG) {
+            stream.on("streamEvent", (event) => {
+                const line = JSON.stringify(event);
+                console.log("[claude raw stream]", line);
+                fs.appendFile(
+                    RAW_STREAM_LOG_PATH,
+                    line + "\n",
+                    { mode: RAW_STREAM_LOG_MODE },
+                    () => {},
+                );
+            });
+        }
 
         stream.on("text", (delta) => {
             callbacks.onContentDelta?.(delta);

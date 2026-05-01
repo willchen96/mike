@@ -52,8 +52,31 @@ chatRouter.get("/", requireAuth, async (req, res) => {
 // POST /chat/create
 chatRouter.post("/create", requireAuth, async (req, res) => {
     const userId = res.locals.userId as string;
-    const projectId: string | null = req.body.project_id ?? null;
+    const userEmail = res.locals.userEmail as string | undefined;
+    const rawProjectId: unknown = req.body.project_id;
+    let projectId: string | null = null;
+    if (rawProjectId !== null && rawProjectId !== undefined) {
+        if (typeof rawProjectId !== "string" || !rawProjectId.trim()) {
+            return void res
+                .status(400)
+                .json({ detail: "Invalid project_id" });
+        }
+        projectId = rawProjectId.trim();
+    }
     const db = createServerSupabase();
+
+    // Project chats require owner/shared access, matching POST /chat.
+    if (projectId) {
+        const access = await checkProjectAccess(
+            projectId,
+            userId,
+            userEmail,
+            db,
+        );
+        if (!access.ok)
+            return void res.status(404).json({ detail: "Project not found" });
+    }
+
     const { data, error } = await db
         .from("chats")
         .insert({ user_id: userId, project_id: projectId ?? undefined })

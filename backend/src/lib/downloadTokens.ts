@@ -7,14 +7,35 @@ import crypto from "crypto";
  * `/download/:token` validates the signature and streams the file. This
  * gives persistent links safe to store in chat history without signed-URL
  * expiry or R2 CORS headaches.
+ *
+ * The signing secret comes from `DOWNLOAD_SIGNING_SECRET` (preferred) or
+ * falls back to `SUPABASE_SECRET_KEY`. If neither is set we throw rather
+ * than silently signing every link with a hardcoded literal — a forgeable
+ * default would let any caller mint download URLs for arbitrary keys.
  */
 
 function getSecret(): string {
-    return (
-        process.env.DOWNLOAD_SIGNING_SECRET ??
-        process.env.SUPABASE_SECRET_KEY ??
-        "dev-secret"
-    );
+    // Trim and ignore empty/whitespace values so a deploy with
+    // `DOWNLOAD_SIGNING_SECRET=` (e.g. an unfilled env template) still
+    // falls back to SUPABASE_SECRET_KEY instead of crashing every download.
+    const secret =
+        process.env.DOWNLOAD_SIGNING_SECRET?.trim() ||
+        process.env.SUPABASE_SECRET_KEY?.trim();
+    if (!secret) {
+        throw new Error(
+            "Download signing secret is not configured: set DOWNLOAD_SIGNING_SECRET (preferred) or SUPABASE_SECRET_KEY.",
+        );
+    }
+    return secret;
+}
+
+/**
+ * Call once at process start so a misconfigured deploy crashes fast at
+ * boot with a clear error, instead of returning 500 on every /download
+ * request once a user clicks a saved link.
+ */
+export function assertDownloadSigningConfigured(): void {
+    getSecret();
 }
 
 function b64urlEncode(buf: Buffer): string {
