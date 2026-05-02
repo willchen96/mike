@@ -21,6 +21,7 @@ interface UserProfile {
     tabularModel: string;
     claudeApiKey: string | null;
     geminiApiKey: string | null;
+    openaiApiKey: string | null;
 }
 
 interface UserProfileContextType {
@@ -33,7 +34,7 @@ interface UserProfileContextType {
         value: string,
     ) => Promise<boolean>;
     updateApiKey: (
-        provider: "claude" | "gemini",
+        provider: "claude" | "gemini" | "openai",
         value: string | null,
     ) => Promise<boolean>;
     reloadProfile: () => Promise<void>;
@@ -77,6 +78,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                     tabularModel: "gemini-3-flash-preview",
                     claudeApiKey: null,
                     geminiApiKey: null,
+                    openaiApiKey: null,
                 });
                 return;
             }
@@ -111,6 +113,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                         data.tabular_model || "gemini-3-flash-preview",
                     claudeApiKey: data.claude_api_key ?? null,
                     geminiApiKey: data.gemini_api_key ?? null,
+                    openaiApiKey: data.openai_api_key ?? null,
                 });
 
                 // 2. Update database in background if needed
@@ -148,6 +151,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                 tabularModel: "gemini-3-flash-preview",
                 claudeApiKey: null,
                 geminiApiKey: null,
+                openaiApiKey: null,
             });
         } finally {
             setLoading(false);
@@ -245,14 +249,22 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
     const updateApiKey = useCallback(
         async (
-            provider: "claude" | "gemini",
+            provider: "claude" | "gemini" | "openai",
             value: string | null,
         ): Promise<boolean> => {
             if (!user) return false;
             const dbField =
-                provider === "claude" ? "claude_api_key" : "gemini_api_key";
+                provider === "claude"
+                    ? "claude_api_key"
+                    : provider === "openai"
+                      ? "openai_api_key"
+                      : "gemini_api_key";
             const stateField =
-                provider === "claude" ? "claudeApiKey" : "geminiApiKey";
+                provider === "claude"
+                    ? "claudeApiKey"
+                    : provider === "openai"
+                      ? "openaiApiKey"
+                      : "geminiApiKey";
             const normalized = value?.trim() ? value.trim() : null;
             try {
                 const { error } = await supabase

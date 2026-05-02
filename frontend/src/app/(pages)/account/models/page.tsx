@@ -44,6 +44,7 @@ export default function ModelsAndApiKeysPage() {
                             apiKeys={{
                                 claudeApiKey: profile?.claudeApiKey ?? null,
                                 geminiApiKey: profile?.geminiApiKey ?? null,
+                                openaiApiKey: profile?.openaiApiKey ?? null,
                             }}
                             onChange={(id) =>
                                 updateModelPreference("tabularModel", id)
@@ -87,6 +88,14 @@ export default function ModelsAndApiKeysPage() {
                             updateApiKey("gemini", value.trim() || null)
                         }
                     />
+                    <ApiKeyField
+                        label="OpenAI API Key"
+                        placeholder="sk-…"
+                        initialValue={profile?.openaiApiKey ?? ""}
+                        onSave={(value) =>
+                            updateApiKey("openai", value.trim() || null)
+                        }
+                    />
                 </div>
             </div>
         </div>
@@ -100,12 +109,12 @@ function TabularModelDropdown({
 }: {
     value: string;
     onChange: (id: string) => void;
-    apiKeys: { claudeApiKey: string | null; geminiApiKey: string | null };
+    apiKeys: { claudeApiKey: string | null; geminiApiKey: string | null; openaiApiKey: string | null };
 }) {
     const [isOpen, setIsOpen] = useState(false);
     const selected = MODELS.find((m) => m.id === value);
     const selectedAvailable = isModelAvailable(value, apiKeys);
-    const groups: ("Anthropic" | "Google")[] = ["Anthropic", "Google"];
+    const groups: ("Anthropic" | "Google" | "OpenAI")[] = ["Anthropic", "Google", "OpenAI"];
 
     return (
         <DropdownMenu onOpenChange={setIsOpen}>
