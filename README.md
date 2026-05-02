@@ -1,5 +1,12 @@
 # Mike
 
+This project is kind of cool, I will help team build in similar fasion. Then ask them what they feel.
+
+Second, I want to strucuture my portfolio in the same manner. 
+
+Committing the changes for now.
+
+
 Open-source release containing the Mike frontend and backend.
 
 ## Contents
