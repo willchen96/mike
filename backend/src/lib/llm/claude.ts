@@ -10,6 +10,11 @@ import type {
 } from "./types";
 import { toClaudeTools } from "./tools";
 
+// Streamed content includes user prompts, document context, and assistant
+// output — i.e. potentially privileged matter content. Persisting it to
+// disk by default is a confidentiality risk for a legal platform, so we
+// only write the raw stream log when explicitly opted-in.
+const DEBUG_RAW_STREAM = process.env.DEBUG_LLM_STREAM === "true";
 const RAW_STREAM_LOG_PATH = path.resolve(
     process.cwd(),
     "claude-raw-stream.log",
@@ -80,11 +85,13 @@ export async function streamClaude(
 
         let sawThinking = false;
 
-        stream.on("streamEvent", (event) => {
-            const line = JSON.stringify(event);
-            console.log("[claude raw stream]", line);
-            fs.appendFile(RAW_STREAM_LOG_PATH, line + "\n", () => {});
-        });
+        if (DEBUG_RAW_STREAM) {
+            stream.on("streamEvent", (event) => {
+                const line = JSON.stringify(event);
+                console.log("[claude raw stream]", line);
+                fs.appendFile(RAW_STREAM_LOG_PATH, line + "\n", () => {});
+            });
+        }
 
         stream.on("text", (delta) => {
             callbacks.onContentDelta?.(delta);
