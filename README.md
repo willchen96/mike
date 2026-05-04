@@ -47,6 +47,23 @@ Open `http://localhost:3000`.
 - At least one supported model provider key, depending on which models you enable
 - LibreOffice for DOC/DOCX to PDF conversion
 
+## LLM Configuration Options
+
+The backend supports multiple LLM providers via environment variables in `backend/.env`:
+
+### Provider Keys
+- `GEMINI_API_KEY` - Google Gemini models
+- `ANTHROPIC_API_KEY` - Anthropic Claude models
+- `OPENROUTER_API_KEY` - OpenRouter (aggregates multiple providers)
+- `RESEND_API_KEY` - Resend (for email functionality)
+
+### Local LLM (vLLM) Configuration
+For self-hosted vLLM endpoints:
+- `VLLM_BASE_URL` - Base URL for your vLLM server (e.g., `https://your-vllm-endpoint.com/v1`)
+- `VLLM_API_KEY` - API key for vLLM authentication
+- `VLLM_MAIN_MODEL` - Primary model name for vLLM (e.g., `BredaAI`)
+- `VLLM_LIGHT_MODEL` - Lightweight model for faster responses (e.g., `your-light-model-name`)
+
 ## Checks
 
 ```bash

@@ -39,16 +39,20 @@ export default function ModelsAndApiKeysPage() {
                         <TabularModelDropdown
                             value={
                                 profile?.tabularModel ??
-                                "gemini-3-flash-preview"
+                                "vllm-main"
                             }
                             apiKeys={{
                                 claudeApiKey: profile?.claudeApiKey ?? null,
                                 geminiApiKey: profile?.geminiApiKey ?? null,
+                                openaiApiKey: process.env.NEXT_PUBLIC_VLLM_API_KEY || "configured",
                             }}
                             onChange={(id) =>
                                 updateModelPreference("tabularModel", id)
                             }
                         />
+                        <p className="text-xs text-gray-500 mt-2">
+                            LocalLLM models are configured by the server administrator and are available to all users.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -67,8 +71,8 @@ export default function ModelsAndApiKeysPage() {
                 </p>
                 <p className="text-xs text-gray-400 mb-4 max-w-xl">
                     Title generation automatically routes to the cheapest model
-                    of whichever provider you&rsquo;ve configured (Gemini Flash
-                    Lite if a Gemini key is set, otherwise Claude Haiku).
+                    of whichever provider you&rsquo;ve configured (LocalLLM Lite if
+                    available, otherwise Gemini Flash Lite, otherwise Claude Haiku).
                 </p>
                 <div className="space-y-4 max-w-xl">
                     <ApiKeyField
@@ -100,12 +104,12 @@ function TabularModelDropdown({
 }: {
     value: string;
     onChange: (id: string) => void;
-    apiKeys: { claudeApiKey: string | null; geminiApiKey: string | null };
+    apiKeys: { claudeApiKey: string | null; geminiApiKey: string | null; openaiApiKey: string | null };
 }) {
     const [isOpen, setIsOpen] = useState(false);
     const selected = MODELS.find((m) => m.id === value);
     const selectedAvailable = isModelAvailable(value, apiKeys);
-    const groups: ("Anthropic" | "Google")[] = ["Anthropic", "Google"];
+    const groups: ("LocalLLM" | "Anthropic" | "Google")[] = ["LocalLLM", "Anthropic", "Google"];
 
     return (
         <DropdownMenu onOpenChange={setIsOpen}>
@@ -147,23 +151,24 @@ function TabularModelDropdown({
                                     m.id,
                                     apiKeys,
                                 );
+                                const tooltip = !available
+                                    ? provider === "openai"
+                                        ? "LocalLLM configured by server"
+                                        : `Add a ${provider === "claude" ? "Claude" : "Gemini"} API key to use this model`
+                                    : undefined;
                                 return (
                                     <DropdownMenuItem
                                         key={m.id}
                                         className="cursor-pointer"
                                         onSelect={() => onChange(m.id)}
-                                        title={
-                                            !available
-                                                ? `Add a ${provider === "claude" ? "Claude" : "Gemini"} API key to use this model`
-                                                : undefined
-                                        }
+                                        title={tooltip}
                                     >
                                         <span
                                             className={`flex-1 ${available ? "" : "text-gray-400"}`}
                                         >
                                             {m.label}
                                         </span>
-                                        {!available && (
+                                        {!available && provider !== "openai" && (
                                             <AlertCircle className="h-3.5 w-3.5 text-red-500 ml-1" />
                                         )}
                                         {m.id === value && available && (

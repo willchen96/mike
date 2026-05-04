@@ -2121,7 +2121,8 @@ export async function runToolCalls(
             }
 
         } else if (tc.function.name === "generate_docx") {
-            const title = args.title as string;
+            // Fallback to "document" if title is missing - model sometimes omits required fields
+            const title = (args.title as string) || "document";
             const landscape = !!(args.landscape);
             console.log(`[generate_docx] title="${title}" landscape=${landscape} args.landscape=${args.landscape}`);
             const previewFilename = `${(title.replace(/[^a-zA-Z0-9 _-]/g, "").trim().slice(0, 64) || "document")}.docx`;

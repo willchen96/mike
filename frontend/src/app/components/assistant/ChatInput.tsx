@@ -70,6 +70,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
     const apiKeys = {
         claudeApiKey: profile?.claudeApiKey ?? null,
         geminiApiKey: profile?.geminiApiKey ?? null,
+        openaiApiKey: process.env.NEXT_PUBLIC_VLLM_API_KEY || "configured",
     };
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [docSelectorOpen, setDocSelectorOpen] = useState(false);
