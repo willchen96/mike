@@ -526,11 +526,14 @@ projectsRouter.patch("/:projectId/folders/:folderId", requireAuth, async (req, r
   if ("parent_folder_id" in body) {
     // Cycle check: walk up the tree from the proposed parent to ensure folderId is not an ancestor
     if (body.parent_folder_id) {
+      const parent = await loadProjectFolder(db, projectId, body.parent_folder_id);
+      if (!parent) return void res.status(404).json({ detail: "Parent folder not found" });
+
       let cur: string | null = body.parent_folder_id;
       while (cur) {
         if (cur === folderId) return void res.status(400).json({ detail: "Cannot move a folder into itself or a descendant" });
-        const { data: p }: { data: { parent_folder_id: string | null } | null } =
-          await db.from("project_subfolders").select("parent_folder_id").eq("id", cur).single();
+        const p = await loadProjectFolder(db, projectId, cur);
+        if (!p) return void res.status(404).json({ detail: "Parent folder not found" });
         cur = p?.parent_folder_id ?? null;
       }
     }
@@ -555,8 +558,11 @@ projectsRouter.delete("/:projectId/folders/:folderId", requireAuth, async (req, 
   const access = await checkProjectAccess(projectId, userId, userEmail, db);
   if (!access.ok) return void res.status(404).json({ detail: "Project not found" });
 
+  const folder = await loadProjectFolder(db, projectId, folderId);
+  if (!folder) return void res.status(404).json({ detail: "Folder not found" });
+
   // Move direct documents to root before cascade-deleting subfolders
-  await db.from("documents").update({ folder_id: null }).eq("folder_id", folderId);
+  await db.from("documents").update({ folder_id: null }).eq("folder_id", folderId).eq("project_id", projectId);
 
   const { error } = await db.from("project_subfolders")
     .delete().eq("id", folderId).eq("project_id", projectId);
@@ -575,6 +581,11 @@ projectsRouter.patch("/:projectId/documents/:documentId/folder", requireAuth, as
   const access = await checkProjectAccess(projectId, userId, userEmail, db);
   if (!access.ok) return void res.status(404).json({ detail: "Project not found" });
 
+  if (folder_id) {
+    const folder = await loadProjectFolder(db, projectId, folder_id);
+    if (!folder) return void res.status(404).json({ detail: "Folder not found" });
+  }
+
   const { data, error } = await db.from("documents")
     .update({ folder_id: folder_id ?? null, updated_at: new Date().toISOString() })
     .eq("id", documentId).eq("project_id", projectId)
@@ -582,6 +593,20 @@ projectsRouter.patch("/:projectId/documents/:documentId/folder", requireAuth, as
   if (error || !data) return void res.status(404).json({ detail: "Document not found" });
   res.json(data);
 });
+
+async function loadProjectFolder(
+  db: ReturnType<typeof createServerSupabase>,
+  projectId: string,
+  folderId: string,
+): Promise<{ id: string; parent_folder_id: string | null } | null> {
+  const { data } = await db
+    .from("project_subfolders")
+    .select("id, parent_folder_id")
+    .eq("id", folderId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+  return (data as { id: string; parent_folder_id: string | null } | null) ?? null;
+}
 
 export async function handleDocumentUpload(
   req: import("express").Request,
