@@ -1,0 +1,277 @@
+{
+  "mode": "adapt",
+  "projectType": "modular-project",
+  "language": "typescript",
+  "languages": [
+    "typescript"
+  ],
+  "totalLOC": null,
+  "fileCount": null,
+  "hasLLM": true,
+  "hasEntryPoint": true,
+  "hasEvaluation": false,
+  "hasDataLoading": true,
+  "hasMultiWorkflow": true,
+  "targetWorkflow": "legal_chat_agent",
+  "uses_tools": true,
+  "uses_rag": false,
+  "is_multi_turn": true,
+  "output_rendered_html": false,
+  "output_executed_as_sql": false,
+  "output_executed_as_shell": false,
+  "evalFunctions": [],
+  "dataLoadingMethod": "file",
+  "dataLoadingFunction": {
+    "file": "backend/src/lib/chatTools.ts",
+    "function": "buildDocContext",
+    "signature": "buildDocContext(attachmentIds: string[], userId: string, projectId?: string) -> { docStore, docIndex }"
+  },
+  "sourceFiles": [
+    "backend/src/index.ts",
+    "backend/src/middleware/auth.ts",
+    "backend/src/lib/llm/types.ts",
+    "backend/src/lib/llm/models.ts",
+    "backend/src/lib/llm/tools.ts",
+    "backend/src/lib/llm/claude.ts",
+    "backend/src/lib/llm/gemini.ts",
+    "backend/src/lib/llm/index.ts",
+    "backend/src/lib/chatTools.ts",
+    "backend/src/lib/storage.ts",
+    "backend/src/lib/supabase.ts",
+    "backend/src/lib/userSettings.ts",
+    "backend/src/lib/access.ts",
+    "backend/src/lib/builtinWorkflows.ts",
+    "backend/src/lib/documentVersions.ts",
+    "backend/src/lib/docxTrackedChanges.ts",
+    "backend/src/lib/convert.ts",
+    "backend/src/lib/downloadTokens.ts",
+    "backend/src/lib/upload.ts",
+    "backend/src/routes/chat.ts",
+    "backend/src/routes/documents.ts",
+    "backend/src/routes/tabular.ts",
+    "backend/src/routes/projectChat.ts",
+    "backend/src/routes/workflows.ts",
+    "backend/src/routes/projects.ts",
+    "backend/src/routes/user.ts",
+    "backend/src/routes/downloads.ts",
+    "frontend/src/app/lib/mikeApi.ts",
+    "frontend/src/contexts/AuthContext.tsx",
+    "frontend/src/lib/fileConverter.ts"
+  ],
+  "dataFiles": [
+    "backend/migrations/000_one_shot_schema.sql"
+  ],
+  "workflowNodes": [
+    {
+      "id": "legal_chat_agent",
+      "entryPoint": "backend/src/lib/chatTools.ts:runLLMStream",
+      "nodes": [
+        {
+          "id": "build_doc_context",
+          "name": "build_doc_context",
+          "type": "code",
+          "function": "buildDocContext",
+          "codeDescription": "Loads user-attached PDF/DOCX documents from Cloudflare R2, extracts plaintext via pdf-parse / jszip+XML parsing, assigns sequential doc-N labels, and constructs the per-request docStore + docIndex used by the agent.",
+          "language": "typescript",
+          "inputs": [
+            "attachmentIds",
+            "userId",
+            "projectId"
+          ],
+          "outputs": [
+            "docStore",
+            "docIndex"
+          ]
+        },
+        {
+          "id": "build_messages",
+          "name": "build_messages",
+          "type": "code",
+          "function": "buildMessages",
+          "codeDescription": "Constructs the LlmMessage[] array sent to the LLM: prepends SYSTEM_PROMPT, injects a doc-availability list (doc-N -> filename), and replays prior chat history from Supabase.",
+          "language": "typescript",
+          "inputs": [
+            "docIndex",
+            "chatHistory",
+            "userMessage",
+            "workflowPrompt"
+          ],
+          "outputs": [
+            "messages"
+          ]
+        },
+        {
+          "id": "enrich_with_prior_events",
+          "name": "enrich_with_prior_events",
+          "type": "code",
+          "function": "enrichWithPriorEvents",
+          "codeDescription": "Appends a structured summary of prior tool calls and results to the last assistant message so the agent has memory of multi-turn tool history without reloading every event.",
+          "language": "typescript",
+          "inputs": [
+            "messages",
+            "priorEvents"
+          ],
+          "outputs": [
+            "enrichedMessages"
+          ]
+        },
+        {
+          "id": "chat_agent",
+          "name": "chat_agent",
+          "type": "agentic",
+          "function": "streamChatWithTools",
+          "sdk": "anthropic-sdk-and-google-genai",
+          "agentInstructions": "SYSTEM_PROMPT (defined in backend/src/lib/chatTools.ts) \u2014 instructs Mike to act as a legal assistant for lawyers, cite sources using <doc-N page=\"X\"> tags, follow strict docx generation rules, respect workflow templates when read_workflow is invoked, and never fabricate citations. Approximately 1,500 chars covering citation format, tool-use discipline, refusal behavior on unsupported claims, and DOCX edit rules.",
+          "tools": [
+            "read_document",
+            "find_in_document",
+            "generate_docx",
+            "edit_document",
+            "list_documents",
+            "fetch_documents",
+            "replicate_document",
+            "list_workflows",
+            "read_workflow",
+            "read_table_cells"
+          ],
+          "model": "user-selected (default gemini-3-flash-preview; options: claude-opus-4-7, claude-sonnet-4-6, gemini-3.1-pro-preview, gemini-3-flash-preview)",
+          "inputs": [
+            "enrichedMessages",
+            "tools",
+            "model",
+            "enableThinking"
+          ],
+          "outputs": [
+            "streamedText",
+            "toolCalls",
+            "stopReason"
+          ]
+        },
+        {
+          "id": "run_tool_calls",
+          "name": "run_tool_calls",
+          "type": "code",
+          "function": "runToolCalls",
+          "codeDescription": "Dispatches each NormalizedToolCall from the agent to its server-side implementation: read_document/find_in_document/fetch_documents read R2 + extract text; generate_docx builds a Word file via docx library; edit_document applies tracked changes via fast-xml-parser+jszip; list_documents/list_workflows/read_workflow/read_table_cells query Supabase; replicate_document copies up to 20 documents. Returns NormalizedToolResult[] back to the agent loop.",
+          "language": "typescript",
+          "inputs": [
+            "toolCalls",
+            "userId",
+            "docIndex",
+            "projectId"
+          ],
+          "outputs": [
+            "toolResults"
+          ]
+        },
+        {
+          "id": "extract_annotations",
+          "name": "extract_annotations",
+          "type": "code",
+          "function": "extractAnnotations",
+          "codeDescription": "Regex-parses the assistant's final text for <doc-N page=\"X\">snippet</doc-N> citation tags and resolves each into a structured annotation pointing back to the docId in docIndex. Drives the highlighted-citation UI on the frontend.",
+          "language": "typescript",
+          "inputs": [
+            "assistantText",
+            "docIndex"
+          ],
+          "outputs": [
+            "annotations"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tabular_review_extractor",
+      "entryPoint": "backend/src/routes/tabular.ts:generateHandler",
+      "nodes": [
+        {
+          "id": "load_document_text",
+          "name": "load_document_text",
+          "type": "code",
+          "function": "loadDocumentText",
+          "codeDescription": "For each document in the review batch: downloads the active version from Cloudflare R2, extracts plaintext (pdf-parse for PDFs, jszip+XML for DOCX), truncates to 120,000 characters to fit in the extraction model's context window.",
+          "language": "typescript",
+          "inputs": [
+            "documentId"
+          ],
+          "outputs": [
+            "documentText",
+            "filename"
+          ]
+        },
+        {
+          "id": "extraction_agent",
+          "name": "extraction_agent",
+          "type": "llm",
+          "function": "queryGeminiAllColumns",
+          "prompt": "Document: {filename}\n\n{documentText.slice(0, 120_000)}\n\n---\nInstruction: {fullPrompt}{suffix}\n\nReturn one JSON object per line, one per requested column. Each object must include: { columnId, value, citation: { page, quote }, confidence }. Do not wrap in markdown. Do not include commentary.",
+          "model": "user tabular_model (default gemini-3-flash-preview; alt: claude-sonnet-4-6)",
+          "systemPrompt": "EXTRACTION_SYSTEM: You are a precise legal analyst. Extract the requested fields from the provided document. Output strict JSON, one object per line, with the exact schema specified. Cite the page and a verbatim quote. If a field is not present, return null with confidence 0.",
+          "inputs": [
+            "documentText",
+            "columnPrompts",
+            "filename"
+          ],
+          "outputs": [
+            "streamedJsonLines"
+          ]
+        },
+        {
+          "id": "parse_cells",
+          "name": "parse_cells",
+          "type": "code",
+          "function": "parseCellContent",
+          "codeDescription": "Parses each streamed JSON line into a structured cell { columnId, value, citation: {page, quote}, confidence, status }. Tolerates trailing commas and code-fence noise. Drops malformed lines and marks the cell status='error' for those columns.",
+          "language": "typescript",
+          "inputs": [
+            "streamedJsonLines"
+          ],
+          "outputs": [
+            "cells"
+          ]
+        },
+        {
+          "id": "persist_cells",
+          "name": "persist_cells",
+          "type": "code",
+          "function": "persistTabularCells",
+          "codeDescription": "Inserts/updates the parsed cells into Supabase tabular_cells table keyed on (reviewId, documentId, columnId). Streams progress events back to the client over SSE.",
+          "language": "typescript",
+          "inputs": [
+            "cells",
+            "reviewId",
+            "documentId"
+          ],
+          "outputs": [
+            "dbRows"
+          ]
+        },
+        {
+          "id": "tabular_chat_agent",
+          "name": "tabular_chat_agent",
+          "type": "agentic",
+          "function": "runLLMStream",
+          "sdk": "anthropic-sdk-and-google-genai",
+          "agentInstructions": "Reuses SYSTEM_PROMPT from chatTools.ts but is invoked from POST /tabular-review/:reviewId/chat with the read_table_cells tool exposed so the agent can answer questions about the populated review grid (e.g., 'which contracts have a governing law of New York?'). Same 10-iteration tool-use loop, same citation discipline.",
+          "tools": [
+            "read_table_cells",
+            "read_document",
+            "find_in_document",
+            "fetch_documents"
+          ],
+          "model": "user-selected main-tier model",
+          "inputs": [
+            "userMessage",
+            "reviewId",
+            "model"
+          ],
+          "outputs": [
+            "streamedAnswer",
+            "annotations"
+          ]
+        }
+      ]
+    }
+  ]
+}
