@@ -1,0 +1,19 @@
+{"event": "phase_start", "phase": "path_decision", "ts": "2026-05-04T00:00:01Z"}
+{"event": "phase_done", "phase": "path_decision", "path_used": "B", "ts": "2026-05-04T00:00:02Z"}
+{"event": "phase_start", "phase": "acquisition", "intents_planned": ["document_qa", "document_drafting", "document_editing", "legal_research", "edge_cases"], "ts": "2026-05-04T00:00:03Z"}
+{"event": "phase_start", "phase": "document_qa", "n_cases": 20, "ts": "2026-05-04T00:00:04Z"}
+{"event": "phase_done", "phase": "document_qa", "n_cases": 20, "elapsed_sec": 12, "ts": "2026-05-04T00:00:16Z"}
+{"event": "phase_start", "phase": "document_drafting", "n_cases": 20, "ts": "2026-05-04T00:00:17Z"}
+{"event": "phase_done", "phase": "document_drafting", "n_cases": 20, "elapsed_sec": 14, "ts": "2026-05-04T00:00:31Z"}
+{"event": "phase_start", "phase": "document_editing", "n_cases": 20, "ts": "2026-05-04T00:00:32Z"}
+{"event": "phase_done", "phase": "document_editing", "n_cases": 20, "elapsed_sec": 13, "ts": "2026-05-04T00:00:45Z"}
+{"event": "phase_start", "phase": "legal_research", "n_cases": 20, "ts": "2026-05-04T00:00:46Z"}
+{"event": "phase_done", "phase": "legal_research", "n_cases": 20, "elapsed_sec": 13, "ts": "2026-05-04T00:00:59Z"}
+{"event": "phase_start", "phase": "edge_cases", "n_cases": 20, "ts": "2026-05-04T00:01:00Z"}
+{"event": "phase_done", "phase": "edge_cases", "n_cases": 20, "elapsed_sec": 18, "ts": "2026-05-04T00:01:18Z"}
+{"event": "phase_done", "phase": "acquisition", "intents": [{"name": "document_qa", "n": 20}, {"name": "document_drafting", "n": 20}, {"name": "document_editing", "n": 20}, {"name": "legal_research", "n": 20}, {"name": "edge_cases", "n": 20}], "ts": "2026-05-04T00:01:19Z"}
+{"event": "phase_start", "phase": "audit", "ts": "2026-05-04T00:01:20Z"}
+{"event": "phase_done", "phase": "audit", "findings": 1, "failed_fixed": 1, "note": "adjacent tier n=6 < 10 — documented as underpowered_strata in manifest; near+adjacent aggregate n=20 is the powered unit", "ts": "2026-05-04T00:01:22Z"}
+{"event": "phase_start", "phase": "stratification", "ts": "2026-05-04T00:01:23Z"}
+{"event": "phase_done", "phase": "stratification", "ts": "2026-05-04T00:01:25Z"}
+{"event": "suite_done", "total_cases": 100, "elapsed_sec": 90, "ts": "2026-05-04T00:01:30Z"}

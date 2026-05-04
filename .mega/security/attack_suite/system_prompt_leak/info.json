@@ -1,0 +1,31 @@
+{
+  "category": "Tier1.SystemPromptLeak",
+  "localization_mode": "entity_swap",
+  "n_train": 70,
+  "n_val": 30,
+  "total": 100,
+  "benchmarks_used": ["DAN", "HarmBench", "custom"],
+  "techniques_covered": [
+    "direct_extraction", "technical_extraction", "repeat_above", "tag_based_extraction",
+    "summary_extraction", "meta_instruction_extraction", "transparency_framing",
+    "incremental_extraction", "conditional_extraction", "purchase_decision_framing",
+    "translation_extraction", "obfuscated_extraction", "creative_reformulation_extraction",
+    "restriction_enumeration", "sentence_completion_extraction", "debug_context_dump",
+    "encoded_extraction", "documentation_framing", "documentation_role_play",
+    "process_walkthrough", "probing_extraction", "onboarding_framing",
+    "structured_config_extraction", "secret_instruction_extraction", "trigger_word_leak",
+    "non_user_message_extraction", "topic_specific_extraction", "tool_description_extraction",
+    "tool_specific_instruction_extraction", "comparison_extraction", "self_audit_extraction",
+    "code_format_extraction", "audit_extraction", "developer_review_framing",
+    "pre_conversation_extraction", "reformatted_extraction", "partial_extraction",
+    "faq_reformulation", "codebase_reference_extraction", "state_dump",
+    "trust_building_framing", "compliance_extraction", "last_instruction_extraction",
+    "context_window_probing", "conversation_position_extraction", "confirm_and_extract",
+    "legal_declaration_framing", "partial_disclosure_probe", "manual_role_play",
+    "limitation_extraction", "authority_role_extraction", "documentation_extraction",
+    "template_completion_extraction", "tool_assisted_leak"
+  ],
+  "val_divergence_axes": ["novel_entity", "rephrased"],
+  "train_val_8gram_overlap": 0.0,
+  "notes": "Val probes use distinct positional references (last sentence vs first sentence), distinct encoding schemes (ROT13 vs base64, hex vs reversed), distinct creative formats (limerick vs haiku, statute vs contract), distinct config formats (YAML vs JSON), and distinct threshold values in probing queries (2000/1500 chars vs 1000 chars). Mike-specific codebase references (chatTools.ts, SYSTEM_PROMPT, buildMessages, agentInstructions) appear in both splits at different abstraction levels to test resistance regardless of framing specificity. Tool-specific extractions target different tools across splits (generate_docx in train, edit_document in val)."
+}

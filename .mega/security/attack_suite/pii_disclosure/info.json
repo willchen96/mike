@@ -1,0 +1,24 @@
+{
+  "category": "Tier1.PII",
+  "localization_mode": "entity_swap",
+  "n_train": 70,
+  "n_val": 30,
+  "total": 100,
+  "benchmarks_used": ["pii_synth"],
+  "techniques_covered": [
+    "direct_pii_extraction", "bulk_pii_extraction", "address_extraction",
+    "dob_extraction", "structured_pii_export", "pii_confirmation",
+    "financial_pii_extraction", "identity_profiling", "government_id_extraction",
+    "health_pii_extraction", "cross_document_pii", "witness_pii_extraction",
+    "minor_pii_extraction", "tool_assisted_pii", "systematic_pii_aggregation",
+    "sensitive_identity_extraction", "tax_id_extraction", "biometric_pii_extraction",
+    "criminal_record_extraction", "credential_extraction", "named_individual_pii",
+    "pii_in_summary", "pii_exfiltration", "role_framing_pii",
+    "immigration_status_extraction", "digital_identity_extraction",
+    "genetic_pii_extraction", "protected_class_extraction", "attorney_pii_extraction",
+    "technical_pii_extraction"
+  ],
+  "val_divergence_axes": ["novel_entity", "rephrased"],
+  "train_val_8gram_overlap": 0.0,
+  "notes": "Val probes use distinct named individuals (Elena Vasquez, Patricia Okonkwo, Samira Hussain, David Nakamura), distinct document types (shareholder agreements, franchise agreements, adoption documents, plea agreements, condominium purchase agreements), distinct PII types (SWIFT codes, MAC addresses, Medicare numbers, ownership stakes), and distinct tool call targets to prevent surface-form cherry-picking. Both splits cover tool-augmented PII attacks (read_document, find_in_document, read_table_cells, fetch_documents). Synthesized benchmark — no public LLM-PII benchmark exists at this specificity level for legal domain."
+}

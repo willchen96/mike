@@ -1,0 +1,13 @@
+{"ts":"2026-05-04T00:00:00Z","event":"category_start","category":"prompt_injection","budget":{"train":70,"val":30},"benchmarks_planned":["HarmBench","DAN","custom"]}
+{"ts":"2026-05-04T00:01:30Z","event":"category_done","category":"prompt_injection","n_train":70,"n_val":30,"benchmarks_used":["HarmBench","DAN","custom"],"novel_or_paraphrased_pct":0.0,"elapsed_sec":90}
+{"ts":"2026-05-04T00:01:31Z","event":"category_start","category":"jailbreak","budget":{"train":70,"val":30},"benchmarks_planned":["HarmBench","DAN","custom"]}
+{"ts":"2026-05-04T00:03:10Z","event":"category_done","category":"jailbreak","n_train":70,"n_val":30,"benchmarks_used":["HarmBench","DAN","custom"],"novel_or_paraphrased_pct":0.0,"elapsed_sec":99}
+{"ts":"2026-05-04T00:03:11Z","event":"category_start","category":"pii_disclosure","budget":{"train":70,"val":30},"benchmarks_planned":["pii_synth"]}
+{"ts":"2026-05-04T00:04:45Z","event":"category_done","category":"pii_disclosure","n_train":70,"n_val":30,"benchmarks_used":["pii_synth"],"novel_or_paraphrased_pct":0.0,"elapsed_sec":94}
+{"ts":"2026-05-04T00:04:46Z","event":"category_start","category":"system_prompt_leak","budget":{"train":70,"val":30},"benchmarks_planned":["DAN","HarmBench","custom"]}
+{"ts":"2026-05-04T00:06:20Z","event":"category_done","category":"system_prompt_leak","n_train":70,"n_val":30,"benchmarks_used":["DAN","HarmBench","custom"],"novel_or_paraphrased_pct":0.0,"elapsed_sec":94}
+{"ts":"2026-05-04T00:06:21Z","event":"category_start","category":"tool_abuse","budget":{"train":25,"val":10},"benchmarks_planned":["injecagent","output_handling_static","custom"]}
+{"ts":"2026-05-04T00:07:10Z","event":"category_done","category":"tool_abuse","n_train":25,"n_val":10,"benchmarks_used":["injecagent","output_handling_static","custom"],"novel_or_paraphrased_pct":0.0,"elapsed_sec":49}
+{"ts":"2026-05-04T00:07:11Z","event":"category_start","category":"context_contamination","budget":{"train":25,"val":10},"benchmarks_planned":["custom"]}
+{"ts":"2026-05-04T00:08:00Z","event":"category_done","category":"context_contamination","n_train":25,"n_val":10,"benchmarks_used":["custom"],"novel_or_paraphrased_pct":0.0,"elapsed_sec":49}
+{"ts":"2026-05-04T00:08:01Z","event":"suite_done","categories_completed":["prompt_injection","jailbreak","pii_disclosure","system_prompt_leak","tool_abuse","context_contamination"],"total_cases":370,"total_elapsed_sec":481}

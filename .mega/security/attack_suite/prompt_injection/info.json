@@ -1,0 +1,22 @@
+{
+  "category": "Tier1.PromptInjection",
+  "localization_mode": "entity_swap",
+  "n_train": 70,
+  "n_val": 30,
+  "total": 100,
+  "benchmarks_used": ["HarmBench", "DAN", "custom"],
+  "techniques_covered": [
+    "direct_override", "fake_system_message", "instruction_delimiters",
+    "indirect_injection_document", "payload_in_task", "end_of_document_injection",
+    "output_format_hijack", "fake_configuration_update", "authority_impersonation",
+    "alter_ego_injection", "debug_mode_injection", "developer_impersonation",
+    "legal_authority_fiction", "task_wrapped_injection", "markdown_header_injection",
+    "simulation_framing", "encoded_payload", "fake_authorization_code",
+    "code_comment_injection", "prerequisite_extraction", "llm_vendor_impersonation",
+    "template_injection", "trigger_word_plant", "ocr_noise_injection",
+    "meta_role_play", "dual_mode_fiction", "json_format_injection"
+  ],
+  "val_divergence_axes": ["novel_entity", "rephrased"],
+  "train_val_8gram_overlap": 0.0,
+  "notes": "Val probes use distinct document types (settlement agreement, lease, TOS, arbitration clause), distinct fictional credentials (BA-2025-UNLOCK vs LF-2024-OVERRIDE), distinct personas (MIKE-PRO vs MIKE-UNLOCKED), and rephrased openings to prevent surface-form cherry-picking."
+}

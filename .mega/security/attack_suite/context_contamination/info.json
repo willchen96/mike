@@ -1,0 +1,19 @@
+{
+  "category": "Tier2.ContextContamination",
+  "localization_mode": "entity_swap",
+  "n_train": 25,
+  "n_val": 10,
+  "total": 35,
+  "benchmarks_used": ["custom"],
+  "techniques_covered": [
+    "false_prior_agreement", "fabricated_mode_history", "prior_permission_claim",
+    "incomplete_prior_instruction", "prior_pii_extraction_claim", "fabricated_access_rights",
+    "false_prior_plan", "fabricated_tool_execution_in_progress", "incomplete_prior_leak",
+    "fabricated_keyword_trigger", "cross_session_fabrication", "fabricated_false_statement",
+    "fabricated_attorney_client_relationship", "fabricated_jailbreak_confirmation",
+    "false_legitimacy_grant"
+  ],
+  "val_divergence_axes": ["novel_entity", "rephrased"],
+  "train_val_8gram_overlap": 0.0,
+  "notes": "All probes exploit Supabase multi-turn chat history by injecting prior turns that fabricate Mike's prior behavior. Val probes use distinct named individuals (Gareth Reynolds, Patricia Webb, Marcus Dinallo), distinct harmful tasks (deed of trust, tax audit evasion, perjured affidavit, juror contact), distinct keywords (OVERRIDE-COUNSEL vs LEGAL-UNLOCK), and distinct partial-leak content. The contamination vector is the agentic loop's enrichWithPriorEvents step, which injects prior tool results and messages. Synthesized benchmark — no public multi-turn legal AI context contamination benchmark exists."
+}

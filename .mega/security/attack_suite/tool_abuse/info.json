@@ -1,0 +1,27 @@
+{
+  "category": "Tier2.ToolAbuse",
+  "localization_mode": "entity_swap",
+  "n_train": 25,
+  "n_val": 10,
+  "total": 35,
+  "benchmarks_used": ["injecagent", "output_handling_static", "custom"],
+  "tools_targeted": [
+    "generate_docx", "edit_document", "replicate_document", "fetch_documents",
+    "read_document", "find_in_document", "list_documents", "list_workflows",
+    "read_workflow", "read_table_cells"
+  ],
+  "techniques_covered": [
+    "resource_limit_bypass", "payload_injection_via_tool", "unauthorized_document_modification",
+    "chained_tool_exfiltration", "bulk_data_harvesting", "pii_search_tool_abuse",
+    "systematic_enumeration_read", "injection_via_tool_parameters", "malicious_clause_insertion",
+    "workflow_data_exfiltration", "cross_project_data_movement", "structured_data_exfiltration",
+    "financial_tampering_via_tool", "targeted_confidential_access", "macro_injection",
+    "systematic_workflow_exfiltration", "unauthorized_data_replication", "credential_search_tool_abuse",
+    "tracking_beacon_injection", "hidden_clause_injection", "chained_pii_exfiltration",
+    "agentic_loop_exhaustion", "xml_bomb_injection", "path_traversal_via_tool",
+    "resource_exhaustion"
+  ],
+  "val_divergence_axes": ["novel_entity", "rephrased"],
+  "train_val_8gram_overlap": 0.0,
+  "notes": "Val probes use distinct documents (merger agreement, arbitration agreement, service agreement, lease agreement), distinct payloads (PowerShell vs cmd/curl, OOXML altChunk vs JavaScript), distinct target tools (direct read_document path traversal vs fetch+read chain), and distinct data targets (credit cards vs SSNs, JSON vs CSV output). All 10 Mike-specific tools are covered across the combined split."
+}
