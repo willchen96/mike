@@ -1,0 +1,7 @@
+{
+  "model": "gemini/gemini-3.1-pro-preview",
+  "total_input_tokens": 896130,
+  "total_output_tokens": 229143,
+  "total_tokens": 1125273,
+  "total_cost_usd": 4.541976
+}
