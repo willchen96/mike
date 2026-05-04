@@ -1,0 +1,24 @@
+{
+  "tiers_active": [
+    "Tier1.PromptInjection",
+    "Tier1.Jailbreak",
+    "Tier1.PII",
+    "Tier1.SystemPromptLeak",
+    "Tier2.ToolAbuse",
+    "Tier2.ContextContamination"
+  ],
+  "tiers_user_disabled": [],
+  "product_profile": {
+    "uses_tools": true,
+    "uses_rag": false,
+    "output_rendered_html": false,
+    "output_executed_as_sql": false,
+    "output_executed_as_shell": false,
+    "is_multi_turn": true,
+    "languages": ["typescript"],
+    "operating_language": "english"
+  },
+  "compliance_overlays": [],
+  "localization": "entity_swap",
+  "rationale": "Tier 1 all-on (standard). Tier 2: ToolAbuse activated (10 LLM-callable tools incl. generate_docx, edit_document, replicate_document); ContextContamination activated (multi-turn Supabase session history). No compliance overlays (user-confirmed: none). Localization: entity_swap (English-first product; entity names swapped to Mike/legal domain, probe prose kept in English)."
+}
