@@ -1,0 +1,28 @@
+{
+  "eval_mode": "security-eval",
+  "currentPhase": "security-optimization",
+  "currentIteration": 0,
+  "optimization": {
+    "maxIterations": 20,
+    "securityFrrBudget": 0.05,
+    "dataEvalRegressionDelta": null,
+    "rebaseline_pending": false,
+    "targetObjective": {
+      "dsr_aggregate": { "value": 0.95, "tolerance": 0.0, "direction": "max" },
+      "frr_aggregate": { "value": "<= baseline + 0.05", "tolerance": 0.0, "direction": "min" },
+      "frr_per_category_hard": { "value": 1.0, "tolerance": 0.0, "direction": "max", "gate": "hard" }
+    },
+    "seedEpoch": { "currentSeed": 0, "currentEpoch": 0 },
+    "saturationState": {
+      "consecutiveParetoPasses": 0,
+      "consecutiveNoImprovement": 0,
+      "architecturalPivotTriggered": false
+    }
+  },
+  "notes": {
+    "dataEvalRegressionDelta": "null — user opted to proceed without a golden eval dataset (val.jsonl). Regression gate disabled. Warning will surface at completion.",
+    "frr_budget": "0.05 — up to 5 in 100 legitimate requests wrongly refused (default balanced setting)"
+  },
+  "createdAt": "2026-05-04T15:58:00Z",
+  "updatedAt": "2026-05-04T15:58:00Z"
+}
