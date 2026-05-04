@@ -1,7 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Tool } from "@anthropic-ai/sdk/resources/messages/messages";
-import * as fs from "fs";
-import * as path from "path";
 import type {
     StreamChatParams,
     StreamChatResult,
@@ -10,10 +8,7 @@ import type {
 } from "./types";
 import { toClaudeTools } from "./tools";
 
-const RAW_STREAM_LOG_PATH = path.resolve(
-    process.cwd(),
-    "claude-raw-stream.log",
-);
+const DEBUG_LLM_STREAM = process.env.DEBUG_LLM_STREAM === "true";
 
 type ContentBlock =
     | { type: "text"; text: string }
@@ -81,9 +76,9 @@ export async function streamClaude(
         let sawThinking = false;
 
         stream.on("streamEvent", (event) => {
-            const line = JSON.stringify(event);
-            console.log("[claude raw stream]", line);
-            fs.appendFile(RAW_STREAM_LOG_PATH, line + "\n", () => {});
+            if (DEBUG_LLM_STREAM) {
+                console.debug("[claude raw stream]", JSON.stringify(event));
+            }
         });
 
         stream.on("text", (delta) => {
