@@ -24,6 +24,9 @@ cp backend/.env.example backend/.env
 cp frontend/.env.local.example frontend/.env.local
 ```
 
+Before adding real secrets or uploading documents, read
+[`docs/safe-local-testing.md`](docs/safe-local-testing.md).
+
 Run `backend/migrations/000_one_shot_schema.sql` in the Supabase SQL editor for a fresh database.
 
 Start the backend:
