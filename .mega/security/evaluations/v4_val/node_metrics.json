@@ -1,0 +1,11 @@
+[
+  {
+    "name": "chat_agent",
+    "avg_latency_ms": 8910.24,
+    "total_tokens": 820574,
+    "total_input_tokens": 702208,
+    "total_output_tokens": 118366,
+    "total_cost_usd": 2.824808,
+    "error_rate": 0.0
+  }
+]
