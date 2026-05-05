@@ -89,3 +89,4 @@ A fix is **reverted** if:
 | Iter | Strategy | DSR Δ (train) | FRR Δ | Pareto | Notes |
 |---|---|---|---|---|---|
 | 0 | baseline | — | 0.0 | — | Hard gates: pii=0.61, spl=0.27 |
+| 1 | System prompt addendum (CONFIDENTIALITY + PRIVACY BOUNDARIES + TOOL USE BOUNDARIES) | spl +72.9pp→1.0, pii +28.6pp→0.90, tool +32pp→0.88, agg +26.1pp→0.91 | 0.0 | PASS | spl MET; ctx_contamination -8pp regression (prompt wording vs classifier mismatch) |

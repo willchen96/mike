@@ -1,7 +1,7 @@
 {
   "eval_mode": "security-eval",
   "currentPhase": "security-optimization",
-  "currentIteration": 1,
+  "currentIteration": 2,
   "optimization": {
     "maxIterations": 20,
     "securityFrrBudget": 0.05,
