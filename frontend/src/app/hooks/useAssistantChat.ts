@@ -534,6 +534,9 @@ export function useAssistantChat({
                             pushEvent({
                                 type: "tool_call_start",
                                 name: (data.name as string) ?? "",
+                                display_name:
+                                    (data.display_name as string | undefined) ??
+                                    undefined,
                                 isStreaming: true,
                             });
                             continue;
@@ -752,6 +755,19 @@ export function useAssistantChat({
                                     isStreaming: false,
                                 }),
                             );
+                            pushThinkingPlaceholder();
+                            continue;
+                        }
+
+                        if (data.type === "mcp_tool_result") {
+                            pushEvent({
+                                type: "mcp_tool_result",
+                                server: (data.server as string) ?? "",
+                                tool: (data.tool as string) ?? "",
+                                ok: data.ok !== false,
+                                args: (data.args as string) ?? "",
+                                output: (data.output as string) ?? "",
+                            });
                             pushThinkingPlaceholder();
                             continue;
                         }

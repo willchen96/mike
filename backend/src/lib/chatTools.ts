@@ -21,6 +21,8 @@ import {
     type LlmMessage,
     type OpenAIToolSchema,
 } from "./llm";
+import { findMcpServerForTool } from "./mcp/servers";
+import type { LoadedMcpServer } from "./mcp/types";
 
 const STANDARD_FONT_DATA_URL = (() => {
     try {
@@ -1484,6 +1486,32 @@ export type DocReplicatedResult = {
     }[];
 };
 
+/**
+ * One MCP tool call worth of observability — surfaced to the chat UI so the
+ * user can see what was sent and what came back. `args` and `output` are
+ * already capped in size before this event is emitted/persisted.
+ */
+export type McpToolResultEvent = {
+    type: "mcp_tool_result";
+    server: string;
+    tool: string;
+    ok: boolean;
+    args: string;
+    output: string;
+};
+
+/**
+ * Cap previewed args/output to keep `chat_messages.content` from bloating.
+ * The model still receives the full untruncated tool output — this only
+ * affects what is shown to and persisted for the user.
+ */
+const MCP_PREVIEW_MAX = 4096;
+
+function truncateForPreview(s: string): string {
+    if (s.length <= MCP_PREVIEW_MAX) return s;
+    return s.slice(0, MCP_PREVIEW_MAX) + "\n…(truncated)";
+}
+
 export async function runToolCalls(
     toolCalls: ToolCall[],
     docStore: DocStore,
@@ -1495,6 +1523,7 @@ export async function runToolCalls(
     docIndex?: DocIndex,
     turnEditState?: TurnEditState,
     projectId?: string | null,
+    mcpServers?: LoadedMcpServer[],
 ): Promise<{
     toolResults: unknown[];
     docsRead: { filename: string; document_id?: string }[];
@@ -1503,6 +1532,7 @@ export async function runToolCalls(
     docsReplicated: DocReplicatedResult[];
     workflowsApplied: { workflow_id: string; title: string }[];
     docsEdited: DocEditedResult[];
+    mcpResults: McpToolResultEvent[];
 }> {
     const toolResults: unknown[] = [];
     const docsRead: { filename: string; document_id?: string }[] = [];
@@ -1515,6 +1545,7 @@ export async function runToolCalls(
     const docsReplicated: DocReplicatedResult[] = [];
     const workflowsApplied: { workflow_id: string; title: string }[] = [];
     const docsEdited: DocEditedResult[] = [];
+    const mcpResults: McpToolResultEvent[] = [];
 
     for (const tc of toolCalls) {
         let args: Record<string, unknown> = {};
@@ -1522,6 +1553,46 @@ export async function runToolCalls(
             args = JSON.parse(tc.function.arguments || "{}");
         } catch {
             /* ignore */
+        }
+
+        if (tc.function.name.startsWith("mcp__") && mcpServers?.length) {
+            const match = findMcpServerForTool(tc.function.name, mcpServers);
+            if (!match) {
+                toolResults.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: `MCP tool '${tc.function.name}' not available (server may have been removed mid-request).`,
+                });
+                continue;
+            }
+            const { server, originalName } = match;
+            write(
+                `data: ${JSON.stringify({
+                    type: "mcp_tool_call",
+                    server: server.row.name,
+                    tool: originalName,
+                })}\n\n`,
+            );
+            const content = await server.client.callTool(originalName, args);
+            // The model gets the untruncated content; the user-facing preview
+            // is capped to keep chat_messages.content from bloating.
+            const ok = !content.startsWith(`MCP tool '${originalName}' `);
+            const preview: McpToolResultEvent = {
+                type: "mcp_tool_result",
+                server: server.row.name,
+                tool: originalName,
+                ok,
+                args: truncateForPreview(JSON.stringify(args)),
+                output: truncateForPreview(content),
+            };
+            write(`data: ${JSON.stringify(preview)}\n\n`);
+            mcpResults.push(preview);
+            toolResults.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                content,
+            });
+            continue;
         }
 
         if (tc.function.name === "read_document") {
@@ -2206,6 +2277,7 @@ export async function runToolCalls(
         docsReplicated,
         workflowsApplied,
         docsEdited,
+        mcpResults,
     };
 }
 
@@ -2291,7 +2363,8 @@ type AssistantEvent =
           download_url: string;
           annotations: EditAnnotation[];
       }
-    | { type: "content"; text: string };
+    | { type: "content"; text: string }
+    | McpToolResultEvent;
 
 export async function runLLMStream(params: {
     apiMessages: unknown[];
@@ -2312,11 +2385,22 @@ export async function runLLMStream(params: {
      * generated docs still get persisted, but as standalone documents.
      */
     projectId?: string | null;
+    /**
+     * MCP servers loaded for this user (already connected, with tool lists
+     * fetched). Their tools are merged into the per-request tool set under
+     * the `mcp__<slug>__` prefix. Leave undefined when no MCP support is
+     * wired in or the user has none configured.
+     */
+    mcpServers?: LoadedMcpServer[];
 }): Promise<{ fullText: string; events: AssistantEvent[] }> {
-    const { apiMessages, docStore, docIndex, userId, db, write, extraTools, workflowStore, tabularStore, buildCitations, model, apiKeys, projectId } = params;
-    const activeTools = extraTools?.length
-        ? [...TOOLS, ...WORKFLOW_TOOLS, ...extraTools]
-        : [...TOOLS, ...WORKFLOW_TOOLS];
+    const { apiMessages, docStore, docIndex, userId, db, write, extraTools, workflowStore, tabularStore, buildCitations, model, apiKeys, projectId, mcpServers } = params;
+    const mcpTools = (mcpServers ?? []).flatMap((s) => s.tools);
+    const activeTools = [
+        ...TOOLS,
+        ...WORKFLOW_TOOLS,
+        ...(extraTools ?? []),
+        ...mcpTools,
+    ];
 
     // Extract system prompt; pass remaining turns to the adapter as
     // plain user/assistant messages.
@@ -2444,10 +2528,21 @@ export async function runLLMStream(params: {
             // and the first tool-specific event.
             onToolCallStart: (call) => {
                 flushText();
+                // For MCP tools, emit a friendly display name (server + tool)
+                // alongside the raw prefixed name. The UI renders display_name
+                // when present so users don't see `mcp__<slug>__<tool>`.
+                let display_name: string | undefined;
+                if (call.name.startsWith("mcp__") && mcpServers?.length) {
+                    const match = findMcpServerForTool(call.name, mcpServers);
+                    if (match) {
+                        display_name = `${match.server.row.name} · ${match.originalName}`;
+                    }
+                }
                 write(
                     `data: ${JSON.stringify({
                         type: "tool_call_start",
                         name: call.name,
+                        ...(display_name ? { display_name } : {}),
                     })}\n\n`,
                 );
             },
@@ -2472,6 +2567,7 @@ export async function runLLMStream(params: {
                 docsReplicated,
                 workflowsApplied,
                 docsEdited,
+                mcpResults,
             } = await runToolCalls(
                     toolCalls,
                     docStore,
@@ -2483,6 +2579,7 @@ export async function runLLMStream(params: {
                     docIndex,
                     turnEditState,
                     projectId,
+                    mcpServers,
                 );
             for (const r of docsRead) {
                 events.push({
@@ -2534,6 +2631,9 @@ export async function runLLMStream(params: {
                     download_url: e.download_url,
                     annotations: e.annotations,
                 });
+            }
+            for (const r of mcpResults) {
+                events.push(r);
             }
 
             // Index alignment would break if any tool branch skips its

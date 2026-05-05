@@ -85,6 +85,8 @@ export type AssistantEvent =
   | {
         type: "tool_call_start";
         name: string;
+        /** Friendly label (e.g. "Legal Data Hunter · search") for MCP tools. */
+        display_name?: string;
         isStreaming?: boolean;
     }
   | { type: "thinking"; isStreaming?: boolean }
@@ -112,6 +114,17 @@ export type AssistantEvent =
         isStreaming?: boolean;
     }
   | { type: "doc_download"; filename: string; download_url: string }
+  | {
+        type: "mcp_tool_result";
+        server: string;
+        tool: string;
+        ok: boolean;
+        /** JSON-stringified args (capped server-side). */
+        args: string;
+        /** Tool output text (capped server-side). */
+        output: string;
+        isStreaming?: boolean;
+    }
   | {
         type: "doc_replicated";
         /** Source document filename. */

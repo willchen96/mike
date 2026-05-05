@@ -273,6 +273,56 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- User MCP servers
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.user_mcp_servers (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  slug text not null,
+  name text not null,
+  url text not null,
+  headers jsonb not null default '{}'::jsonb,
+  enabled boolean not null default true,
+  last_error text,
+  auth_type text not null default 'headers'
+    check (auth_type in ('headers', 'oauth')),
+  oauth_metadata jsonb,
+  oauth_tokens jsonb,
+  oauth_code_verifier text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint user_mcp_servers_slug_format
+    check (slug ~ '^[a-z0-9_-]{1,24}$'),
+  unique (user_id, slug)
+);
+
+create index if not exists idx_user_mcp_servers_user
+  on public.user_mcp_servers(user_id, enabled);
+
+alter table public.user_mcp_servers enable row level security;
+
+drop policy if exists "Users can view their own MCP servers" on public.user_mcp_servers;
+create policy "Users can view their own MCP servers"
+  on public.user_mcp_servers for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can insert their own MCP servers" on public.user_mcp_servers;
+create policy "Users can insert their own MCP servers"
+  on public.user_mcp_servers for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update their own MCP servers" on public.user_mcp_servers;
+create policy "Users can update their own MCP servers"
+  on public.user_mcp_servers for update
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can delete their own MCP servers" on public.user_mcp_servers;
+create policy "Users can delete their own MCP servers"
+  on public.user_mcp_servers for delete
+  using (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
 -- Tabular reviews
 -- ---------------------------------------------------------------------------
 

@@ -421,6 +421,89 @@ function ReasoningBlock({
     );
 }
 
+function McpToolResultBlock({
+    server,
+    tool,
+    ok,
+    args,
+    output,
+    showConnector,
+}: {
+    server: string;
+    tool: string;
+    ok: boolean;
+    args: string;
+    output: string;
+    showConnector?: boolean;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const prettyArgs = (() => {
+        try {
+            const parsed = JSON.parse(args);
+            return JSON.stringify(parsed, null, 2);
+        } catch {
+            return args;
+        }
+    })();
+    const outputPreview = output.split("\n").slice(0, 1).join("\n");
+    const outputClamped =
+        outputPreview.length > 160
+            ? outputPreview.slice(0, 160) + "…"
+            : outputPreview;
+    return (
+        <div className="text-sm font-serif text-gray-500 relative">
+            {showConnector && (
+                <div className="absolute bottom-0 w-[1px] bg-gray-300 top-[13px] left-[2.5px] h-[calc(100%+11px)]" />
+            )}
+            <div className="flex items-start">
+                <div
+                    className={`mt-2 w-1.5 h-1.5 rounded-full shrink-0 ${
+                        ok ? "bg-green-400" : "bg-red-400"
+                    }`}
+                />
+                <button
+                    type="button"
+                    onClick={() => setExpanded((v) => !v)}
+                    className="ml-2 min-w-0 flex-1 text-left hover:text-gray-700 transition-colors"
+                >
+                    <span className="font-medium">{ok ? "Called" : "Failed"}</span>{" "}
+                    <span>
+                        {server} · {tool}
+                    </span>
+                    {!expanded && outputClamped && (
+                        <span className="ml-2 text-gray-400">
+                            — {outputClamped}
+                        </span>
+                    )}
+                    <span className="ml-2 text-xs text-gray-400">
+                        {expanded ? "Hide" : "Show"} details
+                    </span>
+                </button>
+            </div>
+            {expanded && (
+                <div className="ml-3.5 mt-2 space-y-2 border-l-2 border-gray-200 pl-3">
+                    <div>
+                        <div className="text-[11px] uppercase tracking-wider text-gray-400 mb-1">
+                            Arguments
+                        </div>
+                        <pre className="text-xs font-mono bg-gray-50 border border-gray-200 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                            {prettyArgs || "(none)"}
+                        </pre>
+                    </div>
+                    <div>
+                        <div className="text-[11px] uppercase tracking-wider text-gray-400 mb-1">
+                            Output
+                        </div>
+                        <pre className="text-xs font-mono bg-gray-50 border border-gray-200 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words max-h-72 overflow-y-auto">
+                            {output || "(empty)"}
+                        </pre>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function DocReadBlock({
     filename,
     onClick,
@@ -1239,7 +1322,11 @@ export function AssistantMessage({
                     <div className="w-1.5 h-1.5 rounded-full border border-gray-400 border-t-transparent animate-spin shrink-0" />
                     <span className="font-medium ml-2">Running</span>
                     <span className="ml-1">
-                        {event.name ? `${event.name}...` : "tool..."}
+                        {event.display_name
+                            ? `${event.display_name}...`
+                            : event.name
+                              ? `${event.name}...`
+                              : "tool..."}
                     </span>
                 </div>
             );
@@ -1333,6 +1420,19 @@ export function AssistantMessage({
                             ? () => onWorkflowClick(event.workflow_id)
                             : undefined
                     }
+                />
+            );
+        }
+        if (event.type === "mcp_tool_result") {
+            return (
+                <McpToolResultBlock
+                    key={globalIdx}
+                    server={event.server}
+                    tool={event.tool}
+                    ok={event.ok}
+                    args={event.args}
+                    output={event.output}
+                    showConnector={showConnector}
                 />
             );
         }
