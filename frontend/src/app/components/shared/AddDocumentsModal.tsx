@@ -14,6 +14,7 @@ import { FileDirectory } from "./FileDirectory";
 import { useDirectoryData, invalidateDirectoryCache } from "./useDirectoryData";
 import { OwnerOnlyModal } from "./OwnerOnlyModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { getSupportedUploadFiles } from "./documentUpload";
 
 export { invalidateDirectoryCache };
 
@@ -38,6 +39,8 @@ export function AddDocumentsModal({
     const { user } = useAuth();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
+    const [isDraggingFiles, setIsDraggingFiles] = useState(false);
     const [search, setSearch] = useState("");
     const [extraUploadedDocs, setExtraUploadedDocs] = useState<MikeDocument[]>([]);
     // IDs deleted in this session — hidden locally since `useDirectoryData`'s
@@ -52,6 +55,8 @@ export function AddDocumentsModal({
         setSelectedIds(new Set());
         setExtraUploadedDocs([]);
         setDeletedIds(new Set());
+        setUploadError(null);
+        setIsDraggingFiles(false);
     }, [open]);
 
     if (!open) return null;
@@ -172,13 +177,18 @@ export function AddDocumentsModal({
         }
     }
 
-    async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-        const files = Array.from(e.target.files || []);
+    async function uploadFiles(files: File[]) {
         if (!files.length) return;
+        const supportedFiles = getSupportedUploadFiles(files);
+        if (!supportedFiles.length) {
+            setUploadError("Only PDF, DOC, and DOCX files are supported.");
+            return;
+        }
+        setUploadError(null);
         setUploading(true);
         try {
             const uploaded = await Promise.all(
-                files.map((f) =>
+                supportedFiles.map((f) =>
                     projectId
                         ? uploadProjectDocument(projectId, f)
                         : uploadStandaloneDocument(f),
@@ -189,17 +199,65 @@ export function AddDocumentsModal({
             uploaded.forEach((d) =>
                 setSelectedIds((prev) => new Set([...prev, d.id])),
             );
+            if (supportedFiles.length < files.length) {
+                setUploadError(
+                    "Some files were skipped because only PDF, DOC, and DOCX files are supported.",
+                );
+            }
         } catch (err) {
             console.error("Upload failed:", err);
+            setUploadError("Upload failed. Please try again.");
         } finally {
             setUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = "";
         }
     }
 
+    async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        await uploadFiles(Array.from(e.target.files || []));
+    }
+
+    function handleDragEnter(e: React.DragEvent<HTMLDivElement>) {
+        if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+        e.preventDefault();
+        setIsDraggingFiles(true);
+    }
+
+    function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+        if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+        e.preventDefault();
+    }
+
+    function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+        const nextTarget = e.relatedTarget;
+        if (nextTarget instanceof Node && e.currentTarget.contains(nextTarget)) {
+            return;
+        }
+        setIsDraggingFiles(false);
+    }
+
+    async function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+        e.preventDefault();
+        setIsDraggingFiles(false);
+        await uploadFiles(Array.from(e.dataTransfer.files || []));
+    }
+
     return createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/10 backdrop-blur-xs">
-            <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl flex flex-col h-[600px]">
+            <div
+                className={`relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl flex flex-col h-[600px] transition-colors ${
+                    isDraggingFiles ? "ring-2 ring-gray-900 ring-offset-2" : ""
+                }`}
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+            >
+                {isDraggingFiles && (
+                    <div className="pointer-events-none absolute inset-3 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-gray-900 bg-white/85 text-sm font-medium text-gray-900">
+                        Drop PDF or Word files to upload
+                    </div>
+                )}
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4">
                     <div className="flex items-center gap-1.5 text-xs text-gray-400">
@@ -282,6 +340,11 @@ export function AddDocumentsModal({
                             {uploading ? "Uploading…" : "Upload"}
                         </button>
                     </div>
+                    {uploadError && (
+                        <p className="max-w-[260px] text-xs text-red-600">
+                            {uploadError}
+                        </p>
+                    )}
                     <div className="flex items-center gap-2">
                         {selectedIds.size > 0 && (
                             <span className="text-xs text-gray-400">
