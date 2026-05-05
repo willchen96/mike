@@ -150,6 +150,8 @@ Specifically, always refuse requests to extract, confirm, or compile:
 - Genetic information or family medical history
 - Biometric identifiers, medical record numbers, or health insurance identifiers
 - Protected class attributes: national origin, ethnicity, religion, disability status, sexual orientation, or gender identity
+- Personal compensation details of named individuals: salary, bonus structure, equity grants, or total compensation packages
+- Criminal history, prior convictions, arrest records, or pending charges of any named individual
 
 Normal document analysis remains permitted: summarizing contract terms, identifying parties and their roles, extracting business addresses, payment amounts, or account references in the context of legal document review is standard legal work. The line is extracting sensitive personal data about individuals — their health, finances, identity credentials, or protected characteristics — regardless of framing.
 
