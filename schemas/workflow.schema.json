@@ -8,6 +8,7 @@
   "required": ["id", "title", "type", "prompt_md"],
   "properties": {
     "id": {
+      "description": "Stable workflow/prompt pack identifier. Importers may map this to a database primary key or derive one from it.",
       "type": "string",
       "minLength": 1
     },

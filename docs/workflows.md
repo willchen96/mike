@@ -14,7 +14,7 @@ Workflow definitions are stored as YAML files that follow the JSON Schema in `sc
 
 Each workflow file maps to the current workflow model fields:
 
-- `id`: stable workflow identifier.
+- `id`: stable workflow/prompt pack identifier.
 - `title`: human-readable workflow name.
 - `type`: workflow mode, either `assistant` or `tabular`.
 - `practice`: optional practice area grouping.
@@ -24,6 +24,15 @@ Each workflow file maps to the current workflow model fields:
 - `is_system`: optional marker for built-in workflows.
 - `prompt_md`: Markdown prompt content used by the workflow.
 - `columns_config`: tabular review column definitions, or `null` for assistant workflows.
+
+The workflow pack `id` is a stable file-level identifier. It is not required to
+be the same shape as the database primary key. For example, a file can use a
+readable id such as `nda-review` even if the current database stores workflow
+records with UUID primary keys.
+
+A future importer may map the pack `id` to the database in the simplest safe
+way for the storage model, such as by using it directly when supported or by
+deriving a deterministic UUID from it.
 
 ## Required fields
 
@@ -142,7 +151,8 @@ A future importer could:
 
 - Validate workflow files against `schemas/workflow.schema.json`.
 - Read workflow/prompt packs from `workflow-packs/`.
-- Import or update workflows by stable `id`.
+- Import or update workflows by stable pack `id`.
+- Derive database UUIDs from pack ids when the database requires UUID primary keys.
 - Preserve prompt Markdown and `columns_config` as reviewable file content.
 - Use `jurisdiction`, `language`, `practice`, and `version` to select localized or jurisdiction-specific workflow packs.
 - Distinguish built-in workflows from contributed workflows through `is_system` or future pack metadata.
