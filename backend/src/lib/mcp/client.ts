@@ -8,6 +8,7 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
 const CONNECT_TIMEOUT_MS = 10_000;
@@ -20,6 +21,7 @@ export class McpHttpClient {
     constructor(
         private readonly url: string,
         private readonly headers: Record<string, string>,
+        private readonly authProvider?: OAuthClientProvider,
     ) {}
 
     async connect(): Promise<void> {
@@ -27,6 +29,7 @@ export class McpHttpClient {
             requestInit: {
                 headers: this.headers,
             },
+            ...(this.authProvider ? { authProvider: this.authProvider } : {}),
         });
         this.client = new Client(
             { name: "mike", version: "1.0.0" },

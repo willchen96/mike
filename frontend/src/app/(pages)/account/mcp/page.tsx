@@ -15,6 +15,7 @@ import {
     createMcpServer,
     deleteMcpServer,
     listMcpServers,
+    startMcpOauth,
     testMcpServer,
     updateMcpServer,
     type McpServer,
@@ -27,12 +28,14 @@ type Draft = {
     name: string;
     url: string;
     headers: DraftHeader[];
+    auth_type: "headers" | "oauth";
 };
 
 const EMPTY_DRAFT: Draft = {
     name: "",
     url: "",
     headers: [{ key: "", value: "" }],
+    auth_type: "headers",
 };
 
 export default function McpServersPage() {
@@ -82,18 +85,82 @@ export default function McpServersPage() {
         }
         setSaving(true);
         try {
-            const created = await createMcpServer({ name, url, headers });
+            const created = await createMcpServer({
+                name,
+                url,
+                headers: draft.auth_type === "oauth" ? {} : headers,
+                auth_type: draft.auth_type,
+            });
             setDraft(EMPTY_DRAFT);
             setShowAdd(false);
             await reload();
-            // Auto-discover tools so the user sees the tool list right away
-            // without an extra Test click. Errors surface inline via the
-            // server card's last_error / testResults render.
-            void runAutoTest(created.id);
+            if (draft.auth_type === "oauth") {
+                // Discovery + sign-in needs user interaction. Kick the popup
+                // immediately so it feels like one continuous flow.
+                void launchOAuth(created.id);
+            } else {
+                // Auto-discover tools so the user sees the tool list right
+                // away without an extra Test click.
+                void runAutoTest(created.id);
+            }
         } catch (err) {
             setAddError(err instanceof Error ? err.message : "Failed to save");
         } finally {
             setSaving(false);
+        }
+    };
+
+    const launchOAuth = async (id: string) => {
+        try {
+            const { authorize_url, already_authorized } = await startMcpOauth(id);
+            if (already_authorized) {
+                await reload();
+                void runAutoTest(id);
+                return;
+            }
+            if (!authorize_url) {
+                alert("Authorization server did not return a URL.");
+                return;
+            }
+            const popup = window.open(
+                authorize_url,
+                "mcp_oauth",
+                "width=600,height=720,menubar=no,toolbar=no,location=no",
+            );
+            if (!popup) {
+                alert(
+                    "Couldn't open the sign-in window — check your popup blocker.",
+                );
+                return;
+            }
+            // Poll the row until tokens are saved, or until the popup closes
+            // unfinished. Stop after 5 minutes regardless.
+            const deadline = Date.now() + 5 * 60 * 1000;
+            const interval = setInterval(async () => {
+                try {
+                    const list = await listMcpServers();
+                    const row = list.find((s) => s.id === id);
+                    if (row?.oauth_authorized) {
+                        clearInterval(interval);
+                        try {
+                            popup.close();
+                        } catch {
+                            /* ignore */
+                        }
+                        setServers(list);
+                        void runAutoTest(id);
+                        return;
+                    }
+                } catch {
+                    /* ignore transient errors */
+                }
+                if (popup.closed || Date.now() > deadline) {
+                    clearInterval(interval);
+                    await reload();
+                }
+            }, 1500);
+        } catch (err) {
+            alert(err instanceof Error ? err.message : "Sign-in failed");
         }
     };
 
@@ -259,6 +326,7 @@ export default function McpServersPage() {
                             onToggle={() => handleToggleEnabled(s)}
                             onDelete={() => handleDelete(s)}
                             onTest={() => handleTest(s)}
+                            onSignIn={() => launchOAuth(s.id)}
                         />
                     ))}
                 </div>
@@ -308,11 +376,6 @@ function AddForm({
                         setDraft({ ...draft, name: e.target.value })
                     }
                 />
-                <p className="text-xs text-gray-400 mt-1">
-                    Shown in chat when the assistant calls a tool. Don&rsquo;t
-                    paste tokens here &mdash; use the Headers section below
-                    for credentials.
-                </p>
             </div>
             <div>
                 <label className="text-sm text-gray-600 block mb-1">URL</label>
@@ -323,11 +386,49 @@ function AddForm({
                         setDraft({ ...draft, url: e.target.value })
                     }
                 />
-                <p className="text-xs text-gray-400 mt-1">
-                    Streamable-HTTP MCP endpoint. Must be HTTPS (or
-                    http://localhost for local testing).
-                </p>
             </div>
+            <div>
+                <label className="text-sm text-gray-600 block mb-1">
+                    Authentication
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                        type="button"
+                        onClick={() =>
+                            setDraft({ ...draft, auth_type: "headers" })
+                        }
+                        className={`text-left rounded-md border p-2 text-sm transition-colors ${
+                            draft.auth_type === "headers"
+                                ? "border-blue-500 bg-white ring-1 ring-blue-500"
+                                : "border-gray-200 bg-white hover:bg-gray-50"
+                        }`}
+                    >
+                        <div className="font-medium">API key / headers</div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                            For servers that accept a static token. You paste
+                            it as a custom header below.
+                        </div>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() =>
+                            setDraft({ ...draft, auth_type: "oauth" })
+                        }
+                        className={`text-left rounded-md border p-2 text-sm transition-colors ${
+                            draft.auth_type === "oauth"
+                                ? "border-blue-500 bg-white ring-1 ring-blue-500"
+                                : "border-gray-200 bg-white hover:bg-gray-50"
+                        }`}
+                    >
+                        <div className="font-medium">OAuth (auto-discover)</div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                            For spec-conformant servers. You&rsquo;ll sign in
+                            via a popup &mdash; no token to paste.
+                        </div>
+                    </button>
+                </div>
+            </div>
+            {draft.auth_type === "headers" && (
             <div>
                 <label className="text-sm text-gray-600 block mb-1">
                     Custom headers (optional)
@@ -387,16 +488,13 @@ function AddForm({
                     </Button>
                 </div>
             </div>
+            )}
             {error && (
                 <div className="text-sm text-red-600 flex items-center gap-2">
                     <AlertCircle className="h-4 w-4" />
                     {error}
                 </div>
             )}
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 leading-relaxed">
-                By saving, you confirm you trust this server&rsquo;s operator
-                with anything Mike sends to it during tool calls.
-            </p>
             <div className="flex justify-end gap-2 pt-2">
                 <Button
                     onClick={onSave}
@@ -408,8 +506,10 @@ function AddForm({
                             <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                             Saving&hellip;
                         </>
+                    ) : draft.auth_type === "oauth" ? (
+                        "Save & sign in"
                     ) : (
-                        "Save server"
+                        "Save connector"
                     )}
                 </Button>
             </div>
@@ -454,6 +554,7 @@ function ServerCard({
     onToggle,
     onDelete,
     onTest,
+    onSignIn,
 }: {
     server: McpServer;
     testing: boolean;
@@ -461,10 +562,13 @@ function ServerCard({
     onToggle: () => void;
     onDelete: () => void;
     onTest: () => void;
+    onSignIn: () => void;
 }) {
     const [showDetails, setShowDetails] = useState(false);
     const displayName = safeServerName(server.name);
     const nameWasSanitized = displayName !== server.name.trim();
+    const needsSignIn =
+        server.auth_type === "oauth" && !server.oauth_authorized;
 
     return (
         <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -475,6 +579,19 @@ function ServerCard({
                         <h3 className="font-medium text-gray-900 truncate">
                             {displayName}
                         </h3>
+                        {server.auth_type === "oauth" && (
+                            <span
+                                className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${
+                                    server.oauth_authorized
+                                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                                        : "bg-amber-50 text-amber-700 border-amber-200"
+                                }`}
+                            >
+                                {server.oauth_authorized
+                                    ? "OAuth · signed in"
+                                    : "OAuth · sign-in required"}
+                            </span>
+                        )}
                         {server.enabled ? (
                             <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
@@ -486,7 +603,7 @@ function ServerCard({
                                 Disabled
                             </span>
                         )}
-                        {server.last_error && (
+                        {server.last_error && server.last_error !== "reauth_required" && (
                             <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">
                                 <AlertCircle className="h-3 w-3" />
                                 Error
@@ -522,18 +639,28 @@ function ServerCard({
                     )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={onTest}
-                        disabled={testing}
-                    >
-                        {testing ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                            "Test"
-                        )}
-                    </Button>
+                    {needsSignIn ? (
+                        <Button
+                            size="sm"
+                            onClick={onSignIn}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                            Sign in
+                        </Button>
+                    ) : (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={onTest}
+                            disabled={testing}
+                        >
+                            {testing ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                                "Test"
+                            )}
+                        </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={onToggle}>
                         {server.enabled ? "Disable" : "Enable"}
                     </Button>

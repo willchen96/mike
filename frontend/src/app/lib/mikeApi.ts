@@ -828,6 +828,8 @@ export interface McpServer {
     header_keys: string[];
     enabled: boolean;
     last_error: string | null;
+    auth_type: "headers" | "oauth";
+    oauth_authorized: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -849,11 +851,20 @@ export async function createMcpServer(payload: {
     slug?: string;
     headers?: Record<string, string>;
     enabled?: boolean;
+    auth_type?: "headers" | "oauth";
 }): Promise<McpServer> {
     return apiRequest<McpServer>("/user/mcp-servers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+    });
+}
+
+export async function startMcpOauth(
+    id: string,
+): Promise<{ authorize_url: string | null; already_authorized?: boolean }> {
+    return apiRequest(`/user/mcp-servers/${id}/oauth/start`, {
+        method: "POST",
     });
 }
 

@@ -285,6 +285,11 @@ create table if not exists public.user_mcp_servers (
   headers jsonb not null default '{}'::jsonb,
   enabled boolean not null default true,
   last_error text,
+  auth_type text not null default 'headers'
+    check (auth_type in ('headers', 'oauth')),
+  oauth_metadata jsonb,
+  oauth_tokens jsonb,
+  oauth_code_verifier text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint user_mcp_servers_slug_format

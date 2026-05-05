@@ -10,6 +10,7 @@ import { createHash } from "crypto";
 import type { OpenAIToolSchema } from "../llm/types";
 import type { createServerSupabase } from "../supabase";
 import { McpHttpClient } from "./client";
+import { DbOAuthProvider, ReauthRequiredError } from "./oauth";
 import type { LoadedMcpServer, McpServerRow } from "./types";
 
 const TOOL_NAME_MAX = 64;
@@ -27,7 +28,9 @@ export async function loadEnabledMcpServersForUser(
     if (error || !data || data.length === 0) return [];
 
     const rows = data as McpServerRow[];
-    const results = await Promise.allSettled(rows.map(loadOne));
+    const results = await Promise.allSettled(
+        rows.map((row) => loadOne(row, userId, db)),
+    );
 
     const out: LoadedMcpServer[] = [];
     for (let i = 0; i < results.length; i++) {
@@ -43,26 +46,47 @@ export async function loadEnabledMcpServersForUser(
                     .eq("id", row.id);
             }
         } else {
+            const reason = r.status === "rejected" ? r.reason : "unknown error";
+            const isReauth = reason instanceof ReauthRequiredError;
             const err =
-                r.status === "rejected"
-                    ? r.reason instanceof Error
-                        ? r.reason.message
-                        : String(r.reason)
-                    : "unknown error";
+                reason instanceof Error ? reason.message : String(reason);
             console.warn(
                 `[mcp] failed to load server ${row.slug} (${row.url}): ${err}`,
             );
             await db
                 .from("user_mcp_servers")
-                .update({ last_error: err.slice(0, 1000) })
+                .update({
+                    last_error: isReauth
+                        ? "reauth_required"
+                        : err.slice(0, 1000),
+                })
                 .eq("id", row.id);
         }
     }
     return out;
 }
 
-async function loadOne(row: McpServerRow): Promise<LoadedMcpServer | null> {
-    const client = new McpHttpClient(row.url, row.headers ?? {});
+async function loadOne(
+    row: McpServerRow,
+    userId: string,
+    db: ReturnType<typeof createServerSupabase>,
+): Promise<LoadedMcpServer | null> {
+    let authProvider: DbOAuthProvider | undefined;
+    if (row.auth_type === "oauth") {
+        // No tokens yet → don't even try to connect; the UI will surface a
+        // "Sign in" affordance and the user kicks off /oauth/start.
+        if (!row.oauth_tokens) {
+            throw new ReauthRequiredError(
+                "Connector not yet authorized — sign in from settings",
+            );
+        }
+        authProvider = new DbOAuthProvider(db, row.id, userId, "use");
+    }
+    const client = new McpHttpClient(
+        row.url,
+        row.headers ?? {},
+        authProvider,
+    );
     await client.connect();
     const mcpTools = await client.listTools();
 

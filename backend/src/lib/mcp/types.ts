@@ -9,6 +9,10 @@ export type McpServerRow = {
     headers: Record<string, string>;
     enabled: boolean;
     last_error: string | null;
+    auth_type: "headers" | "oauth";
+    oauth_metadata: Record<string, unknown> | null;
+    oauth_tokens: Record<string, unknown> | null;
+    oauth_code_verifier: string | null;
 };
 
 /**

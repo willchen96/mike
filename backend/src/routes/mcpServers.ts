@@ -4,9 +4,11 @@
 // (bypassing RLS), so every handler MUST filter by `user_id = userId`.
 
 import { Router } from "express";
+import { auth as runOAuth } from "@modelcontextprotocol/sdk/client/auth.js";
 import { requireAuth } from "../middleware/auth";
 import { createServerSupabase } from "../lib/supabase";
 import { McpHttpClient } from "../lib/mcp/client";
+import { DbOAuthProvider } from "../lib/mcp/oauth";
 
 export const mcpServersRouter = Router();
 
@@ -23,6 +25,7 @@ type Body = {
     url?: unknown;
     headers?: unknown;
     enabled?: unknown;
+    auth_type?: unknown;
 };
 
 function deriveSlug(name: string): string {
@@ -77,10 +80,24 @@ function validateHeaders(
 }
 
 function publicShape<T extends Record<string, unknown>>(row: T) {
-    const { headers, ...rest } = row as T & { headers?: Record<string, string> };
+    const {
+        headers,
+        oauth_metadata: _md,
+        oauth_tokens: tokens,
+        oauth_code_verifier: _cv,
+        ...rest
+    } = row as T & {
+        headers?: Record<string, string>;
+        oauth_metadata?: unknown;
+        oauth_tokens?: unknown;
+        oauth_code_verifier?: unknown;
+    };
     return {
         ...rest,
         header_keys: headers ? Object.keys(headers) : [],
+        // Boolean only — never round-trip the actual access token to the
+        // browser, even to the row's owner.
+        oauth_authorized: !!tokens,
     };
 }
 
@@ -90,7 +107,7 @@ mcpServersRouter.get("/", requireAuth, async (_req, res) => {
     const db = createServerSupabase();
     const { data, error } = await db
         .from("user_mcp_servers")
-        .select("id, slug, name, url, headers, enabled, last_error, created_at, updated_at")
+        .select("id, slug, name, url, headers, enabled, last_error, auth_type, oauth_tokens, created_at, updated_at")
         .eq("user_id", userId)
         .order("created_at", { ascending: true });
     if (error) return void res.status(500).json({ detail: error.message });
@@ -123,6 +140,9 @@ mcpServersRouter.post("/", requireAuth, async (req, res) => {
     const headersOk = validateHeaders(body.headers);
     if (!headersOk.ok) return void res.status(400).json({ detail: headersOk.error });
 
+    const auth_type =
+        body.auth_type === "oauth" ? "oauth" : "headers";
+
     const enabled = body.enabled === false ? false : true;
 
     const db = createServerSupabase();
@@ -133,10 +153,11 @@ mcpServersRouter.post("/", requireAuth, async (req, res) => {
             slug,
             name,
             url,
-            headers: headersOk.value,
+            headers: auth_type === "oauth" ? {} : headersOk.value,
             enabled,
+            auth_type,
         })
-        .select("id, slug, name, url, headers, enabled, last_error, created_at, updated_at")
+        .select("id, slug, name, url, headers, enabled, last_error, auth_type, oauth_tokens, created_at, updated_at")
         .single();
     if (error) {
         const status = error.code === "23505" ? 409 : 500;
@@ -181,7 +202,7 @@ mcpServersRouter.patch("/:id", requireAuth, async (req, res) => {
         .update(update)
         .eq("id", id)
         .eq("user_id", userId)
-        .select("id, slug, name, url, headers, enabled, last_error, created_at, updated_at")
+        .select("id, slug, name, url, headers, enabled, last_error, auth_type, oauth_tokens, created_at, updated_at")
         .single();
     if (error || !data) {
         return void res.status(404).json({ detail: error?.message ?? "Not found" });
@@ -210,7 +231,7 @@ mcpServersRouter.post("/:id/test", requireAuth, async (req, res) => {
     const db = createServerSupabase();
     const { data: row, error } = await db
         .from("user_mcp_servers")
-        .select("url, headers")
+        .select("url, headers, auth_type, oauth_tokens")
         .eq("id", id)
         .eq("user_id", userId)
         .single();
@@ -218,7 +239,22 @@ mcpServersRouter.post("/:id/test", requireAuth, async (req, res) => {
         return void res.status(404).json({ detail: "Not found" });
     }
 
-    const client = new McpHttpClient(row.url, (row.headers ?? {}) as Record<string, string>);
+    if (row.auth_type === "oauth" && !row.oauth_tokens) {
+        return void res.status(200).json({
+            ok: false,
+            error: "Connector is configured for OAuth but not yet signed in.",
+        });
+    }
+
+    const provider =
+        row.auth_type === "oauth"
+            ? new DbOAuthProvider(db, id, userId, "use")
+            : undefined;
+    const client = new McpHttpClient(
+        row.url,
+        (row.headers ?? {}) as Record<string, string>,
+        provider,
+    );
     try {
         await client.connect();
         const tools = await client.listTools();
@@ -240,5 +276,57 @@ mcpServersRouter.post("/:id/test", requireAuth, async (req, res) => {
         res.status(200).json({ ok: false, error: message });
     } finally {
         await client.close();
+    }
+});
+
+// POST /user/mcp-servers/:id/oauth/start — discover + DCR + build authorize URL
+//
+// Returns { authorize_url } so the frontend can open it in a popup. The user
+// completes consent at the connector's auth server and is redirected back to
+// /mcp/oauth/callback (mounted under mcpOauthRouter), which exchanges the
+// code and stores tokens.
+mcpServersRouter.post("/:id/oauth/start", requireAuth, async (req, res) => {
+    const userId = res.locals.userId as string;
+    const { id } = req.params;
+    const db = createServerSupabase();
+    const { data: row, error } = await db
+        .from("user_mcp_servers")
+        .select("id, user_id, url, auth_type")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .single();
+    if (error || !row) return void res.status(404).json({ detail: "Not found" });
+    if (row.auth_type !== "oauth") {
+        return void res
+            .status(400)
+            .json({ detail: "Connector is not configured for OAuth" });
+    }
+
+    const provider = new DbOAuthProvider(db, row.id, userId, "initiate");
+    try {
+        const result = await runOAuth(provider, { serverUrl: row.url });
+        if (result === "AUTHORIZED") {
+            // Already valid (e.g. row had a usable refresh token). Nothing
+            // for the user to do.
+            return void res.json({
+                authorize_url: null,
+                already_authorized: true,
+            });
+        }
+        if (!provider.lastAuthorizeUrl) {
+            throw new Error("Auth flow returned REDIRECT but no URL");
+        }
+        await db
+            .from("user_mcp_servers")
+            .update({ last_error: null })
+            .eq("id", id);
+        res.json({ authorize_url: provider.lastAuthorizeUrl.toString() });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await db
+            .from("user_mcp_servers")
+            .update({ last_error: message.slice(0, 1000) })
+            .eq("id", id);
+        res.status(500).json({ detail: message });
     }
 });
