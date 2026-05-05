@@ -1140,6 +1140,7 @@ def _write_traces(
     """Write per-case trace files to traces/passed/ and traces/failed/."""
     (out_dir / "traces" / "passed").mkdir(parents=True, exist_ok=True)
     (out_dir / "traces" / "failed").mkdir(parents=True, exist_ok=True)
+    (out_dir / "traces" / "errors").mkdir(parents=True, exist_ok=True)
 
     all_results = attack_results + benign_results
     for r in all_results:
