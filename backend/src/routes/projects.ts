@@ -27,16 +27,19 @@ projectsRouter.get("/", requireAuth, async (req, res) => {
     .order("created_at", { ascending: false });
   if (ownError) return void res.status(500).json({ detail: ownError.message });
 
-  const { data: sharedProjects, error: sharedError } = userEmail
+  const { data: allShared, error: sharedError } = userEmail
     ? await db
         .from("projects")
         .select("*")
-        .contains("shared_with", [userEmail])
         .neq("user_id", userId)
         .order("created_at", { ascending: false })
     : { data: [], error: null };
   if (sharedError)
     return void res.status(500).json({ detail: sharedError.message });
+
+  const sharedProjects = (allShared ?? []).filter(p =>
+    Array.isArray(p.shared_with) && p.shared_with.includes(userEmail)
+  );
 
   const projects = [...(ownProjects ?? []), ...(sharedProjects ?? [])].sort(
     (a, b) =>
