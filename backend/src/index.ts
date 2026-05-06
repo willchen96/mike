@@ -13,9 +13,21 @@ import { downloadsRouter } from "./routes/downloads";
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
+const ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "https://mike-legal-dhz4.vercel.app",
+  process.env.FRONTEND_URL,
+].filter(Boolean) as string[];
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL ?? "http://localhost:3000",
+    origin: (origin, callback) => {
+      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   }),
 );
