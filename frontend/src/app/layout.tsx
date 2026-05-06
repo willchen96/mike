@@ -38,6 +38,18 @@ export default function RootLayout({
                 className={`${inter.variable} ${ebGaramond.variable} font-sans antialiased`}
             >
                 <Providers>{children}</Providers>
+                <footer className="fixed bottom-0 left-0 right-0 z-[300] border-t border-gray-200 bg-white/95 px-4 py-2 text-center text-xs text-gray-600 backdrop-blur-sm">
+                    <a
+                        href="https://mikeoss.com/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-gray-800 hover:underline"
+                    >
+                        Mike
+                    </a>{" "}
+                    is an open source project and The Players Fund has forked
+                    it integrate with Scout
+                </footer>
             </body>
         </html>
     );

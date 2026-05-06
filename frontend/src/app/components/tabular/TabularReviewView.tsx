@@ -91,7 +91,7 @@ export function TRView({ reviewId, projectId }: Props) {
         claudeApiKey: profile?.claudeApiKey ?? null,
         geminiApiKey: profile?.geminiApiKey ?? null,
     };
-    const tabularModel = profile?.tabularModel ?? "gemini-3-flash-preview";
+    const tabularModel = profile?.tabularModel ?? "gemini-2.5-flash-lite";
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);

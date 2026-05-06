@@ -97,6 +97,43 @@ export async function deleteAccount(): Promise<void> {
     return apiRequest<void>("/user/account", { method: "DELETE" });
 }
 
+export interface MikeUserProfileRow {
+    user_id: string;
+    display_name: string | null;
+    organisation: string | null;
+    tier: string | null;
+    message_credits_used: number;
+    credits_reset_date: string;
+    tabular_model: string | null;
+    claude_api_key: string | null;
+    gemini_api_key: string | null;
+}
+
+export async function getUserProfile(): Promise<MikeUserProfileRow | null> {
+    const result = await apiRequest<{ profile: MikeUserProfileRow | null }>(
+        "/user/profile",
+    );
+    return result.profile;
+}
+
+export async function updateUserProfile(
+    payload: {
+        display_name?: string | null;
+        organisation?: string | null;
+        tabular_model?: string;
+        claude_api_key?: string | null;
+        gemini_api_key?: string | null;
+        message_credits_used?: number;
+        credits_reset_date?: string;
+    },
+): Promise<void> {
+    await apiRequest<void>("/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+}
+
 export async function getProject(projectId: string): Promise<MikeProject> {
     return apiRequest<MikeProject>(`/projects/${projectId}`);
 }

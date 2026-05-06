@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
+import { getUserProfile, updateUserProfile } from "@/app/lib/mikeApi";
 
 interface UserProfile {
     displayName: string | null;
@@ -51,11 +52,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
     const loadProfile = useCallback(async (userId: string) => {
         try {
-            const { data, error } = await supabase
-                .from("mike_user_profiles")
-                .select("*")
-                .eq("user_id", userId)
-                .single();
+            const data = await getUserProfile();
 
             // Define credit limit constant
             const MONTHLY_CREDIT_LIMIT = 999999; // temporarily unlimited
@@ -65,8 +62,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             futureResetDate.setDate(futureResetDate.getDate() + 30);
             const defaultResetDateStr = futureResetDate.toISOString();
 
-            if (error) {
-                // Set fallback profile data if profile doesn't exist
+            if (!data) {
                 setProfile({
                     displayName: null,
                     organisation: null,
@@ -74,7 +70,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                     creditsResetDate: defaultResetDateStr,
                     creditsRemaining: MONTHLY_CREDIT_LIMIT,
                     tier: "Free",
-                    tabularModel: "gemini-3-flash-preview",
+                    tabularModel: "gemini-2.5-flash-lite",
                     claudeApiKey: null,
                     geminiApiKey: null,
                 });
@@ -82,55 +78,44 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             }
 
             // Use fetched data to update profile state
-            if (data) {
-                let creditsUsed = data.message_credits_used;
-                let resetDate = data.credits_reset_date;
-                let creditsRemaining = MONTHLY_CREDIT_LIMIT - creditsUsed;
-                let shouldUpdateDb = false;
+            let creditsUsed = data.message_credits_used;
+            let resetDate = data.credits_reset_date;
+            let creditsRemaining = MONTHLY_CREDIT_LIMIT - creditsUsed;
+            let shouldUpdateDb = false;
 
-                // Check if credits have expired and need reset
-                if (resetDate && new Date() > new Date(resetDate)) {
-                    // Calculate new reset date
-                    const newResetDate = new Date();
-                    newResetDate.setDate(newResetDate.getDate() + 30);
-                    resetDate = newResetDate.toISOString();
-                    creditsUsed = 0;
-                    creditsRemaining = MONTHLY_CREDIT_LIMIT;
-                    shouldUpdateDb = true;
-                }
+            // Check if credits have expired and need reset
+            if (resetDate && new Date() > new Date(resetDate)) {
+                // Calculate new reset date
+                const newResetDate = new Date();
+                newResetDate.setDate(newResetDate.getDate() + 30);
+                resetDate = newResetDate.toISOString();
+                creditsUsed = 0;
+                creditsRemaining = MONTHLY_CREDIT_LIMIT;
+                shouldUpdateDb = true;
+            }
 
-                // 1. Update local state immediately
-                setProfile({
-                    displayName: data.display_name,
-                    organisation: data.organisation ?? null,
-                    messageCreditsUsed: creditsUsed,
-                    creditsResetDate: resetDate,
-                    creditsRemaining: creditsRemaining,
-                    tier: data.tier || "Free",
-                    tabularModel:
-                        data.tabular_model || "gemini-3-flash-preview",
-                    claudeApiKey: data.claude_api_key ?? null,
-                    geminiApiKey: data.gemini_api_key ?? null,
+            // 1. Update local state immediately
+            setProfile({
+                displayName: data.display_name,
+                organisation: data.organisation ?? null,
+                messageCreditsUsed: creditsUsed,
+                creditsResetDate: resetDate,
+                creditsRemaining: creditsRemaining,
+                tier: data.tier || "Free",
+                tabularModel:
+                    data.tabular_model || "gemini-2.5-flash-lite",
+                claudeApiKey: data.claude_api_key ?? null,
+                geminiApiKey: data.gemini_api_key ?? null,
+            });
+
+            // 2. Update database in background if needed
+            if (shouldUpdateDb) {
+                updateUserProfile({
+                    message_credits_used: 0,
+                    credits_reset_date: resetDate,
+                }).catch((error) => {
+                    console.error("Failed to auto-reset credits", error);
                 });
-
-                // 2. Update database in background if needed
-                if (shouldUpdateDb) {
-                    supabase
-                        .from("mike_user_profiles")
-                        .update({
-                            message_credits_used: 0,
-                            credits_reset_date: resetDate,
-                            updated_at: new Date().toISOString(),
-                        })
-                        .eq("user_id", userId)
-                        .then(({ error }) => {
-                            if (error)
-                                console.error(
-                                    "Failed to auto-reset credits",
-                                    error,
-                                );
-                        });
-                }
             }
         } catch (e) {
             // Calculate a default future reset date for fallback
@@ -145,7 +130,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                 creditsResetDate: futureResetDate.toISOString(),
                 creditsRemaining: 999999, // temporarily unlimited
                 tier: "Free",
-                tabularModel: "gemini-3-flash-preview",
+                tabularModel: "gemini-2.5-flash-lite",
                 claudeApiKey: null,
                 geminiApiKey: null,
             });
@@ -171,17 +156,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             }
 
             try {
-                const { error } = await supabase
-                    .from("mike_user_profiles")
-                    .update({
-                        display_name: displayName,
-                        updated_at: new Date().toISOString(),
-                    })
-                    .eq("user_id", user.id);
-
-                if (error) {
-                    throw error;
-                }
+                await updateUserProfile({ display_name: displayName });
 
                 setProfile((prev) => (prev ? { ...prev, displayName } : null));
                 return true;
@@ -196,14 +171,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         async (organisation: string): Promise<boolean> => {
             if (!user) return false;
             try {
-                const { error } = await supabase
-                    .from("mike_user_profiles")
-                    .update({
-                        organisation,
-                        updated_at: new Date().toISOString(),
-                    })
-                    .eq("user_id", user.id);
-                if (error) throw error;
+                await updateUserProfile({ organisation });
                 setProfile((prev) =>
                     prev ? { ...prev, organisation } : null,
                 );
@@ -221,17 +189,9 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             value: string,
         ): Promise<boolean> => {
             if (!user) return false;
-            const dbField = field === "tabularModel" ? "tabular_model" : "";
-            if (!dbField) return false;
             try {
-                const { error } = await supabase
-                    .from("mike_user_profiles")
-                    .update({
-                        [dbField]: value,
-                        updated_at: new Date().toISOString(),
-                    })
-                    .eq("user_id", user.id);
-                if (error) throw error;
+                if (field !== "tabularModel") return false;
+                await updateUserProfile({ tabular_model: value });
                 setProfile((prev) =>
                     prev ? { ...prev, [field]: value } : null,
                 );
@@ -255,14 +215,11 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                 provider === "claude" ? "claudeApiKey" : "geminiApiKey";
             const normalized = value?.trim() ? value.trim() : null;
             try {
-                const { error } = await supabase
-                    .from("mike_user_profiles")
-                    .update({
-                        [dbField]: normalized,
-                        updated_at: new Date().toISOString(),
-                    })
-                    .eq("user_id", user.id);
-                if (error) throw error;
+                if (dbField === "claude_api_key") {
+                    await updateUserProfile({ claude_api_key: normalized });
+                } else {
+                    await updateUserProfile({ gemini_api_key: normalized });
+                }
                 setProfile((prev) =>
                     prev ? { ...prev, [stateField]: normalized } : null,
                 );
@@ -293,17 +250,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         try {
             const newCreditsUsed = profile.messageCreditsUsed + 1;
 
-            const { error } = await supabase
-                .from("mike_user_profiles")
-                .update({
-                    message_credits_used: newCreditsUsed,
-                    updated_at: new Date().toISOString(),
-                })
-                .eq("user_id", user.id);
-
-            if (error) {
-                throw error;
-            }
+            await updateUserProfile({ message_credits_used: newCreditsUsed });
 
             // Update local state
             setProfile((prev) =>

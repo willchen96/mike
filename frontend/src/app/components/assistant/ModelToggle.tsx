@@ -21,8 +21,6 @@ export interface ModelOption {
 export const MODELS: ModelOption[] = [
     { id: "claude-opus-4-7", label: "Claude Opus 4.7", group: "Anthropic" },
     { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", group: "Anthropic" },
-    { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", group: "Google" },
-    { id: "gemini-3-flash-preview", label: "Gemini 3 Flash", group: "Google" },
     { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", group: "Google" },
 ];
 
