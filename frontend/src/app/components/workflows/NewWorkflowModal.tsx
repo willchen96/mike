@@ -95,18 +95,18 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
     }
 
     return (
-        <div className="fixed inset-0 z-101 flex items-center justify-center bg-black/20 backdrop-blur-xs">
+        <div className="fixed inset-0 z-101 flex items-center justify-center bg-[#292629]/20 backdrop-blur-xs">
             <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col" style={{ height: 600 }}>
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 pt-5 pb-2 shrink-0">
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                    <div className="flex items-center gap-1.5 text-xs text-[#292629]/40">
                         <span>Workflows</span>
                         <span>›</span>
                         <span>{isEditing ? "Edit workflow" : "New workflow"}</span>
                     </div>
                     <button
                         onClick={handleClose}
-                        className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                        className="rounded-lg p-1.5 text-[#292629]/40 hover:bg-[#F5F5F5] hover:text-[#292629]/60 transition-colors"
                     >
                         <X className="h-4 w-4" />
                     </button>
@@ -121,22 +121,22 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
                             placeholder="Workflow name"
-                            className="w-full text-2xl font-serif text-gray-800 placeholder-gray-300 focus:outline-none bg-transparent"
+                            className="w-full text-2xl font-sans text-[#292629]/90 placeholder-[#C7C7B2] focus:outline-none bg-transparent"
                             autoFocus
                         />
 
                         {/* Type pills — only shown when creating */}
                         {!isEditing && (
                             <div className="mt-5">
-                                <p className="mb-2 text-sm font-medium text-gray-500">Type</p>
+                                <p className="mb-2 text-sm font-medium text-[#292629]/50">Type</p>
                                 <div className="flex items-center gap-2">
                                     <button
                                         type="button"
                                         onClick={() => setType("assistant")}
                                         className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
                                             type === "assistant"
-                                                ? "border-gray-900 bg-gray-900 text-white"
-                                                : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                                                ? "border-[#292629] bg-[#292629] text-white"
+                                                : "border-[#C7C7B2] text-[#292629]/60 hover:bg-[#F5F5F5]"
                                         }`}
                                     >
                                         <MessageSquare className="h-3 w-3" />
@@ -147,8 +147,8 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
                                         onClick={() => setType("tabular")}
                                         className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
                                             type === "tabular"
-                                                ? "border-gray-900 bg-gray-900 text-white"
-                                                : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                                                ? "border-[#292629] bg-[#292629] text-white"
+                                                : "border-[#C7C7B2] text-[#292629]/60 hover:bg-[#F5F5F5]"
                                         }`}
                                     >
                                         <Table2 className="h-3 w-3" />
@@ -160,7 +160,7 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
 
                         {/* Practice */}
                         <div className="mt-5">
-                            <p className="mb-2 text-sm font-medium text-gray-500">Practice Area</p>
+                            <p className="mb-2 text-sm font-medium text-[#292629]/50">Practice Area</p>
                             <div className="flex flex-wrap gap-2">
                                 {PRACTICE_OPTIONS.map((p) => (
                                     <button
@@ -169,8 +169,8 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
                                         onClick={() => setPractice(practice === p ? "" : p)}
                                         className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                                             practice === p
-                                                ? "border-gray-900 bg-gray-900 text-white"
-                                                : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                                                ? "border-[#292629] bg-[#292629] text-white"
+                                                : "border-[#C7C7B2] text-[#292629]/60 hover:bg-[#F5F5F5]"
                                         }`}
                                     >
                                         {p}
@@ -184,7 +184,7 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
                                     value={customPractice}
                                     onChange={(e) => setCustomPractice(e.target.value)}
                                     placeholder="Enter practice area…"
-                                    className="mt-3 w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 placeholder-gray-400 focus:border-gray-400 focus:outline-none"
+                                    className="mt-3 w-full rounded-md border border-[#C7C7B2] px-3 py-1.5 text-sm text-[#292629]/80 placeholder-[#C7C7B2] focus:border-[#C7C7B2] focus:outline-none"
                                 />
                             )}
                         </div>
@@ -195,18 +195,18 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
                     </div>
 
                     {/* Footer */}
-                    <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-6 py-4 shrink-0">
+                    <div className="flex items-center justify-end gap-2 border-t border-[#C7C7B2]/50 px-6 py-4 shrink-0">
                         <button
                             type="button"
                             onClick={handleClose}
-                            className="rounded-lg px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 transition-colors"
+                            className="rounded-lg px-4 py-2 text-sm text-[#292629]/50 hover:bg-[#F5F5F5] transition-colors"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={!title.trim() || loading}
-                            className="rounded-lg bg-gray-900 px-5 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-40 transition-colors"
+                            className="rounded-lg bg-[#292629] px-5 py-2 text-sm font-medium text-white hover:bg-[#292629]/90 disabled:opacity-40 transition-colors"
                         >
                             {loading ? (isEditing ? "Saving…" : "Creating…") : (isEditing ? "Save changes" : "Create workflow")}
                         </button>

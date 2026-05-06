@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { Inter, EB_Garamond } from "next/font/google";
+import { Plus_Jakarta_Sans, EB_Garamond } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
-const inter = Inter({
-    variable: "--font-inter",
+const plusJakartaSans = Plus_Jakarta_Sans({
+    variable: "--font-plus-jakarta",
     subsets: ["latin"],
+    weight: ["200", "300", "400", "500", "600", "700", "800"],
 });
 
 const ebGaramond = EB_Garamond({
@@ -35,7 +36,7 @@ export default function RootLayout({
     return (
         <html lang="en">
             <body
-                className={`${inter.variable} ${ebGaramond.variable} font-sans antialiased`}
+                className={`${plusJakartaSans.variable} ${ebGaramond.variable} font-sans antialiased`}
             >
                 <Providers>{children}</Providers>
             </body>

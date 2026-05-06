@@ -295,13 +295,13 @@ export function EditCard({
     };
 
     return (
-        <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+        <div className="border border-[#C7C7B2] rounded-lg p-3 bg-[#F5F5F5]">
             {annotation.reason && (
-                <p className="text-xs text-gray-500 mb-2">
+                <p className="text-xs text-[#292629]/50 mb-2">
                     {annotation.reason}
                 </p>
             )}
-            <div className="text-sm leading-relaxed font-serif bg-white border border-gray-200 rounded-md px-2 py-2">
+            <div className="text-sm leading-relaxed font-sans bg-white border border-[#C7C7B2] rounded-md px-2 py-2">
                 {annotation.inserted_text && (
                     <span className="text-green-700">
                         {annotation.inserted_text}
@@ -317,14 +317,14 @@ export function EditCard({
                 <button
                     onClick={() => handle("accept")}
                     disabled={inFlight || resolved}
-                    className="px-2 py-1 text-xs rounded border border-gray-900 bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50"
+                    className="px-2 py-1 text-xs rounded border border-[#292629] bg-[#292629] text-white hover:bg-[#292629]/90 disabled:opacity-50"
                 >
                     {status === "accepted" ? "Accepted" : "Accept"}
                 </button>
                 <button
                     onClick={() => handle("reject")}
                     disabled={inFlight || resolved}
-                    className="px-2 py-1 text-xs rounded border border-gray-200 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                    className="px-2 py-1 text-xs rounded border border-[#C7C7B2] bg-white text-[#292629]/80 hover:bg-[#F5F5F5] disabled:opacity-50"
                 >
                     {status === "rejected" ? "Rejected" : "Reject"}
                 </button>
@@ -337,7 +337,7 @@ export function EditCard({
                                 ? "This change has been resolved and is no longer in the document."
                                 : undefined
                         }
-                        className="ml-auto px-2 py-1 text-xs rounded border border-gray-200 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+                        className="ml-auto px-2 py-1 text-xs rounded border border-[#C7C7B2] bg-white text-[#292629]/80 hover:bg-[#F5F5F5] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
                     >
                         View
                     </button>

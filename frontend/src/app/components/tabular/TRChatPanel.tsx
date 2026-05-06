@@ -96,12 +96,12 @@ function ReasoningBlock({
         <div className="ml-1">
             <button
                 onClick={() => !isStreaming && setIsOpen((v) => !v)}
-                className="flex items-center text-sm text-gray-400 hover:text-gray-500 transition-colors"
+                className="flex items-center text-sm text-[#292629]/40 hover:text-[#292629]/50 transition-colors"
             >
                 {isStreaming ? (
-                    <div className="w-1.5 h-1.5 rounded-full border border-gray-400 border-t-transparent animate-spin shrink-0" />
+                    <div className="w-1.5 h-1.5 rounded-full border border-[#C7C7B2] border-t-transparent animate-spin shrink-0" />
                 ) : (
-                    <div className="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#C7C7B2] shrink-0" />
                 )}
                 <span className="font-medium ml-2">
                     {isStreaming
@@ -116,7 +116,7 @@ function ReasoningBlock({
                 )}
             </button>
             {(isOpen || isStreaming) && (
-                <div className="mt-1.5 ml-[14px] text-sm text-gray-400 prose prose-sm max-w-none [&>*]:text-gray-400 [&>*]:text-sm">
+                <div className="mt-1.5 ml-[14px] text-sm text-[#292629]/40 prose prose-sm max-w-none [&>*]:text-[#292629]/40 [&>*]:text-sm">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {text}
                     </ReactMarkdown>
@@ -138,16 +138,16 @@ function DocReadBlock({
     isStreaming?: boolean;
 }) {
     return (
-        <div className="flex items-center text-sm text-gray-400 ml-1">
+        <div className="flex items-center text-sm text-[#292629]/40 ml-1">
             {isStreaming ? (
-                <div className="w-1.5 h-1.5 rounded-full border border-gray-400 border-t-transparent animate-spin shrink-0" />
+                <div className="w-1.5 h-1.5 rounded-full border border-[#C7C7B2] border-t-transparent animate-spin shrink-0" />
             ) : (
                 <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
             )}
             <span className="font-medium ml-2">
                 {isStreaming ? "Reading" : "Read"}
             </span>
-            <span className="ml-1 text-gray-500">{label}</span>
+            <span className="ml-1 text-[#292629]/50">{label}</span>
         </div>
     );
 }
@@ -296,9 +296,9 @@ function TRAssistantMessage({
             return (
                 <div
                     key={key}
-                    className="flex items-center text-sm text-gray-400 ml-1"
+                    className="flex items-center text-sm text-[#292629]/40 ml-1"
                 >
-                    <div className="w-1.5 h-1.5 rounded-full border border-gray-400 border-t-transparent animate-spin shrink-0" />
+                    <div className="w-1.5 h-1.5 rounded-full border border-[#C7C7B2] border-t-transparent animate-spin shrink-0" />
                     <span className="ml-2">Thinking...</span>
                 </div>
             );
@@ -351,7 +351,7 @@ function TRAssistantMessage({
                                             )
                                         }
                                         title={`${cit.col_name} · ${cit.doc_name.replace(/\.[^.]+$/, "")}`}
-                                        className="mx-0.5 inline-flex items-center justify-center rounded-full w-4 h-4 text-[10px] font-medium bg-gray-100 text-gray-900 hover:bg-gray-200 transition-colors align-super font-serif"
+                                        className="mx-0.5 inline-flex items-center justify-center rounded-full w-4 h-4 text-[10px] font-medium bg-[#F5F5F5] text-[#292629] hover:bg-[#C7C7B2]/40 transition-colors align-super font-sans"
                                     >
                                         {idx + 1}
                                     </button>
@@ -359,7 +359,7 @@ function TRAssistantMessage({
                             }
                         }
                         return (
-                            <code className="bg-gray-100 px-1 py-0.5 rounded text-xs font-mono">
+                            <code className="bg-[#F5F5F5] px-1 py-0.5 rounded text-xs font-mono">
                                 {children}
                             </code>
                         );
@@ -372,7 +372,7 @@ function TRAssistantMessage({
     );
 
     return (
-        <div className="text-gray-900 font-serif">
+        <div className="text-[#292629] font-sans">
             <TRResponseStatus isActive={!!msg.isStreaming} />
             {groups.length > 0 && (
                 <div className="flex flex-col gap-2.5">
@@ -427,7 +427,7 @@ function MessageBubble({
     if (msg.role === "user") {
         return (
             <div className="flex justify-end">
-                <div className="max-w-[90%] rounded-md bg-gray-100 px-3 py-2 text-xs text-gray-800 whitespace-pre-wrap">
+                <div className="max-w-[90%] rounded-md bg-[#F5F5F5] px-3 py-2 text-xs text-[#292629]/90 whitespace-pre-wrap">
                     {msg.content}
                 </div>
             </div>
@@ -472,7 +472,7 @@ function TRChatInput({
 
     return (
         <div className="absolute bottom-0 left-0 right-0 mx-4 pb-4 bg-white">
-            <div className="border border-gray-300 rounded-xl bg-white  pt-1.5 pb-1.5 flex flex-col gap-1">
+            <div className="border border-[#C7C7B2] rounded-xl bg-white  pt-1.5 pb-1.5 flex flex-col gap-1">
                 <textarea
                     ref={textareaRef}
                     rows={1}
@@ -489,7 +489,7 @@ function TRChatInput({
                             handleAction();
                         }
                     }}
-                    className="flex-1 resize-none text-sm bg-transparent outline-none placeholder:text-gray-400 leading-6 max-h-48 overflow-y-auto border-0 p-0 pl-3 pr-2 pt-1"
+                    className="flex-1 resize-none text-sm bg-transparent outline-none placeholder:text-[#292629]/40 leading-6 max-h-48 overflow-y-auto border-0 p-0 pl-3 pr-2 pt-1"
                 />
                 <div className="flex items-center justify-between pl-1 pr-2">
                     <ModelToggle
@@ -542,20 +542,20 @@ function HistoryDropdown({
 
     return (
         <>
-            <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-100">
-                <Search className="h-3 w-3 text-gray-400 shrink-0" />
+            <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-[#C7C7B2]/50">
+                <Search className="h-3 w-3 text-[#292629]/40 shrink-0" />
                 <input
                     autoFocus
                     type="text"
                     placeholder="Search chats…"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    className="flex-1 text-xs bg-transparent outline-none placeholder:text-gray-400 text-gray-700"
+                    className="flex-1 text-xs bg-transparent outline-none placeholder:text-[#292629]/40 text-[#292629]/80"
                 />
             </div>
             <div className="max-h-48 overflow-y-auto">
                 {filtered.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-gray-400">
+                    <p className="px-3 py-2 text-xs text-[#292629]/40">
                         {chats.filter((c) => c.id !== currentChatId).length ===
                         0
                             ? "No previous chats."
@@ -568,7 +568,7 @@ function HistoryDropdown({
                             <button
                                 key={chat.id}
                                 onClick={() => onLoad(chat.id)}
-                                className="w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 transition-colors truncate"
+                                className="w-full px-3 py-2 text-left text-xs text-[#292629]/80 hover:bg-[#F5F5F5] transition-colors truncate"
                             >
                                 {label}
                             </button>
@@ -1303,7 +1303,7 @@ export function TRChatPanel({
     return (
         <div
             style={{ width: panelWidth }}
-            className="shrink-0 flex flex-col border-r border-gray-200 bg-white h-full relative"
+            className="shrink-0 flex flex-col border-r border-[#C7C7B2] bg-white h-full relative"
         >
             {/* Resize handle */}
             <div
@@ -1313,12 +1313,12 @@ export function TRChatPanel({
                 }}
                 className={`absolute top-0 right-0 h-full w-1 cursor-col-resize z-20 transition-colors ${
                     isResizing
-                        ? "bg-blue-500"
-                        : "bg-transparent hover:bg-blue-500"
+                        ? "bg-[#898344]"
+                        : "bg-transparent hover:bg-[#898344]"
                 }`}
             />
             {/* Header */}
-            <div className="flex items-center justify-between h-8 px-2 border-b border-gray-200 shrink-0">
+            <div className="flex items-center justify-between h-8 px-2 border-b border-[#C7C7B2] shrink-0">
                 <div className="flex items-center gap-1.5 px-2 min-w-0">
                     <MikeIcon mike size={14} />
                     <div
@@ -1339,7 +1339,7 @@ export function TRChatPanel({
                         }}
                         className="min-w-0 overflow-x-hidden whitespace-nowrap scrollbar-none"
                     >
-                        <span className="text-xs font-medium text-gray-700">
+                        <span className="text-xs font-medium text-[#292629]/80">
                             {currentChatTitle ?? "Assistant"}
                         </span>
                     </div>
@@ -1349,12 +1349,12 @@ export function TRChatPanel({
                         <button
                             onClick={() => setHistoryOpen((v) => !v)}
                             title="Chat history"
-                            className={`flex items-center justify-center h-7 w-7 rounded-md transition-colors ${historyOpen ? "text-gray-900" : "text-gray-400 hover:text-gray-700"}`}
+                            className={`flex items-center justify-center h-7 w-7 rounded-md transition-colors ${historyOpen ? "text-[#292629]" : "text-[#292629]/40 hover:text-[#292629]/80"}`}
                         >
                             <Clock className="h-3.5 w-3.5" />
                         </button>
                         {historyOpen && (
-                            <div className="absolute top-full right-0 mt-1 w-64 rounded-lg border border-gray-100 bg-white shadow-lg z-50 overflow-hidden">
+                            <div className="absolute top-full right-0 mt-1 w-64 rounded-lg border border-[#C7C7B2]/50 bg-white shadow-lg z-50 overflow-hidden">
                                 <HistoryDropdown
                                     chats={chats}
                                     currentChatId={currentChatId}
@@ -1366,7 +1366,7 @@ export function TRChatPanel({
                     <button
                         onClick={handleNewChat}
                         title="New chat"
-                        className="flex items-center justify-center h-7 w-7 rounded-md text-gray-400 hover:text-gray-700 transition-colors"
+                        className="flex items-center justify-center h-7 w-7 rounded-md text-[#292629]/40 hover:text-[#292629]/80 transition-colors"
                     >
                         <MessageSquarePlus className="h-3.5 w-3.5" />
                     </button>
@@ -1374,7 +1374,7 @@ export function TRChatPanel({
                         <button
                             onClick={handleDeleteChat}
                             title="Delete chat"
-                            className="flex items-center justify-center h-7 w-7 rounded-md text-gray-400 hover:text-red-600 transition-colors"
+                            className="flex items-center justify-center h-7 w-7 rounded-md text-[#292629]/40 hover:text-red-600 transition-colors"
                         >
                             <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -1382,7 +1382,7 @@ export function TRChatPanel({
                     <button
                         onClick={onClose}
                         title="Close"
-                        className="flex items-center justify-center h-7 w-7 rounded-md text-gray-400 hover:text-gray-700 transition-colors"
+                        className="flex items-center justify-center h-7 w-7 rounded-md text-[#292629]/40 hover:text-[#292629]/80 transition-colors"
                     >
                         <X className="h-3.5 w-3.5" />
                     </button>
@@ -1397,7 +1397,7 @@ export function TRChatPanel({
                 {messages.length === 0 && !isLoadingMessages && (
                     <div className="flex flex-1 flex-col items-center justify-center gap-2">
                         <MikeIcon size={24} />
-                        <p className="text-sm text-gray-400 text-center">
+                        <p className="text-sm text-[#292629]/40 text-center">
                             Ask a question about this tabular review.
                         </p>
                     </div>
@@ -1405,15 +1405,15 @@ export function TRChatPanel({
                 {isLoadingMessages && (
                     <div className="flex flex-col gap-4">
                         <div className="flex justify-end">
-                            <div className="bg-gray-100 rounded-2xl p-3 w-3/5">
-                                <div className="h-3 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite] rounded w-full" />
+                            <div className="bg-[#F5F5F5] rounded-2xl p-3 w-3/5">
+                                <div className="h-3 bg-gradient-to-r from-[#EBEBEB] via-[#D8D8D8] to-[#EBEBEB] bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite] rounded w-full" />
                             </div>
                         </div>
                         <div className="space-y-2">
                             {[1, 2, 3, 4].map((i) => (
                                 <div
                                     key={i}
-                                    className={`h-3 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite] rounded ${i === 3 ? "w-5/6" : i === 4 ? "w-4/6" : "w-full"}`}
+                                    className={`h-3 bg-gradient-to-r from-[#EBEBEB] via-[#D8D8D8] to-[#EBEBEB] bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite] rounded ${i === 3 ? "w-5/6" : i === 4 ? "w-4/6" : "w-full"}`}
                                 />
                             ))}
                         </div>

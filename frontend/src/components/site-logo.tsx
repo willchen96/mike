@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { MikeIcon } from "@/components/chat/mike-icon";
 
 interface SiteLogoProps {
     size?: "sm" | "md" | "lg" | "xl";
@@ -18,36 +17,35 @@ export function SiteLogo({
         process.env.NODE_ENV === "production"
             ? "https://mikeoss.com"
             : "http://localhost:3000";
-    const sizeClasses = {
-        sm: "text-xl",
-        md: "text-2xl",
-        lg: "text-4xl",
-        xl: "text-6xl",
-    };
 
-    const iconSizes = {
-        sm: 20,
-        md: 22,
-        lg: 32,
-        xl: 48,
+    const sizeMap = {
+        sm: { text: "text-lg", sub: "text-[8px]" },
+        md: { text: "text-2xl", sub: "text-[9px]" },
+        lg: { text: "text-4xl", sub: "text-xs" },
+        xl: { text: "text-6xl", sub: "text-sm" },
     };
 
     const logo = (
-        <h1
-            className={`flex items-center gap-1.5 ${sizeClasses[size]} font-light font-serif ${
+        <div
+            className={`flex flex-col gap-0.5 font-sans tracking-tight ${
                 animate ? "sidebar-fade-in" : ""
             } ${className}`}
         >
-            <MikeIcon size={iconSizes[size]} />
-            <span>Mike</span>
-        </h1>
+            <span className={`${sizeMap[size].text} leading-none`}>
+                <span className="font-light">Mike</span>
+                <span className="font-black"> Legal</span>
+            </span>
+            <span className={`${sizeMap[size].sub} uppercase tracking-[0.14em] text-current opacity-40 font-medium`}>
+                AI Platform
+            </span>
+        </div>
     );
 
     if (asLink) {
         return (
             <Link
                 href={landingHref}
-                className="cursor-pointer hover:opacity-80 transition-opacity"
+                className="cursor-pointer hover:opacity-75 transition-opacity"
             >
                 {logo}
             </Link>

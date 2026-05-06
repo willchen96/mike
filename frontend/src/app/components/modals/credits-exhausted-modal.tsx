@@ -28,7 +28,7 @@ export function CreditsExhaustedModal({
         <>
             {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-black/50 z-[200]"
+                className="fixed inset-0 bg-[#292629]/50 z-[200]"
                 onClick={onClose}
             />
 
@@ -37,28 +37,28 @@ export function CreditsExhaustedModal({
                 <div className="relative bg-white rounded-2xl shadow-2xl p-6">
                     {/* Header */}
                     <div className="flex items-start justify-between mb-4">
-                        <h2 className="text-3xl font-light font-eb-garamond text-gray-900">
+                        <h2 className="text-3xl font-light font-sans text-[#292629]">
                             Message Limit Reached
                         </h2>
                     </div>
 
                     {/* Content */}
                     <div className="space-y-4">
-                        <p className="text-gray-600">
+                        <p className="text-[#292629]/60">
                             You've reached your monthly message limit of 100
                             messages.
                         </p>
 
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="bg-[#F5F5F5] border border-[#898344] rounded-lg p-4">
                             <p className="text-sm text-blue-900 font-medium mb-1">
                                 Your credits will reset on:
                             </p>
-                            <p className="text-lg font-semibold text-blue-700">
+                            <p className="text-lg font-semibold text-[#536049]">
                                 {formatResetDate(resetDate)}
                             </p>
                         </div>
 
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-[#292629]/50">
                             Your message credits automatically reset on the
                             first day of each month.
                         </p>
@@ -68,7 +68,7 @@ export function CreditsExhaustedModal({
                     <div className="mt-6 flex gap-3">
                         <button
                             onClick={onClose}
-                            className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+                            className="flex-1 px-4 py-2.5 bg-[#F5F5F5] hover:bg-[#C7C7B2]/40 text-[#292629]/80 rounded-lg font-medium transition-colors"
                         >
                             Close
                         </button>

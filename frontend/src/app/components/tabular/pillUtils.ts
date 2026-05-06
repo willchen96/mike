@@ -6,7 +6,7 @@ export type PillSegment =
 
 /** Sequential colors assigned to tags by their position in the tags array. */
 export const TAG_COLORS = [
-    "bg-blue-100 text-blue-700",
+    "bg-blue-100 text-[#536049]",
     "bg-violet-100 text-violet-700",
     "bg-pink-100 text-pink-700",
     "bg-orange-100 text-orange-700",
@@ -18,7 +18,7 @@ export const TAG_COLORS = [
 
 const CURRENCY_COLORS: Record<string, string> = {
     USD: "bg-green-100 text-green-700",
-    EUR: "bg-blue-100 text-blue-700",
+    EUR: "bg-blue-100 text-[#536049]",
     GBP: "bg-purple-100 text-purple-700",
     JPY: "bg-red-100 text-red-700",
     CHF: "bg-orange-100 text-orange-700",
@@ -35,7 +35,7 @@ export function getPillClass(content: string, column?: ColumnConfig): string {
         const lower = content.toLowerCase();
         if (lower === "yes") return "bg-green-100 text-green-700";
         if (lower === "no") return "bg-red-100 text-red-700";
-        return "bg-gray-100 text-gray-700";
+        return "bg-[#F5F5F5] text-[#292629]/80";
     }
     if (column?.format === "currency") {
         return (
@@ -49,7 +49,7 @@ export function getPillClass(content: string, column?: ColumnConfig): string {
         );
         if (idx >= 0) return TAG_COLORS[idx % TAG_COLORS.length]!;
     }
-    return "bg-gray-100 text-gray-700";
+    return "bg-[#F5F5F5] text-[#292629]/80";
 }
 
 /** Split text on [[...]] pill markers, preserving surrounding text. */

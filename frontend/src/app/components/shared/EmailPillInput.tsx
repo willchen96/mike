@@ -75,22 +75,22 @@ export function EmailPillInput({
     return (
         <div>
             <div
-                className={`flex flex-wrap gap-1.5 rounded-lg border bg-gray-50 px-3 py-2 min-h-[40px] transition-colors ${
+                className={`flex flex-wrap gap-1.5 rounded-lg border bg-[#F5F5F5] px-3 py-2 min-h-[40px] transition-colors ${
                     error
                         ? "border-red-300 focus-within:border-red-400"
-                        : "border-gray-200 focus-within:border-gray-400"
+                        : "border-[#C7C7B2] focus-within:border-[#C7C7B2]"
                 }`}
             >
                 {emails.map((email) => (
                     <span
                         key={email}
-                        className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs text-gray-700"
+                        className="inline-flex items-center gap-1 rounded-full bg-[#C7C7B2]/40 px-2.5 py-0.5 text-xs text-[#292629]/80"
                     >
                         {email}
                         <button
                             type="button"
                             onClick={() => onChange(emails.filter((e) => e !== email))}
-                            className="text-gray-400 hover:text-gray-700 transition-colors"
+                            className="text-[#292629]/40 hover:text-[#292629]/80 transition-colors"
                         >
                             <X className="h-3 w-3" />
                         </button>
@@ -106,12 +106,12 @@ export function EmailPillInput({
                     onKeyDown={handleKeyDown}
                     onBlur={addEmail}
                     placeholder={emails.length === 0 ? placeholder : ""}
-                    className="flex-1 min-w-[160px] bg-transparent text-sm text-gray-700 placeholder:text-gray-400 outline-none"
+                    className="flex-1 min-w-[160px] bg-transparent text-sm text-[#292629]/80 placeholder:text-[#292629]/40 outline-none"
                     autoFocus={autoFocus}
                 />
             </div>
             {error && <p className="mt-1.5 text-xs text-red-500">{error}</p>}
-            {validating && <p className="mt-1.5 text-xs text-gray-400">Checking…</p>}
+            {validating && <p className="mt-1.5 text-xs text-[#292629]/40">Checking…</p>}
         </div>
     );
 }

@@ -54,9 +54,9 @@ export function AddDocButton({ onSelectDoc, onBrowseAll, selectedDocIds = [] }: 
                     <button
                         className={`flex items-center gap-1 px-2 h-8 rounded-lg text-sm transition-colors cursor-pointer ${
                             selectedDocIds.length > 0
-                                ? "text-black hover:bg-gray-100"
-                                : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"
-                        } ${isOpen ? "bg-gray-100" : ""}`}
+                                ? "text-black hover:bg-[#F5F5F5]"
+                                : "text-[#292629]/40 hover:text-[#292629]/80 hover:bg-[#F5F5F5]"
+                        } ${isOpen ? "bg-[#F5F5F5]" : ""}`}
                         title="Add documents"
                         aria-label="Add documents"
                     >
@@ -88,9 +88,9 @@ export function AddDocButton({ onSelectDoc, onBrowseAll, selectedDocIds = [] }: 
                         }}
                     >
                         {uploading ? (
-                            <Loader2Icon className="h-4 w-4 mr-2 animate-spin text-gray-400" />
+                            <Loader2Icon className="h-4 w-4 mr-2 animate-spin text-[#292629]/40" />
                         ) : (
-                            <Upload className="h-4 w-4 mr-2 text-gray-500" />
+                            <Upload className="h-4 w-4 mr-2 text-[#292629]/50" />
                         )}
                         <span className="text-sm">
                             {uploading ? "Uploading…" : "Upload files"}
@@ -100,7 +100,7 @@ export function AddDocButton({ onSelectDoc, onBrowseAll, selectedDocIds = [] }: 
                         className="cursor-pointer"
                         onClick={onBrowseAll}
                     >
-                        <LayoutGridIcon className="h-4 w-4 mr-2 text-gray-500" />
+                        <LayoutGridIcon className="h-4 w-4 mr-2 text-[#292629]/50" />
                         <span className="text-sm">Browse all</span>
                     </DropdownMenuItem>
                 </DropdownMenuContent>

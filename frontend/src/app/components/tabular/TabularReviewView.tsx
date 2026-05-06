@@ -471,43 +471,43 @@ export function TRView({ reviewId, projectId }: Props) {
             <div className="flex flex-1 flex-col overflow-hidden">
                 {/* Header */}
                 <div className="bg-white px-8 py-4 flex items-start justify-between shrink-0 gap-4">
-                    <div className="flex items-center gap-1.5 text-2xl font-medium font-serif">
+                    <div className="flex items-center gap-1.5 text-3xl font-bold font-sans">
                         {projectId && (
                             <>
                                 <button
                                     onClick={() => router.push("/projects")}
-                                    className="text-gray-500 hover:text-gray-700 transition-colors"
+                                    className="text-[#292629]/50 hover:text-[#292629]/80 transition-colors"
                                 >
                                     Projects
                                 </button>
-                                <span className="text-gray-300">›</span>
+                                <span className="text-[#292629]/30">›</span>
                                 <button
                                     onClick={() =>
                                         router.push(`/projects/${projectId}`)
                                     }
-                                    className="text-gray-500 hover:text-gray-700 transition-colors"
+                                    className="text-[#292629]/50 hover:text-[#292629]/80 transition-colors"
                                 >
                                     {loading ? (
-                                        <div className="h-6 w-32 rounded bg-gray-100 animate-pulse" />
+                                        <div className="h-6 w-32 rounded bg-[#F5F5F5] animate-pulse" />
                                     ) : (
                                         <>
                                             {project?.name ?? ""}
                                             {project?.cm_number && (
-                                                <span className="ml-1 text-gray-400">
+                                                <span className="ml-1 text-[#292629]/40">
                                                     (#{project.cm_number})
                                                 </span>
                                             )}
                                         </>
                                     )}
                                 </button>
-                                <span className="text-gray-300">›</span>
+                                <span className="text-[#292629]/30">›</span>
                                 <button
                                     onClick={() =>
                                         router.push(
                                             `/projects/${projectId}?tab=reviews`,
                                         )
                                     }
-                                    className="text-gray-500 hover:text-gray-700 transition-colors"
+                                    className="text-[#292629]/50 hover:text-[#292629]/80 transition-colors"
                                 >
                                     Tabular Reviews
                                 </button>
@@ -516,14 +516,14 @@ export function TRView({ reviewId, projectId }: Props) {
                         {!projectId && (
                             <button
                                 onClick={() => router.push("/tabular-reviews")}
-                                className="text-gray-500 hover:text-gray-700 transition-colors"
+                                className="text-[#292629]/50 hover:text-[#292629]/80 transition-colors"
                             >
                                 Tabular Reviews
                             </button>
                         )}
-                        <span className="text-gray-300">›</span>
+                        <span className="text-[#292629]/30">›</span>
                         {loading ? (
-                            <div className="h-6 w-40 rounded bg-gray-100 animate-pulse" />
+                            <div className="h-6 w-40 rounded bg-[#F5F5F5] animate-pulse" />
                         ) : (
                             <RenameableTitle
                                 value={review?.title || "Untitled Review"}
@@ -540,8 +540,8 @@ export function TRView({ reviewId, projectId }: Props) {
                                     disabled={loading}
                                     className={`flex h-8 w-8 items-center justify-center text-sm transition-colors ${
                                         loading
-                                            ? "text-gray-300 cursor-default"
-                                            : "text-gray-500 hover:text-gray-900 cursor-pointer"
+                                            ? "text-[#292629]/30 cursor-default"
+                                            : "text-[#292629]/50 hover:text-[#292629] cursor-pointer"
                                     }`}
                                     title="People with access"
                                     aria-label="People with access"
@@ -562,8 +562,8 @@ export function TRView({ reviewId, projectId }: Props) {
                                 title="Export to Excel"
                                 className={`flex h-8 items-center justify-center gap-1.5 px-3 text-sm transition-colors ${
                                     columns.length === 0 || documents.length === 0
-                                        ? "text-gray-300 cursor-default"
-                                        : "text-gray-700 hover:text-gray-900 cursor-pointer"
+                                        ? "text-[#292629]/30 cursor-default"
+                                        : "text-[#292629]/80 hover:text-[#292629] cursor-pointer"
                                 }`}
                             >
                                 <Download className="h-4 w-4" />
@@ -582,8 +582,8 @@ export function TRView({ reviewId, projectId }: Props) {
                                     columns.length === 0 ||
                                     documents.length === 0 ||
                                     savingColumnsConfig
-                                        ? "text-gray-300 cursor-default"
-                                        : "text-gray-700 hover:text-gray-900 cursor-pointer"
+                                        ? "text-[#292629]/30 cursor-default"
+                                        : "text-[#292629]/80 hover:text-[#292629] cursor-pointer"
                                 }`}
                             >
                                 {generating ? (
@@ -598,7 +598,7 @@ export function TRView({ reviewId, projectId }: Props) {
                 </div>
 
                 {/* Toolbar */}
-                <div className="flex items-center h-10 px-8 border-b border-gray-200 gap-4">
+                <div className="flex items-center h-10 px-8 border-b border-[#C7C7B2] gap-4">
                     <button
                         onClick={() => {
                             if (!chatOpen) setSidebarOpen(false);
@@ -608,8 +608,8 @@ export function TRView({ reviewId, projectId }: Props) {
                         disabled={loading || columns.length === 0 || documents.length === 0}
                         className={`flex items-center gap-1 text-xs font-medium transition-colors ${
                             loading || columns.length === 0 || documents.length === 0
-                                ? "text-gray-300 cursor-default"
-                                : "text-gray-700 hover:text-gray-900"
+                                ? "text-[#292629]/30 cursor-default"
+                                : "text-[#292629]/80 hover:text-[#292629]"
                         }`}
                     >
                         <MessageSquare className="h-3.5 w-3.5" />
@@ -620,16 +620,16 @@ export function TRView({ reviewId, projectId }: Props) {
                             <div ref={actionsRef} className="relative">
                                 <button
                                     onClick={() => setActionsOpen((v) => !v)}
-                                    className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                                    className="flex items-center gap-1 text-xs font-medium text-[#292629]/60 hover:text-[#292629] transition-colors"
                                 >
                                     Actions
                                     <ChevronDown className="h-3.5 w-3.5" />
                                 </button>
                                 {actionsOpen && (
-                                    <div className="absolute top-full right-0 mt-1 w-36 rounded-lg border border-gray-100 bg-white shadow-lg z-50 overflow-hidden">
+                                    <div className="absolute top-full right-0 mt-1 w-36 rounded-lg border border-[#C7C7B2]/50 bg-white shadow-lg z-50 overflow-hidden">
                                         <button
                                             onClick={handleClearResults}
-                                            className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                                            className="w-full px-3 py-1.5 text-left text-xs text-[#292629]/80 hover:bg-[#F5F5F5] transition-colors"
                                         >
                                             Clear results
                                         </button>
@@ -648,8 +648,8 @@ export function TRView({ reviewId, projectId }: Props) {
                             disabled={loading || savingColumnsConfig}
                             className={`flex items-center gap-1 text-xs font-medium transition-colors ${
                                 loading || savingColumnsConfig
-                                    ? "text-gray-300 cursor-default"
-                                    : "text-gray-700 hover:text-gray-900"
+                                    ? "text-[#292629]/30 cursor-default"
+                                    : "text-[#292629]/80 hover:text-[#292629]"
                             }`}
                         >
                             <Plus className="h-3.5 w-3.5" />
@@ -662,8 +662,8 @@ export function TRView({ reviewId, projectId }: Props) {
                             }
                             className={`flex items-center gap-1 text-xs font-medium transition-colors ${
                                 loading || savingColumn || savingColumnsConfig
-                                    ? "text-gray-300 cursor-default"
-                                    : "text-gray-700 hover:text-gray-900"
+                                    ? "text-[#292629]/30 cursor-default"
+                                    : "text-[#292629]/80 hover:text-[#292629]"
                             }`}
                         >
                             <Plus className="h-3.5 w-3.5" />

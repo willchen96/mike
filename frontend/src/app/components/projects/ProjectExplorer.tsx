@@ -32,8 +32,8 @@ function DocIcon({ fileType }: { fileType: string | null }) {
     if (fileType === "pdf")
         return <FileText className="h-3.5 w-3.5 text-red-500 shrink-0" />;
     if (fileType === "docx" || fileType === "doc")
-        return <File className="h-3.5 w-3.5 text-blue-500 shrink-0" />;
-    return <File className="h-3.5 w-3.5 text-gray-400 shrink-0" />;
+        return <File className="h-3.5 w-3.5 text-[#536049] shrink-0" />;
+    return <File className="h-3.5 w-3.5 text-[#292629]/40 shrink-0" />;
 }
 
 type ContextMenuState = {
@@ -178,12 +178,12 @@ export function ProjectExplorer({
                         className="flex items-center gap-1.5 py-1.5 pr-2 select-none"
                         style={{ paddingLeft: basePadding }}
                     >
-                        <ChevronRight className="h-3 w-3 text-gray-300 shrink-0" />
+                        <ChevronRight className="h-3 w-3 text-[#292629]/30 shrink-0" />
                         <FolderPlus className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                         <input
                             ref={newFolderInputRef}
                             autoFocus
-                            className="flex-1 min-w-0 text-xs bg-transparent outline-none border-b border-gray-300 text-gray-800"
+                            className="flex-1 min-w-0 text-xs bg-transparent outline-none border-b border-[#C7C7B2] text-[#292629]/90"
                             placeholder="Folder name"
                             value={newFolderName}
                             onChange={(e) => setNewFolderName(e.target.value)}
@@ -231,8 +231,8 @@ export function ProjectExplorer({
                                 }}
                                 className={`flex items-center gap-1.5 py-1.5 pr-2 rounded-sm cursor-pointer select-none transition-colors group ${
                                     isDragTarget
-                                        ? "bg-blue-50 ring-1 ring-inset ring-blue-200"
-                                        : "hover:bg-gray-50"
+                                        ? "bg-[#FEEA0F]/10 ring-1 ring-inset ring-[#FEEA0F]/40"
+                                        : "hover:bg-[#F5F5F5]"
                                 }`}
                                 style={{ paddingLeft: basePadding }}
                                 onClick={() => toggleFolder(folder.id)}
@@ -241,8 +241,8 @@ export function ProjectExplorer({
                                 }
                             >
                                 {isExpanded
-                                    ? <ChevronDown className="h-3 w-3 text-gray-400 shrink-0" />
-                                    : <ChevronRight className="h-3 w-3 text-gray-400 shrink-0" />
+                                    ? <ChevronDown className="h-3 w-3 text-[#292629]/40 shrink-0" />
+                                    : <ChevronRight className="h-3 w-3 text-[#292629]/40 shrink-0" />
                                 }
                                 {isExpanded
                                     ? <FolderOpen className="h-3.5 w-3.5 text-amber-500 shrink-0" />
@@ -251,7 +251,7 @@ export function ProjectExplorer({
                                 {isRenaming ? (
                                     <input
                                         autoFocus
-                                        className="flex-1 min-w-0 text-xs bg-transparent outline-none border-b border-gray-300 text-gray-800"
+                                        className="flex-1 min-w-0 text-xs bg-transparent outline-none border-b border-[#C7C7B2] text-[#292629]/90"
                                         value={renameValue}
                                         onChange={(e) => setRenameValue(e.target.value)}
                                         onKeyDown={(e) => {
@@ -262,7 +262,7 @@ export function ProjectExplorer({
                                         onClick={(e) => e.stopPropagation()}
                                     />
                                 ) : (
-                                    <span className="text-xs text-gray-600 truncate">{folder.name}</span>
+                                    <span className="text-xs text-[#292629]/60 truncate">{folder.name}</span>
                                 )}
                             </div>
                             {isExpanded && (
@@ -293,8 +293,8 @@ export function ProjectExplorer({
                                     doc.id,
                                 )
                             }
-                            className={`flex items-center gap-2 py-1.5 pr-4 rounded-sm cursor-pointer select-none transition-colors ${
-                                isSelected ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                            className={`flex items-center gap-2 py-1.5 pr-4 rounded-sm cursor-pointer select-none transition-colors border-l-2 ${
+                                isSelected ? "bg-[#FEEA0F]/10 border-l-[#FEEA0F] text-[#292629]" : "border-l-transparent text-[#292629]/60 hover:bg-[#F5F5F5] hover:text-[#292629]"
                             }`}
                             style={{ paddingLeft: basePadding }}
                         >
@@ -341,8 +341,8 @@ export function ProjectExplorer({
                     className="flex items-center gap-2 px-2 py-1.5 select-none"
                     onContextMenu={(e) => { e.stopPropagation(); openContextMenu(e, null); }}
                 >
-                    <FolderOpen className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                    <span className="text-xs text-gray-500 truncate">{projectName}</span>
+                    <FolderOpen className="h-3.5 w-3.5 text-[#292629]/40 shrink-0" />
+                    <span className="text-xs text-[#292629]/50 truncate">{projectName}</span>
                 </li>
             )}
 
@@ -353,19 +353,19 @@ export function ProjectExplorer({
 
             {/* Empty state */}
             {documents.length === 0 && folders.length === 0 && creatingIn === undefined && (
-                <li className="px-4 py-2 text-xs text-gray-400">No documents in this project.</li>
+                <li className="px-4 py-2 text-xs text-[#292629]/40">No documents in this project.</li>
             )}
 
             {/* Context menu */}
             {contextMenu && (
                 <div
                     ref={contextMenuRef}
-                    className="fixed z-50 w-44 rounded-lg border border-gray-100 bg-white shadow-lg overflow-hidden text-xs"
+                    className="fixed z-50 w-44 rounded-lg border border-[#C7C7B2]/50 bg-white shadow-lg overflow-hidden text-xs"
                     style={{ top: contextMenu.y, left: contextMenu.x }}
                 >
                     {onCreateFolder && (
                         <button
-                            className="w-full px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            className="w-full px-3 py-1.5 text-left text-[#292629]/80 hover:bg-[#F5F5F5] flex items-center gap-2"
                             onClick={() => {
                                 setContextMenu(null);
                                 if (contextMenu.parentId) {
@@ -377,13 +377,13 @@ export function ProjectExplorer({
                                 setNewFolderName("");
                             }}
                         >
-                            <FolderPlus className="h-3.5 w-3.5 text-gray-400" />
+                            <FolderPlus className="h-3.5 w-3.5 text-[#292629]/40" />
                             New subfolder
                         </button>
                     )}
                     {contextMenu.folderId && onRenameFolder && (
                         <button
-                            className="w-full px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50"
+                            className="w-full px-3 py-1.5 text-left text-[#292629]/80 hover:bg-[#F5F5F5]"
                             onClick={() => {
                                 const f = folders.find((x) => x.id === contextMenu.folderId);
                                 setRenameValue(f?.name ?? "");

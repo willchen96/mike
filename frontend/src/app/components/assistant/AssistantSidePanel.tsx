@@ -149,18 +149,18 @@ export function AssistantSidePanel({
     return (
         <div
             ref={panelRef}
-            className="flex h-full shrink-0 flex-col bg-white relative border-l border-gray-200 shadow-[-4px_0_12px_rgba(0,0,0,0.02)]"
+            className="flex h-full shrink-0 flex-col bg-white relative border-l border-[#C7C7B2] shadow-[-4px_0_12px_rgba(0,0,0,0.02)]"
             style={{ width: panelWidth }}
         >
             {/* Drag handle */}
             <div
                 onMouseDown={onMouseDown}
-                className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-400 transition-colors z-10"
+                className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-[#898344] transition-colors z-10"
                 style={{ marginLeft: -2 }}
             />
 
             {/* Tab strip (Chrome-style) */}
-            <div className="flex items-end gap-1 pr-2 pt-2 bg-gray-100">
+            <div className="flex items-end gap-1 pr-2 pt-2 bg-[#F5F5F5]">
                 <div className="flex-1 flex items-end gap-1 overflow-x-auto pl-2 pr-2">
                     {tabs.map((tab) => {
                         const isActive = tab.id === active.id;
@@ -174,8 +174,8 @@ export function AssistantSidePanel({
                                 onClick={() => onActivateTab(tab.id)}
                                 className={`group relative flex items-center gap-1.5 pl-3 pr-1.5 h-8 min-w-0 max-w-[220px] rounded-t-lg cursor-pointer select-none transition-colors ${
                                     isActive
-                                        ? "bg-white text-gray-800 before:content-[''] before:absolute before:bottom-0 before:-left-2 before:w-2 before:h-2 before:bg-[radial-gradient(circle_at_top_left,transparent_8px,white_9px)] after:content-[''] after:absolute after:bottom-0 after:-right-2 after:w-2 after:h-2 after:bg-[radial-gradient(circle_at_top_right,transparent_8px,white_9px)]"
-                                        : "bg-gray-200/70 text-gray-600 hover:bg-gray-200"
+                                        ? "bg-white text-[#292629]/90 before:content-[''] before:absolute before:bottom-0 before:-left-2 before:w-2 before:h-2 before:bg-[radial-gradient(circle_at_top_left,transparent_8px,white_9px)] after:content-[''] after:absolute after:bottom-0 after:-right-2 after:w-2 after:h-2 after:bg-[radial-gradient(circle_at_top_right,transparent_8px,white_9px)]"
+                                        : "bg-[#C7C7B2]/40/70 text-[#292629]/60 hover:bg-[#C7C7B2]/40"
                                 }`}
                             >
                                 <span
@@ -188,8 +188,8 @@ export function AssistantSidePanel({
                                     <span
                                         className={`shrink-0 inline-flex items-center rounded border px-1 py-px text-[9px] font-medium ${
                                             isActive
-                                                ? "border-gray-200 bg-white text-gray-600"
-                                                : "border-gray-300 bg-white/70 text-gray-500"
+                                                ? "border-[#C7C7B2] bg-white text-[#292629]/60"
+                                                : "border-[#C7C7B2] bg-white/70 text-[#292629]/50"
                                         }`}
                                     >
                                         V{tab.versionNumber}
@@ -200,7 +200,7 @@ export function AssistantSidePanel({
                                         e.stopPropagation();
                                         onCloseTab(tab.id);
                                     }}
-                                    className="shrink-0 rounded-full p-0.5 text-gray-400 hover:bg-gray-300 hover:text-gray-700"
+                                    className="shrink-0 rounded-full p-0.5 text-[#292629]/40 hover:bg-[#C7C7B2] hover:text-[#292629]/80"
                                 >
                                     <X className="h-3 w-3" />
                                 </button>
@@ -210,7 +210,7 @@ export function AssistantSidePanel({
                 </div>
                 <button
                     onClick={onCloseAll}
-                    className="shrink-0 mb-1 ml-1 rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+                    className="shrink-0 mb-1 ml-1 rounded-lg p-1.5 text-[#292629]/40 hover:bg-[#C7C7B2]/40 hover:text-[#292629]/80"
                     title="Close panel"
                 >
                     <X className="h-4 w-4" />

@@ -82,11 +82,11 @@ export default function AccountPage() {
             {/* Profile Settings */}
             <div className="pb-6">
                 <div className="flex items-center gap-2 mb-4">
-                    <h2 className="text-2xl font-medium font-serif">Profile</h2>
+                    <h2 className="text-3xl font-bold font-sans">Profile</h2>
                 </div>
                 <div className="space-y-4">
                     <div>
-                        <label className="text-sm text-gray-600 block mb-2">
+                        <label className="text-sm text-[#292629]/60 block mb-2">
                             Display Name
                         </label>
                         <div className="flex gap-2">
@@ -102,7 +102,7 @@ export default function AccountPage() {
                                 disabled={
                                     isSavingName || !displayName.trim() || saved
                                 }
-                                className="min-w-[80px] transition-all bg-black hover:bg-gray-900 text-white"
+                                className="min-w-[80px] transition-all bg-[#292629] hover:bg-[#292629]/90 text-white"
                             >
                                 {isSavingName ? (
                                     "Saving..."
@@ -118,7 +118,7 @@ export default function AccountPage() {
                         </div>
                     </div>
                     <div>
-                        <label className="text-sm text-gray-600 block mb-2">
+                        <label className="text-sm text-[#292629]/60 block mb-2">
                             Organisation
                         </label>
                         <div className="flex gap-2">
@@ -139,7 +139,7 @@ export default function AccountPage() {
                                         (profile?.organisation ?? "") ||
                                     orgSaved
                                 }
-                                className="min-w-[80px] transition-all bg-black hover:bg-gray-900 text-white"
+                                className="min-w-[80px] transition-all bg-[#292629] hover:bg-[#292629]/90 text-white"
                             >
                                 {isSavingOrg ? (
                                     "Saving..."
@@ -155,7 +155,7 @@ export default function AccountPage() {
                         </div>
                     </div>
                     <div>
-                        <label className="text-sm text-gray-600 block mb-2">
+                        <label className="text-sm text-[#292629]/60 block mb-2">
                             Email
                         </label>
                         <p className="text-base">{user?.email}</p>
@@ -166,12 +166,12 @@ export default function AccountPage() {
             {/* Plan */}
             <div className="py-6">
                 <div className="flex items-center gap-2 mb-4">
-                    <h2 className="text-2xl font-medium font-serif">
+                    <h2 className="text-3xl font-bold font-sans">
                         Usage Plan
                     </h2>
                 </div>
                 <div>
-                    <p className="text-base font-medium text-gray-500 capitalize">
+                    <p className="text-base font-medium text-[#292629]/50 capitalize">
                         {profile?.tier || "Free"}
                     </p>
                 </div>
@@ -179,7 +179,7 @@ export default function AccountPage() {
 
             {/* Actions */}
             <div className="py-6">
-                <h2 className="text-2xl font-medium font-serif mb-4">
+                <h2 className="text-3xl font-bold font-sans mb-4">
                     Actions
                 </h2>
                 <Button
@@ -194,10 +194,10 @@ export default function AccountPage() {
 
             {/* Danger Zone */}
             <div className="py-6">
-                <h2 className="text-2xl font-medium font-serif mb-1 text-red-600">
+                <h2 className="text-3xl font-bold font-sans mb-1 text-red-600">
                     Danger Zone
                 </h2>
-                <p className="text-sm text-gray-500 mb-4">
+                <p className="text-sm text-[#292629]/50 mb-4">
                     Permanently delete your account and all associated data.
                     This action cannot be undone.
                 </p>

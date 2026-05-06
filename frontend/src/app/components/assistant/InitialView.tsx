@@ -60,7 +60,7 @@ export function InitialView({ onSubmit }: InitialViewProps) {
                         </div>
                         <h1
                             ref={textRef}
-                            className="absolute text-4xl font-serif font-light text-gray-900 whitespace-nowrap"
+                            className="absolute text-4xl font-sans font-light text-[#292629] whitespace-nowrap"
                             style={{
                                 left: "50%",
                                 transform: loaded
@@ -83,7 +83,7 @@ export function InitialView({ onSubmit }: InitialViewProps) {
                     />
 
                     <div className="text-center">
-                        <p className="text-xs py-3 mb-3 text-gray-500">
+                        <p className="text-xs py-3 mb-3 text-[#292629]/50">
                             AI can make mistakes. Answers are not legal advice.
                         </p>
                     </div>

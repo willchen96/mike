@@ -30,7 +30,7 @@ export function SimpleLinkDialog({
         <>
             {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-black/50 z-[199]"
+                className="fixed inset-0 bg-[#292629]/50 z-[199]"
                 onClick={onClose}
             />
 
@@ -40,14 +40,14 @@ export function SimpleLinkDialog({
                     {/* Close Button */}
                     <button
                         onClick={onClose}
-                        className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 transition-colors"
+                        className="absolute right-4 top-4 text-[#292629]/40 hover:text-[#292629]/60 transition-colors"
                     >
                         <X className="h-5 w-5" />
                     </button>
 
                     {/* Header */}
                     <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-3xl font-light font-eb-garamond text-gray-900">
+                        <h2 className="text-3xl font-light font-sans text-[#292629]">
                             Share Chat
                         </h2>
                     </div>
@@ -55,11 +55,11 @@ export function SimpleLinkDialog({
                     {/* Content */}
                     <div className="space-y-4">
                         {/* Link display */}
-                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                            <p className="text-sm text-gray-600 mb-2 font-medium">
+                        <div className="bg-[#F5F5F5] rounded-lg p-3 border border-[#C7C7B2]">
+                            <p className="text-sm text-[#292629]/60 mb-2 font-medium">
                                 Share Link
                             </p>
-                            <p className="text-sm text-gray-800 break-all font-mono">
+                            <p className="text-sm text-[#292629]/90 break-all font-mono">
                                 {shareUrl}
                             </p>
                         </div>

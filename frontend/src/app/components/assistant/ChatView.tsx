@@ -457,15 +457,15 @@ export function ChatView({
                         {!messagesVisible && (
                             <div className="space-y-6 w-full">
                                 <div className="flex justify-end">
-                                    <div className="bg-gray-100 rounded-2xl p-4 w-2/5">
-                                        <div className="h-4 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite] rounded w-full" />
+                                    <div className="bg-[#F5F5F5] rounded-2xl p-4 w-2/5">
+                                        <div className="h-4 bg-gradient-to-r from-[#EBEBEB] via-[#D8D8D8] to-[#EBEBEB] bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite] rounded w-full" />
                                     </div>
                                 </div>
                                 <div className="space-y-3">
                                     {[1, 2, 3, 4].map((i) => (
                                         <div
                                             key={i}
-                                            className={`h-4 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite] rounded ${i === 3 ? "w-5/6" : i === 4 ? "w-4/6" : "w-full"}`}
+                                            className={`h-4 bg-gradient-to-r from-[#EBEBEB] via-[#D8D8D8] to-[#EBEBEB] bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite] rounded ${i === 3 ? "w-5/6" : i === 4 ? "w-4/6" : "w-full"}`}
                                         />
                                     ))}
                                 </div>
@@ -561,9 +561,9 @@ export function ChatView({
                     >
                         <button
                             onClick={scrollToBottom}
-                            className="p-2 rounded-full bg-white/70 backdrop-blur-xs shadow-lg cursor-pointer border border-gray-300"
+                            className="p-2 rounded-full bg-white/70 backdrop-blur-xs shadow-lg cursor-pointer border border-[#C7C7B2]"
                         >
-                            <ArrowDown className="h-6 w-6 text-gray-500" />
+                            <ArrowDown className="h-6 w-6 text-[#292629]/50" />
                         </button>
                     </div>
                 )}
@@ -581,7 +581,7 @@ export function ChatView({
                                 isLoading={isResponseLoading}
                             />
                             <div className="py-3 text-center">
-                                <p className="text-xs text-gray-500">
+                                <p className="text-xs text-[#292629]/50">
                                     AI can make mistakes. Answers are not legal
                                     advice.
                                 </p>

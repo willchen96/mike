@@ -25,7 +25,7 @@ function formatDate(iso: string | null) {
 export function DocFileIcon({ fileType }: { fileType: string | null }) {
     if (fileType === "pdf")
         return <FileText className="h-3.5 w-3.5 text-red-500 shrink-0" />;
-    return <File className="h-3.5 w-3.5 text-blue-500 shrink-0" />;
+    return <File className="h-3.5 w-3.5 text-[#536049] shrink-0" />;
 }
 
 interface FileDirectoryProps {
@@ -116,11 +116,11 @@ export function FileDirectory({
 
     if (loading) {
         return (
-            <div className="rounded-sm border border-gray-100 overflow-hidden">
+            <div className="rounded-sm border border-[#C7C7B2]/50 overflow-hidden">
                 {/* Documents header skeleton */}
                 <div className="flex items-center justify-between px-2 py-2">
-                    <div className="h-3 w-20 rounded bg-gray-200 animate-pulse" />
-                    <div className="h-3 w-12 rounded bg-gray-200 animate-pulse" />
+                    <div className="h-3 w-20 rounded bg-[#C7C7B2]/40 animate-pulse" />
+                    <div className="h-3 w-12 rounded bg-[#C7C7B2]/40 animate-pulse" />
                 </div>
                 {/* File rows skeleton */}
                 <div>
@@ -129,10 +129,10 @@ export function FileDirectory({
                             key={i}
                             className="flex items-center gap-2 px-2 py-2"
                         >
-                            <div className="h-3.5 w-3.5 rounded border border-gray-200 shrink-0" />
-                            <div className="h-3.5 w-3.5 rounded bg-gray-200 animate-pulse shrink-0" />
+                            <div className="h-3.5 w-3.5 rounded border border-[#C7C7B2] shrink-0" />
+                            <div className="h-3.5 w-3.5 rounded bg-[#C7C7B2]/40 animate-pulse shrink-0" />
                             <div
-                                className="h-3 rounded bg-gray-200 animate-pulse"
+                                className="h-3 rounded bg-[#C7C7B2]/40 animate-pulse"
                                 style={{ width: `${w}%` }}
                             />
                         </div>
@@ -144,19 +144,19 @@ export function FileDirectory({
 
     if (allDocs.length === 0 && directoryProjects.length === 0) {
         return (
-            <p className="text-center text-sm text-gray-400 py-8">
+            <p className="text-center text-sm text-[#292629]/40 py-8">
                 {emptyMessage}
             </p>
         );
     }
 
     return (
-        <div className="rounded-sm border border-gray-100 overflow-hidden">
+        <div className="rounded-sm border border-[#C7C7B2]/50 overflow-hidden">
             <div>
                 {(standaloneDocs.length > 0 ||
                     (onDelete && selectedCount > 0)) && (
                     <div className="flex items-center justify-between px-2 py-2">
-                        <p className="text-xs font-medium text-gray-400">
+                        <p className="text-xs font-medium text-[#292629]/40">
                             {heading}
                         </p>
                         <div className="flex items-center gap-3">
@@ -175,7 +175,7 @@ export function FileDirectory({
                                 <button
                                     type="button"
                                     onClick={toggleAll}
-                                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                                    className="text-xs text-[#292629]/40 hover:text-[#292629]/60 transition-colors"
                                 >
                                     {allStandaloneSelected
                                         ? "Deselect all"
@@ -193,14 +193,14 @@ export function FileDirectory({
                             key={doc.id}
                             onClick={() => toggle(doc.id)}
                             className={`w-full flex items-center gap-2 px-2 py-2 text-xs transition-colors text-left  ${
-                                selected ? "bg-gray-100" : "hover:bg-gray-50"
+                                selected ? "bg-[#F5F5F5]" : "hover:bg-[#F5F5F5]"
                             }`}
                         >
                             <span
                                 className={`shrink-0 h-3.5 w-3.5 rounded border flex items-center justify-center ${
                                     selected
-                                        ? "bg-gray-900 border-gray-900"
-                                        : "border-gray-300"
+                                        ? "bg-[#292629] border-[#292629]"
+                                        : "border-[#C7C7B2]"
                                 }`}
                             >
                                 {selected && (
@@ -210,14 +210,14 @@ export function FileDirectory({
                             <DocFileIcon fileType={doc.file_type} />
                             <span
                                 className={`flex-1 truncate ${
-                                    selected ? "text-gray-900" : "text-gray-700"
+                                    selected ? "text-[#292629]" : "text-[#292629]/80"
                                 }`}
                             >
                                 {doc.filename}
                             </span>
                             <VersionChip n={doc.latest_version_number} />
                             {doc.created_at && (
-                                <span className="shrink-0 text-gray-300">
+                                <span className="shrink-0 text-[#292629]/30">
                                     {formatDate(doc.created_at)}
                                 </span>
                             )}
@@ -226,8 +226,8 @@ export function FileDirectory({
                 })}
 
                 {standaloneDocs.length > 0 && directoryProjects.length > 0 && (
-                    <div className="border-t border-gray-100 py-2 px-2">
-                        <p className="text-xs font-medium text-gray-400">
+                    <div className="border-t border-[#C7C7B2]/50 py-2 px-2">
+                        <p className="text-xs font-medium text-[#292629]/40">
                             Projects
                         </p>
                     </div>
@@ -242,30 +242,30 @@ export function FileDirectory({
                             <button
                                 type="button"
                                 onClick={() => toggleFolder(project.id)}
-                                className="w-full flex items-center gap-2 px-2 py-2 text-xs hover:bg-gray-50 transition-colors text-left"
+                                className="w-full flex items-center gap-2 px-2 py-2 text-xs hover:bg-[#F5F5F5] transition-colors text-left"
                             >
                                 {isExpanded ? (
-                                    <ChevronDown className="h-3 w-3 text-gray-400 shrink-0" />
+                                    <ChevronDown className="h-3 w-3 text-[#292629]/40 shrink-0" />
                                 ) : (
-                                    <ChevronRight className="h-3 w-3 text-gray-400 shrink-0" />
+                                    <ChevronRight className="h-3 w-3 text-[#292629]/40 shrink-0" />
                                 )}
-                                <Folder className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                                <span className="flex-1 truncate font-medium text-gray-700">
+                                <Folder className="h-3.5 w-3.5 shrink-0 text-[#292629]/40" />
+                                <span className="flex-1 truncate font-medium text-[#292629]/80">
                                     {project.name}
                                     {project.cm_number && (
-                                        <span className="ml-1 font-normal text-gray-400">
+                                        <span className="ml-1 font-normal text-[#292629]/40">
                                             (#{project.cm_number})
                                         </span>
                                     )}
                                 </span>
-                                <span className="text-xs text-gray-400 shrink-0">
+                                <span className="text-xs text-[#292629]/40 shrink-0">
                                     {docs.length}
                                 </span>
                             </button>
                             {isExpanded && (
                                 <div>
                                     {docs.length === 0 ? (
-                                        <p className="pl-7 py-1 text-xs text-gray-400">
+                                        <p className="pl-7 py-1 text-xs text-[#292629]/40">
                                             Empty
                                         </p>
                                     ) : (
@@ -282,15 +282,15 @@ export function FileDirectory({
                                                     }
                                                     className={`w-full flex items-center gap-2 pl-7 pr-2 py-2 text-xs transition-colors text-left  ${
                                                         selected
-                                                            ? "bg-gray-100"
-                                                            : "hover:bg-gray-50"
+                                                            ? "bg-[#F5F5F5]"
+                                                            : "hover:bg-[#F5F5F5]"
                                                     }`}
                                                 >
                                                     <span
                                                         className={`shrink-0 h-3.5 w-3.5 rounded border flex items-center justify-center ${
                                                             selected
-                                                                ? "bg-gray-900 border-gray-900"
-                                                                : "border-gray-300"
+                                                                ? "bg-[#292629] border-[#292629]"
+                                                                : "border-[#C7C7B2]"
                                                         }`}
                                                     >
                                                         {selected && (
@@ -303,8 +303,8 @@ export function FileDirectory({
                                                     <span
                                                         className={`flex-1 truncate min-w-0 ${
                                                             selected
-                                                                ? "text-gray-900 font-medium"
-                                                                : "text-gray-700"
+                                                                ? "text-[#292629] font-medium"
+                                                                : "text-[#292629]/80"
                                                         }`}
                                                     >
                                                         {doc.filename}
@@ -313,7 +313,7 @@ export function FileDirectory({
                                                         n={doc.latest_version_number}
                                                     />
                                                     {doc.created_at && (
-                                                        <span className="shrink-0 text-gray-300">
+                                                        <span className="shrink-0 text-[#292629]/30">
                                                             {formatDate(
                                                                 doc.created_at,
                                                             )}

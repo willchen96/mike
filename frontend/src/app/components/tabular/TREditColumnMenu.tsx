@@ -122,8 +122,8 @@ export function TREditColumnMenu({
                 disabled={disabled}
                 className={`flex h-4 w-4 items-center justify-center rounded transition-colors ${
                     disabled
-                        ? "text-gray-300 cursor-default"
-                        : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                        ? "text-[#292629]/30 cursor-default"
+                        : "text-[#292629]/40 hover:bg-[#F5F5F5] hover:text-[#292629]/60"
                 }`}
             >
                 <MoreHorizontal className="h-4 w-4" />
@@ -131,49 +131,49 @@ export function TREditColumnMenu({
 
             {open && (
                 <div
-                    className="absolute right-0 top-full z-20 mt-1.5 w-72 rounded-xl border border-gray-100 bg-white p-3 shadow-lg"
+                    className="absolute right-0 top-full z-20 mt-1.5 w-72 rounded-xl border border-[#C7C7B2]/50 bg-white p-3 shadow-lg"
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="flex items-center justify-between mb-3">
-                        <p className="text-sm font-medium text-gray-800">
+                        <p className="text-sm font-medium text-[#292629]/90">
                             Edit Column
                         </p>
                         <button
                             type="button"
                             onClick={() => setOpen(false)}
-                            className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                            className="rounded p-0.5 text-[#292629]/40 hover:bg-[#F5F5F5] hover:text-[#292629]/60 transition-colors"
                         >
                             <X className="h-3.5 w-3.5" />
                         </button>
                     </div>
-                    <label className="text-xs font-medium text-gray-800">
+                    <label className="text-xs font-medium text-[#292629]/90">
                         Label
                     </label>
                     <input
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="mt-1 w-full rounded-md border border-gray-200 px-2 py-1 text-gray-800 text-xs font-normal focus:border-gray-400 focus:outline-none"
+                        className="mt-1 w-full rounded-md border border-[#C7C7B2] px-2 py-1 text-[#292629]/90 text-xs font-normal focus:border-[#C7C7B2] focus:outline-none"
                     />
 
                     {/* Format */}
                     <div className="mt-3">
-                        <label className="text-xs font-medium text-gray-800">
+                        <label className="text-xs font-medium text-[#292629]/90">
                             Format
                         </label>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <button className="mt-1 flex w-full items-center justify-between rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 hover:border-gray-400 focus:outline-none">
+                                <button className="mt-1 flex w-full items-center justify-between rounded-md border border-[#C7C7B2] bg-white px-2 py-1 text-xs text-[#292629]/80 hover:border-[#C7C7B2] focus:outline-none">
                                     <span className="flex items-center gap-1.5">
                                         {(() => {
                                             const Icon = formatIcon(format);
                                             return (
-                                                <Icon className="h-3 w-3 text-gray-400" />
+                                                <Icon className="h-3 w-3 text-[#292629]/40" />
                                             );
                                         })()}
                                         {formatLabel(format)}
                                     </span>
-                                    <ChevronDown className="h-3 w-3 text-gray-400" />
+                                    <ChevronDown className="h-3 w-3 text-[#292629]/40" />
                                 </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent
@@ -196,7 +196,7 @@ export function TREditColumnMenu({
                                             value={o.value}
                                             className="text-xs"
                                         >
-                                            <o.icon className="h-3 w-3 text-gray-400" />
+                                            <o.icon className="h-3 w-3 text-[#292629]/40" />
                                             {o.label}
                                         </DropdownMenuRadioItem>
                                     ))}
@@ -208,7 +208,7 @@ export function TREditColumnMenu({
                     {/* Tag input */}
                     {format === "tag" && (
                         <div className="mt-2">
-                            <div className="flex flex-wrap gap-1 rounded-md border border-gray-200 px-2 py-1 focus-within:border-gray-400 min-h-[28px]">
+                            <div className="flex flex-wrap gap-1 rounded-md border border-[#C7C7B2] px-2 py-1 focus-within:border-[#C7C7B2] min-h-[28px]">
                                 {tags.map((tag, tagIdx) => (
                                     <span
                                         key={tag}
@@ -224,7 +224,7 @@ export function TREditColumnMenu({
                                                     ),
                                                 )
                                             }
-                                            className="text-gray-400 hover:text-gray-600"
+                                            className="text-[#292629]/40 hover:text-[#292629]/60"
                                         >
                                             <X className="h-2 w-2" />
                                         </button>
@@ -241,7 +241,7 @@ export function TREditColumnMenu({
                                     placeholder={
                                         tags.length === 0 ? "Add tags…" : ""
                                     }
-                                    className="min-w-[60px] flex-1 bg-transparent text-xs text-gray-700 placeholder-gray-300 focus:outline-none"
+                                    className="min-w-[60px] flex-1 bg-transparent text-xs text-[#292629]/80 placeholder-[#C7C7B2] focus:outline-none"
                                 />
                             </div>
                         </div>
@@ -250,14 +250,14 @@ export function TREditColumnMenu({
                     {/* Prompt */}
                     <div className="mt-3">
                         <div className="flex items-center justify-between">
-                            <label className="text-xs font-medium text-gray-800">
+                            <label className="text-xs font-medium text-[#292629]/90">
                                 Prompt
                             </label>
                             <button
                                 type="button"
                                 onClick={handleAutoGenerate}
                                 disabled={!name.trim() || generating}
-                                className="inline-flex items-center gap-1 text-xs text-gray-600 transition-colors hover:text-gray-700 disabled:text-gray-300"
+                                className="inline-flex items-center gap-1 text-xs text-[#292629]/60 transition-colors hover:text-[#292629]/80 disabled:text-[#292629]/30"
                             >
                                 {generating ? (
                                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -271,7 +271,7 @@ export function TREditColumnMenu({
                             rows={6}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
-                            className="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-normal text-gray-800 placeholder-gray-300 focus:border-gray-400 focus:outline-none resize-none leading-relaxed"
+                            className="mt-2 w-full rounded-lg border border-[#C7C7B2] bg-white px-3 py-2 text-xs font-normal text-[#292629]/90 placeholder-[#C7C7B2] focus:border-[#C7C7B2] focus:outline-none resize-none leading-relaxed"
                         />
                     </div>
 
@@ -295,7 +295,7 @@ export function TREditColumnMenu({
                                 !name.trim() ||
                                 !prompt.trim()
                             }
-                            className="rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-gray-700 disabled:opacity-40"
+                            className="rounded-full bg-[#292629] px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-[#292629]/90 disabled:opacity-40"
                         >
                             {saving ? "Saving…" : "Save"}
                         </button>

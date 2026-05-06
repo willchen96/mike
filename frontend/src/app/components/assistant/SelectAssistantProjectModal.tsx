@@ -41,18 +41,18 @@ export function SelectAssistantProjectModal({ open, onClose }: Props) {
     }
 
     return createPortal(
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/10 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-[#292629]/10 backdrop-blur-xs">
             <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl flex flex-col h-[600px]">
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4">
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                    <div className="flex items-center gap-1.5 text-xs text-[#292629]/40">
                         <span>Assistant</span>
                         <span>›</span>
                         <span>Start Chat in a Project</span>
                     </div>
                     <button
                         onClick={onClose}
-                        className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                        className="rounded-lg p-1.5 text-[#292629]/40 hover:bg-[#F5F5F5] hover:text-[#292629]/60"
                     >
                         <X className="h-4 w-4" />
                     </button>
@@ -66,17 +66,17 @@ export function SelectAssistantProjectModal({ open, onClose }: Props) {
                 />
 
                 {/* Footer */}
-                <div className="border-t border-gray-100 px-4 py-3 flex items-center justify-end gap-2">
+                <div className="border-t border-[#C7C7B2]/50 px-4 py-3 flex items-center justify-end gap-2">
                     <button
                         onClick={onClose}
-                        className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100"
+                        className="rounded-lg px-3 py-1.5 text-sm text-[#292629]/50 hover:bg-[#F5F5F5]"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleContinue}
                         disabled={!selectedId || creating}
-                        className="rounded-lg bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-40"
+                        className="rounded-lg bg-[#292629] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#292629]/90 disabled:opacity-40"
                     >
                         {creating ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />

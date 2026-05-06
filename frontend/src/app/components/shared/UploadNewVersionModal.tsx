@@ -73,16 +73,16 @@ export function UploadNewVersionModal({ open, onClose, doc, onSubmit }: Props) {
     }
 
     return createPortal(
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/10 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-[#292629]/10 backdrop-blur-xs">
             <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4">
-                    <div className="text-xs text-gray-400">
+                    <div className="text-xs text-[#292629]/40">
                         Upload new version · {doc.filename}
                     </div>
                     <button
                         onClick={onClose}
-                        className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                        className="rounded-lg p-1.5 text-[#292629]/40 hover:bg-[#F5F5F5] hover:text-[#292629]/60"
                     >
                         <X className="h-4 w-4" />
                     </button>
@@ -90,7 +90,7 @@ export function UploadNewVersionModal({ open, onClose, doc, onSubmit }: Props) {
 
                 {/* Name input */}
                 <div className="px-5 pb-4">
-                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                    <label className="block text-xs font-medium text-[#292629]/50 mb-1">
                         New version name
                     </label>
                     <input
@@ -98,18 +98,18 @@ export function UploadNewVersionModal({ open, onClose, doc, onSubmit }: Props) {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Version name"
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400"
+                        className="w-full rounded-lg border border-[#C7C7B2] px-3 py-2 text-sm outline-none focus:border-[#C7C7B2]"
                     />
-                    <div className="mt-2 text-xs text-gray-500">
+                    <div className="mt-2 text-xs text-[#292629]/50">
                         Current Version:{" "}
-                        <span className="text-gray-700 font-medium">
+                        <span className="text-[#292629]/80 font-medium">
                             {currentVersion ?? "—"}
                         </span>
                     </div>
                     {stagedFile && (
-                        <div className="mt-2 text-xs text-gray-500 truncate">
+                        <div className="mt-2 text-xs text-[#292629]/50 truncate">
                             New Version File:{" "}
-                            <span className="text-gray-700">
+                            <span className="text-[#292629]/80">
                                 {stagedFile.name}
                             </span>
                         </div>
@@ -117,7 +117,7 @@ export function UploadNewVersionModal({ open, onClose, doc, onSubmit }: Props) {
                 </div>
 
                 {/* Footer */}
-                <div className="border-t border-gray-100 px-4 py-3 flex items-center justify-between gap-3">
+                <div className="border-t border-[#C7C7B2]/50 px-4 py-3 flex items-center justify-between gap-3">
                     <div>
                         <input
                             ref={fileInputRef}
@@ -129,7 +129,7 @@ export function UploadNewVersionModal({ open, onClose, doc, onSubmit }: Props) {
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             disabled={submitting}
-                            className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                            className="flex items-center gap-1.5 rounded-lg border border-[#C7C7B2] px-3 py-1.5 text-sm text-[#292629]/60 hover:bg-[#F5F5F5] disabled:opacity-50"
                         >
                             <Upload className="h-3.5 w-3.5" />
                             {stagedFile ? "Change file" : "Upload"}
@@ -138,14 +138,14 @@ export function UploadNewVersionModal({ open, onClose, doc, onSubmit }: Props) {
                     <div className="flex items-center gap-2">
                         <button
                             onClick={onClose}
-                            className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100"
+                            className="rounded-lg px-3 py-1.5 text-sm text-[#292629]/50 hover:bg-[#F5F5F5]"
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleSubmit}
                             disabled={!stagedFile || submitting}
-                            className="rounded-lg bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-40"
+                            className="rounded-lg bg-[#292629] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#292629]/90 disabled:opacity-40"
                         >
                             {submitting ? "Saving…" : "Save"}
                         </button>

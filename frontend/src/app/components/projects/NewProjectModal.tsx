@@ -81,18 +81,18 @@ export function NewProjectModal({ open, onClose, onCreated }: Props) {
     }
 
     return (
-        <div className="fixed inset-0 z-101 flex items-center justify-center bg-black/20 backdrop-blur-xs">
+        <div className="fixed inset-0 z-101 flex items-center justify-center bg-[#292629]/20 backdrop-blur-xs">
             <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl flex flex-col h-[600px]">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 pt-5 pb-2">
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                    <div className="flex items-center gap-1.5 text-xs text-[#292629]/40">
                         <span>Projects</span>
                         <span>›</span>
                         <span>New project</span>
                     </div>
                     <button
                         onClick={handleClose}
-                        className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                        className="rounded-lg p-1.5 text-[#292629]/40 hover:bg-[#F5F5F5] hover:text-[#292629]/60 transition-colors"
                     >
                         <X className="h-4 w-4" />
                     </button>
@@ -106,7 +106,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props) {
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder="Project name"
-                            className="w-full text-2xl font-serif text-gray-800 placeholder-gray-300 focus:outline-none bg-transparent"
+                            className="w-full text-2xl font-sans text-[#292629]/90 placeholder-[#C7C7B2] focus:outline-none bg-transparent"
                             autoFocus
                         />
 
@@ -116,7 +116,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props) {
                             value={cmNumber}
                             onChange={(e) => setCmNumber(e.target.value)}
                             placeholder="Add a CM number..."
-                            className="mt-1.5 w-full text-sm text-gray-500 placeholder-gray-300 focus:outline-none bg-transparent"
+                            className="mt-1.5 w-full text-sm text-[#292629]/50 placeholder-[#C7C7B2] focus:outline-none bg-transparent"
                         />
 
                         {/* Attribute pills */}
@@ -124,9 +124,9 @@ export function NewProjectModal({ open, onClose, onCreated }: Props) {
                             <button
                                 type="button"
                                 onClick={() => setShowMembers((v) => !v)}
-                                className="flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                                className="flex items-center gap-1.5 rounded-full border border-[#C7C7B2] px-3 py-1 text-xs text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                             >
-                                <Users className="h-3 w-3 text-gray-400" />
+                                <Users className="h-3 w-3 text-[#292629]/40" />
                                 Members{sharedEmails.length > 0 ? ` (${sharedEmails.length})` : ""}
                             </button>
                         </div>
@@ -144,7 +144,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props) {
 
                         {/* Documents */}
                         <div className="mt-4 space-y-2">
-                            <p className="text-xs font-medium text-gray-700">Select documents</p>
+                            <p className="text-xs font-medium text-[#292629]/80">Select documents</p>
                                 <FileDirectory
                                     standaloneDocs={standaloneDocuments}
                                     directoryProjects={dirProjects}
@@ -162,7 +162,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props) {
                     </div>
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between border-t border-gray-100 px-6 py-4 shrink-0">
+                    <div className="flex items-center justify-between border-t border-[#C7C7B2]/50 px-6 py-4 shrink-0">
                         <div className="flex items-center gap-2">
                             <input
                                 ref={fileInputRef}
@@ -174,7 +174,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props) {
                             <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
-                                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 transition-colors"
+                                className="flex items-center gap-1.5 rounded-lg border border-[#C7C7B2] px-3 py-1.5 text-xs text-[#292629]/50 hover:bg-[#F5F5F5] transition-colors"
                             >
                                 <Upload className="h-3.5 w-3.5" />
                                 Upload files{pendingFiles.length > 0 ? ` (${pendingFiles.length})` : ""}
@@ -184,14 +184,14 @@ export function NewProjectModal({ open, onClose, onCreated }: Props) {
                             <button
                                 type="button"
                                 onClick={handleClose}
-                                className="rounded-lg px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 transition-colors"
+                                className="rounded-lg px-4 py-2 text-sm text-[#292629]/50 hover:bg-[#F5F5F5] transition-colors"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
                                 disabled={!name.trim() || loading}
-                                className="rounded-lg bg-gray-900 px-5 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-40 transition-colors"
+                                className="rounded-lg bg-[#292629] px-5 py-2 text-sm font-medium text-white hover:bg-[#292629]/90 disabled:opacity-40 transition-colors"
                             >
                                 {loading ? "Creating…" : "Create project"}
                             </button>

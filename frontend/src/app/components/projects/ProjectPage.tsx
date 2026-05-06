@@ -98,8 +98,8 @@ function DocIcon({ fileType }: { fileType: string | null }) {
     if (fileType === "pdf")
         return <FileText className="h-4 w-4 text-red-600 shrink-0" />;
     if (fileType === "docx" || fileType === "doc")
-        return <File className="h-4 w-4 text-blue-600 shrink-0" />;
-    return <File className="h-4 w-4 text-gray-500 shrink-0" />;
+        return <File className="h-4 w-4 text-[#898344] shrink-0" />;
+    return <File className="h-4 w-4 text-[#292629]/50 shrink-0" />;
 }
 
 /**
@@ -148,11 +148,11 @@ function DocVersionHistory({
     };
     if (loading && versions.length === 0) {
         return (
-            <div className="flex items-center h-9 border-b border-gray-50 text-xs text-gray-500 bg-gray-50/60">
-                <div className={`sticky left-0 z-[60] ${CHECK_W} bg-gray-50/60 self-stretch`} />
-                <div className={`sticky left-8 z-[60] ${NAME_COL_W} bg-gray-50/60 p-2`}>
+            <div className="flex items-center h-9 border-b border-[#C7C7B2]/30 text-xs text-[#292629]/50 bg-[#F5F5F5]/60">
+                <div className={`sticky left-0 z-[60] ${CHECK_W} bg-[#F5F5F5]/60 self-stretch`} />
+                <div className={`sticky left-8 z-[60] ${NAME_COL_W} bg-[#F5F5F5]/60 p-2`}>
                     <div className="flex items-center gap-2">
-                        <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
+                        <Loader2 className="h-3 w-3 animate-spin text-[#292629]/40" />
                         <span>Loading versions…</span>
                     </div>
                 </div>
@@ -161,9 +161,9 @@ function DocVersionHistory({
     }
     if (versions.length === 0) {
         return (
-            <div className="flex items-center h-9 border-b border-gray-50 text-xs text-gray-400 bg-gray-50/60">
-                <div className={`sticky left-0 z-[60] ${CHECK_W} bg-gray-50/60 self-stretch`} />
-                <div className={`sticky left-8 z-[60] ${NAME_COL_W} bg-gray-50/60 p-2`}>
+            <div className="flex items-center h-9 border-b border-[#C7C7B2]/30 text-xs text-[#292629]/40 bg-[#F5F5F5]/60">
+                <div className={`sticky left-0 z-[60] ${CHECK_W} bg-[#F5F5F5]/60 self-stretch`} />
+                <div className={`sticky left-8 z-[60] ${NAME_COL_W} bg-[#F5F5F5]/60 p-2`}>
                     <div>
                         No version history.
                     </div>
@@ -201,12 +201,12 @@ function DocVersionHistory({
                             if (isEditing) return;
                             onOpenVersion?.(v.id, displayLabel);
                         }}
-                        className="group flex items-center h-9 pr-8 border-b border-gray-50 bg-gray-50/60 text-xs text-gray-600 cursor-pointer hover:bg-gray-100/80 transition-colors"
+                        className="group flex items-center h-9 pr-8 border-b border-[#C7C7B2]/30 bg-[#F5F5F5]/60 text-xs text-[#292629]/60 cursor-pointer hover:bg-[#F5F5F5] transition-colors"
                     >
-                        <div className={`sticky left-0 z-[60] ${CHECK_W} bg-gray-50/60 group-hover:bg-gray-100/80 self-stretch`} />
-                        <div className={`sticky left-8 z-[60] ${NAME_COL_W} bg-gray-50/60 group-hover:bg-gray-100/80 p-2`}>
+                        <div className={`sticky left-0 z-[60] ${CHECK_W} bg-[#F5F5F5]/60 group-hover:bg-[#F5F5F5] self-stretch`} />
+                        <div className={`sticky left-8 z-[60] ${NAME_COL_W} bg-[#F5F5F5]/60 group-hover:bg-[#F5F5F5] p-2`}>
                         <div className="flex items-center gap-2">
-                            <span className="shrink-0 text-gray-400">↳</span>
+                            <span className="shrink-0 text-[#292629]/40">↳</span>
                             {isEditing ? (
                                 <input
                                     autoFocus
@@ -224,10 +224,10 @@ function DocVersionHistory({
                                         }
                                     }}
                                     onBlur={() => void commit(v.id)}
-                                    className="min-w-0 flex-1 max-w-[240px] border-b border-gray-300 bg-transparent text-xs text-gray-800 outline-none focus:border-gray-500"
+                                    className="min-w-0 flex-1 max-w-[240px] border-b border-[#C7C7B2] bg-transparent text-xs text-[#292629]/90 outline-none focus:border-[#898344]"
                                 />
                             ) : (
-                                <span className="font-medium text-gray-700 truncate">
+                                <span className="font-medium text-[#292629]/80 truncate">
                                     {displayLabel}
                                 </span>
                             )}
@@ -239,14 +239,14 @@ function DocVersionHistory({
                                         setEditingValue(v.display_name ?? "");
                                     }}
                                     title="Rename version"
-                                    className="shrink-0 rounded p-0.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-gray-700 hover:bg-gray-200 transition"
+                                    className="shrink-0 rounded p-0.5 text-[#292629]/40 opacity-0 group-hover:opacity-100 hover:text-[#292629]/80 hover:bg-[#C7C7B2]/40 transition"
                                 >
                                     <Pencil className="h-3 w-3" />
                                 </button>
                             )}
-                            <span className="text-gray-400 truncate">{dateLabel}</span>
-                            <span className="text-gray-300 shrink-0">·</span>
-                            <span className="text-gray-400 truncate">{v.source}</span>
+                            <span className="text-[#292629]/40 truncate">{dateLabel}</span>
+                            <span className="text-[#292629]/30 shrink-0">·</span>
+                            <span className="text-[#292629]/40 truncate">{v.source}</span>
                         </div>
                         </div>
                         <div className="ml-auto w-20 shrink-0" />
@@ -259,7 +259,7 @@ function DocVersionHistory({
                                     onDownloadVersion(docId, v.id, filename);
                                 }}
                                 title="Download this version"
-                                className="flex items-center justify-center w-6 h-6 rounded text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                                className="flex items-center justify-center w-6 h-6 rounded text-[#292629]/50 hover:text-[#292629]/90 hover:bg-[#F5F5F5] transition-colors"
                             >
                                 <Download className="h-3.5 w-3.5" />
                             </button>
@@ -850,17 +850,17 @@ export function ProjectPage({ projectId }: Props) {
         return (
             <div
                 ref={newFolderInputRef}
-                className="group flex items-center h-10 pr-8 border-b border-gray-50"
+                className="group flex items-center h-10 pr-8 border-b border-[#C7C7B2]/30"
                 key={`new-folder-${parentId ?? "root"}`}
             >
                 <div className={`sticky left-0 z-[60] ${CHECK_W} bg-white self-stretch`} />
                 <div className={`sticky left-8 z-[60] ${NAME_COL_W} bg-white p-2`}>
                     <div className="flex items-center gap-1.5">
-                        <ChevronRight className="h-3.5 w-3.5 text-gray-300 shrink-0" />
+                        <ChevronRight className="h-3.5 w-3.5 text-[#292629]/30 shrink-0" />
                         <FolderPlus className="h-4 w-4 text-amber-400 shrink-0" />
                         <input
                             autoFocus
-                            className="flex-1 min-w-0 text-sm text-gray-800 bg-transparent outline-none border-b border-gray-300"
+                            className="flex-1 min-w-0 text-sm text-[#292629]/90 bg-transparent outline-none border-b border-[#C7C7B2]"
                             placeholder="Folder name"
                             value={newFolderName}
                             onChange={(e) => setNewFolderName(e.target.value)}
@@ -911,16 +911,16 @@ export function ProjectPage({ projectId }: Props) {
                                     setViewingDoc(doc);
                                 }}
                                 onContextMenu={(e) => e.stopPropagation()}
-                            className="group flex items-center h-10 pr-8 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
+                            className="group flex items-center h-10 pr-8 border-b border-[#C7C7B2]/30 hover:bg-[#F5F5F5] cursor-pointer transition-colors"
                             >
                                 {(() => {
                                     const rowBg = selectedDocIds.includes(doc.id)
-                                        ? "bg-gray-50"
+                                        ? "bg-[#F5F5F5]"
                                         : "bg-white";
                                     return (
                                         <>
                                 <div
-                                    className={`sticky left-0 z-[60] ${CHECK_W} p-2 flex items-center justify-center ${rowBg} group-hover:bg-gray-50`}
+                                    className={`sticky left-0 z-[60] ${CHECK_W} p-2 flex items-center justify-center ${rowBg} group-hover:bg-[#F5F5F5]`}
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     <input
@@ -933,52 +933,52 @@ export function ProjectPage({ projectId }: Props) {
                                                     : [...prev, doc.id],
                                             )
                                         }
-                                        className="h-2.5 w-2.5 rounded border-gray-200 cursor-pointer accent-black"
+                                        className="h-2.5 w-2.5 rounded border-[#C7C7B2] cursor-pointer accent-black"
                                     />
                                 </div>
-                                <div className={`sticky left-8 z-[60] ${NAME_COL_W} p-2 ${rowBg} group-hover:bg-gray-50`}>
+                                <div className={`sticky left-8 z-[60] ${NAME_COL_W} p-2 ${rowBg} group-hover:bg-[#F5F5F5]`}>
                                 <div className="flex items-center gap-2">
                                     {isProcessing ? (
-                                        <Loader2 className="h-4 w-4 animate-spin text-gray-400 shrink-0" />
+                                        <Loader2 className="h-4 w-4 animate-spin text-[#292629]/40 shrink-0" />
                                     ) : isError ? (
                                         <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
                                     ) : (
                                         <DocIcon fileType={doc.file_type} />
                                     )}
-                                    <span className="text-sm text-gray-800 truncate">{doc.filename}</span>
+                                    <span className="text-sm text-[#292629]/90 truncate">{doc.filename}</span>
                                 </div>
                                 </div>
-                                <div className="ml-auto w-20 shrink-0 text-xs text-gray-500 uppercase truncate">
-                                    {doc.file_type ?? <span className="text-gray-300">—</span>}
+                                <div className="ml-auto w-20 shrink-0 text-xs text-[#292629]/50 uppercase truncate">
+                                    {doc.file_type ?? <span className="text-[#292629]/30">—</span>}
                                 </div>
-                                <div className="w-24 shrink-0 text-sm text-gray-500 truncate">
-                                    {doc.size_bytes != null ? formatBytes(doc.size_bytes) : <span className="text-gray-300">—</span>}
+                                <div className="w-24 shrink-0 text-sm text-[#292629]/50 truncate">
+                                    {doc.size_bytes != null ? formatBytes(doc.size_bytes) : <span className="text-[#292629]/30">—</span>}
                                 </div>
                                 <div
-                                    className="w-20 shrink-0 text-sm text-gray-500 flex items-center gap-1"
+                                    className="w-20 shrink-0 text-sm text-[#292629]/50 flex items-center gap-1"
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     {hasVersions ? (
                                         <button
                                             onClick={() => void toggleVersions(doc.id)}
-                                            className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-gray-100 transition-colors"
+                                            className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-[#F5F5F5] transition-colors"
                                         >
                                             <span>{doc.latest_version_number}</span>
                                             {isVersionsOpen ? (
-                                                <ChevronDown className="h-3 w-3 text-gray-400" />
+                                                <ChevronDown className="h-3 w-3 text-[#292629]/40" />
                                             ) : (
-                                                <ChevronRight className="h-3 w-3 text-gray-400" />
+                                                <ChevronRight className="h-3 w-3 text-[#292629]/40" />
                                             )}
                                         </button>
                                     ) : (
-                                        <span className="text-gray-300 pl-1">—</span>
+                                        <span className="text-[#292629]/30 pl-1">—</span>
                                     )}
                                 </div>
-                                <div className="w-32 shrink-0 text-sm text-gray-500 truncate">
-                                    {doc.created_at ? formatDate(doc.created_at) : <span className="text-gray-300">—</span>}
+                                <div className="w-32 shrink-0 text-sm text-[#292629]/50 truncate">
+                                    {doc.created_at ? formatDate(doc.created_at) : <span className="text-[#292629]/30">—</span>}
                                 </div>
-                                <div className="w-32 shrink-0 text-sm text-gray-500 truncate">
-                                    {doc.updated_at ? formatDate(doc.updated_at) : <span className="text-gray-300">—</span>}
+                                <div className="w-32 shrink-0 text-sm text-[#292629]/50 truncate">
+                                    {doc.updated_at ? formatDate(doc.updated_at) : <span className="text-[#292629]/30">—</span>}
                                 </div>
                                 <div className="w-8 shrink-0 flex justify-end">
                                     {!isProcessing && (
@@ -1043,15 +1043,15 @@ export function ProjectPage({ projectId }: Props) {
                                     e.stopPropagation();
                                     setContextMenu({ x: e.clientX, y: e.clientY, folderId: folder.id, showFolderActions: true });
                                 }}
-                                className={`group flex items-center h-10 pr-8 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors select-none ${dragOverFolderId === folder.id ? "bg-blue-50 ring-1 ring-inset ring-blue-200" : ""}`}
+                                className={`group flex items-center h-10 pr-8 border-b border-[#C7C7B2]/30 hover:bg-[#F5F5F5] cursor-pointer transition-colors select-none ${dragOverFolderId === folder.id ? "bg-[#F5F5F5] ring-1 ring-inset ring-[#FEEA0F]/40" : ""}`}
                             >
-                                <div className={`sticky left-0 z-[60] ${CHECK_W} p-2 flex items-center justify-center ${dragOverFolderId === folder.id ? "bg-blue-50" : "bg-white"} group-hover:bg-gray-50 self-stretch`}>
+                                <div className={`sticky left-0 z-[60] ${CHECK_W} p-2 flex items-center justify-center ${dragOverFolderId === folder.id ? "bg-[#F5F5F5]" : "bg-white"} group-hover:bg-[#F5F5F5] self-stretch`}>
                                     {isExpanded
-                                        ? <ChevronDown className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                                        : <ChevronRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                                        ? <ChevronDown className="h-3.5 w-3.5 text-[#292629]/40 shrink-0" />
+                                        : <ChevronRight className="h-3.5 w-3.5 text-[#292629]/40 shrink-0" />
                                     }
                                 </div>
-                                <div className={`sticky left-8 z-[60] ${NAME_COL_W} p-2 ${dragOverFolderId === folder.id ? "bg-blue-50" : "bg-white"} group-hover:bg-gray-50`}>
+                                <div className={`sticky left-8 z-[60] ${NAME_COL_W} p-2 ${dragOverFolderId === folder.id ? "bg-[#F5F5F5]" : "bg-white"} group-hover:bg-[#F5F5F5]`}>
                                 <div className="flex items-center gap-1.5">
                                     {isExpanded
                                         ? <FolderOpen className="h-4 w-4 text-amber-500 shrink-0" />
@@ -1060,7 +1060,7 @@ export function ProjectPage({ projectId }: Props) {
                                     {isRenaming ? (
                                         <input
                                             autoFocus
-                                            className="flex-1 min-w-0 text-sm text-gray-800 bg-transparent outline-none"
+                                            className="flex-1 min-w-0 text-sm text-[#292629]/90 bg-transparent outline-none"
                                             value={renameFolderValue}
                                             onChange={(e) => setRenameFolderValue(e.target.value)}
                                             onKeyDown={(e) => {
@@ -1071,15 +1071,15 @@ export function ProjectPage({ projectId }: Props) {
                                             onClick={(e) => e.stopPropagation()}
                                         />
                                     ) : (
-                                        <span className="text-sm text-gray-800 truncate">{folder.name}</span>
+                                        <span className="text-sm text-[#292629]/90 truncate">{folder.name}</span>
                                     )}
                                 </div>
                                 </div>
-                                <div className="ml-auto w-20 shrink-0 text-xs text-gray-300">—</div>
-                                <div className="w-24 shrink-0 text-sm text-gray-300">—</div>
-                                <div className="w-20 shrink-0 text-sm text-gray-300">—</div>
-                                <div className="w-32 shrink-0 text-sm text-gray-300">—</div>
-                                <div className="w-32 shrink-0 text-sm text-gray-300">—</div>
+                                <div className="ml-auto w-20 shrink-0 text-xs text-[#292629]/30">—</div>
+                                <div className="w-24 shrink-0 text-sm text-[#292629]/30">—</div>
+                                <div className="w-20 shrink-0 text-sm text-[#292629]/30">—</div>
+                                <div className="w-32 shrink-0 text-sm text-[#292629]/30">—</div>
+                                <div className="w-32 shrink-0 text-sm text-[#292629]/30">—</div>
                                 <div
                                     className="w-8 shrink-0 flex justify-end"
                                     onClick={(e) => e.stopPropagation()}
@@ -1110,34 +1110,34 @@ export function ProjectPage({ projectId }: Props) {
         return (
             <div className="flex-1 overflow-y-auto bg-white">
                 <div className="flex items-start justify-between px-8 py-4">
-                    <div className="flex items-center gap-1.5 text-2xl font-medium font-serif">
-                        <span className="text-gray-400">Projects</span>
-                        <span className="text-gray-300">›</span>
-                        <div className="h-6 w-40 rounded bg-gray-100 animate-pulse" />
+                    <div className="flex items-center gap-1.5 text-3xl font-bold font-sans">
+                        <span className="text-[#292629]/40">Projects</span>
+                        <span className="text-[#292629]/30">›</span>
+                        <div className="h-6 w-40 rounded bg-[#F5F5F5] animate-pulse" />
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="h-8 w-16 rounded bg-gray-100 animate-pulse" />
-                        <div className="h-8 w-28 rounded bg-gray-100 animate-pulse" />
+                        <div className="h-8 w-16 rounded bg-[#F5F5F5] animate-pulse" />
+                        <div className="h-8 w-28 rounded bg-[#F5F5F5] animate-pulse" />
                     </div>
                 </div>
-                <div className="flex items-center h-10 px-8 border-b border-gray-200 gap-5">
-                    <div className="h-3 w-20 rounded bg-gray-100 animate-pulse" />
-                    <div className="h-3 w-10 rounded bg-gray-100 animate-pulse" />
-                    <div className="h-3 w-24 rounded bg-gray-100 animate-pulse" />
+                <div className="flex items-center h-10 px-8 border-b border-[#C7C7B2] gap-5">
+                    <div className="h-3 w-20 rounded bg-[#F5F5F5] animate-pulse" />
+                    <div className="h-3 w-10 rounded bg-[#F5F5F5] animate-pulse" />
+                    <div className="h-3 w-24 rounded bg-[#F5F5F5] animate-pulse" />
                 </div>
-                <div className="flex items-center h-8 pr-8 border-b border-gray-200">
+                <div className="flex items-center h-8 pr-8 border-b border-[#C7C7B2]">
                     <div className="w-8 shrink-0" />
-                    <div className="flex-1 min-w-0 pl-3 pr-4"><div className="h-2.5 w-8 rounded bg-gray-100 animate-pulse" /></div>
-                    <div className="w-20 shrink-0"><div className="h-2.5 w-8 rounded bg-gray-100 animate-pulse" /></div>
-                    <div className="w-24 shrink-0"><div className="h-2.5 w-8 rounded bg-gray-100 animate-pulse" /></div>
+                    <div className="flex-1 min-w-0 pl-3 pr-4"><div className="h-2.5 w-8 rounded bg-[#F5F5F5] animate-pulse" /></div>
+                    <div className="w-20 shrink-0"><div className="h-2.5 w-8 rounded bg-[#F5F5F5] animate-pulse" /></div>
+                    <div className="w-24 shrink-0"><div className="h-2.5 w-8 rounded bg-[#F5F5F5] animate-pulse" /></div>
                     <div className="w-8 shrink-0" />
                 </div>
                 {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="flex items-center h-10 pr-8 border-b border-gray-50">
+                    <div key={i} className="flex items-center h-10 pr-8 border-b border-[#C7C7B2]/30">
                         <div className="w-8 shrink-0" />
-                        <div className="flex-1 min-w-0 pl-3 pr-4"><div className="h-3.5 w-56 rounded bg-gray-100 animate-pulse" /></div>
-                        <div className="w-20 shrink-0"><div className="h-3 w-8 rounded bg-gray-100 animate-pulse" /></div>
-                        <div className="w-24 shrink-0"><div className="h-3 w-12 rounded bg-gray-100 animate-pulse" /></div>
+                        <div className="flex-1 min-w-0 pl-3 pr-4"><div className="h-3.5 w-56 rounded bg-[#F5F5F5] animate-pulse" /></div>
+                        <div className="w-20 shrink-0"><div className="h-3 w-8 rounded bg-[#F5F5F5] animate-pulse" /></div>
+                        <div className="w-24 shrink-0"><div className="h-3 w-12 rounded bg-[#F5F5F5] animate-pulse" /></div>
                         <div className="w-8 shrink-0" />
                     </div>
                 ))}
@@ -1148,7 +1148,7 @@ export function ProjectPage({ projectId }: Props) {
     if (!project) {
         return (
             <div className="flex h-full items-center justify-center">
-                <p className="text-gray-400">Project not found</p>
+                <p className="text-[#292629]/40">Project not found</p>
             </div>
         );
     }
@@ -1180,17 +1180,17 @@ export function ProjectPage({ projectId }: Props) {
         <div ref={actionsRef} className="relative">
             <button
                 onClick={() => setActionsOpen((v) => !v)}
-                className="flex items-center gap-1 text-xs font-medium text-gray-700 hover:text-gray-900 transition-colors"
+                className="flex items-center gap-1 text-xs font-medium text-[#292629]/80 hover:text-[#292629] transition-colors"
             >
                 Actions
                 <ChevronDown className="h-3.5 w-3.5" />
             </button>
             {actionsOpen && (
-                <div className="absolute top-full right-0 mt-1 w-36 rounded-lg border border-gray-100 bg-white shadow-lg z-50 overflow-hidden">
+                <div className="absolute top-full right-0 mt-1 w-36 rounded-lg border border-[#C7C7B2]/50 bg-white shadow-lg z-50 overflow-hidden">
                     {tab === "documents" && (
                         <button
                             onClick={handleDownloadSelectedDocs}
-                            className="w-full px-3 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                            className="w-full px-3 py-1.5 text-left text-xs text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                         >
                             Download
                         </button>
@@ -1198,7 +1198,7 @@ export function ProjectPage({ projectId }: Props) {
                     {tab === "documents" && selectedDocIds.some((id) => docs.find((d) => d.id === id)?.folder_id != null) && (
                         <button
                             onClick={handleRemoveSelectedFromFolder}
-                            className="w-full px-3 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                            className="w-full px-3 py-1.5 text-left text-xs text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                         >
                             Remove from subfolder
                         </button>
@@ -1221,14 +1221,14 @@ export function ProjectPage({ projectId }: Props) {
                 <>
                     <button
                         onClick={() => { setCreatingFolderIn(null); setNewFolderName(""); }}
-                        className="flex items-center gap-1 text-xs px-3 font-medium text-gray-500 hover:text-gray-700 transition-colors"
+                        className="flex items-center gap-1 text-xs px-3 font-medium text-[#292629]/50 hover:text-[#292629]/80 transition-colors"
                     >
                         <FolderPlus className="h-3.5 w-3.5" />
                         Add Subfolder
                     </button>
                     <button
                         onClick={() => setAddDocsOpen(true)}
-                        className="flex items-center gap-1 text-xs px-3 font-medium text-gray-500 hover:text-gray-700 transition-colors"
+                        className="flex items-center gap-1 text-xs px-3 font-medium text-[#292629]/50 hover:text-[#292629]/80 transition-colors"
                     >
                         <Upload className="h-3.5 w-3.5" />
                         Add Documents
@@ -1243,33 +1243,33 @@ export function ProjectPage({ projectId }: Props) {
             {/* Page header */}
             <div className="flex items-start justify-between px-8 py-4">
                 <div>
-                    <div className="flex items-center gap-1.5 text-2xl font-medium font-serif">
+                    <div className="flex items-center gap-1.5 text-3xl font-bold font-sans">
                         <button
                             onClick={() => router.push("/projects")}
-                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                            className="text-[#292629]/40 hover:text-[#292629]/60 transition-colors"
                         >
                             Projects
                         </button>
-                        <span className="text-gray-300">›</span>
+                        <span className="text-[#292629]/30">›</span>
                         {tab !== "documents" ? (
                             <button
                                 onClick={() => router.push(`/projects/${projectId}`)}
-                                className="text-gray-500 hover:text-gray-700 transition-colors"
+                                className="text-[#292629]/50 hover:text-[#292629]/80 transition-colors"
                             >
                                 {project.name}
-                                {project.cm_number ? <span className="ml-1 text-gray-400">(#{project.cm_number})</span> : null}
+                                {project.cm_number ? <span className="ml-1 text-[#292629]/40">(#{project.cm_number})</span> : null}
                             </button>
                         ) : (
                             <RenameableTitle
                                 value={project.name}
                                 onCommit={handleTitleCommit}
-                                suffix={project.cm_number ? <span className="ml-1 text-gray-400">(#{project.cm_number})</span> : null}
+                                suffix={project.cm_number ? <span className="ml-1 text-[#292629]/40">(#{project.cm_number})</span> : null}
                             />
                         )}
                         {tab !== "documents" && (
                             <>
-                                <span className="text-gray-300">›</span>
-                                <span className="text-gray-900">{tab === "assistant" ? "Assistant" : "Tabular Reviews"}</span>
+                                <span className="text-[#292629]/30">›</span>
+                                <span className="text-[#292629]">{tab === "assistant" ? "Assistant" : "Tabular Reviews"}</span>
                             </>
                         )}
                     </div>
@@ -1278,7 +1278,7 @@ export function ProjectPage({ projectId }: Props) {
                     <HeaderSearchBtn value={search} onChange={setSearch} placeholder="Search…" />
                     <button
                         onClick={() => setPeopleModalOpen(true)}
-                        className="flex h-8 w-8 items-center justify-center text-sm text-gray-500 transition-colors hover:text-gray-900 cursor-pointer"
+                        className="flex h-8 w-8 items-center justify-center text-sm text-[#292629]/50 transition-colors hover:text-[#292629] cursor-pointer"
                         title="People with access"
                         aria-label="People with access"
                     >
@@ -1288,7 +1288,7 @@ export function ProjectPage({ projectId }: Props) {
                         <button
                             onClick={() => !creatingChat && handleNewChat()}
                             className={`flex h-8 items-center justify-center gap-1.5 px-3 text-sm transition-colors ${
-                                !creatingChat ? "text-gray-500 hover:text-gray-900 cursor-pointer" : "text-gray-300 cursor-default"
+                                !creatingChat ? "text-[#292629]/50 hover:text-[#292629] cursor-pointer" : "text-[#292629]/30 cursor-default"
                             }`}
                         >
                             {creatingChat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -1299,14 +1299,14 @@ export function ProjectPage({ projectId }: Props) {
                         <button
                             onClick={() => docs.length > 0 && !creatingReview && handleNewReview()}
                             className={`flex h-8 items-center justify-center gap-1.5 px-3 text-sm transition-colors ${
-                                docs.length > 0 ? "text-gray-500 hover:text-gray-900 cursor-pointer" : "text-gray-300 cursor-default"
+                                docs.length > 0 ? "text-[#292629]/50 hover:text-[#292629] cursor-pointer" : "text-[#292629]/30 cursor-default"
                             }`}
                         >
                             {creatingReview ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                             Tabular Review
                         </button>
                         {docs.length === 0 && (
-                            <div className="pointer-events-none absolute right-0 top-full mt-1.5 z-10 hidden group-hover:flex items-center whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs text-white shadow-lg">
+                            <div className="pointer-events-none absolute right-0 top-full mt-1.5 z-10 hidden group-hover:flex items-center whitespace-nowrap rounded-lg bg-[#292629] px-2.5 py-1.5 text-xs text-white shadow-lg">
                                 Upload a document first
                             </div>
                         )}
@@ -1337,7 +1337,7 @@ export function ProjectPage({ projectId }: Props) {
                 {tab === "documents" && (
                     <div className="flex-1 flex flex-col min-h-0">
                         {/* Table header */}
-                        <div className="flex items-center h-8 pr-8 border-b border-gray-200 text-xs text-gray-500 font-medium select-none shrink-0">
+                        <div className="flex items-center h-8 pr-8 border-b border-[#C7C7B2] text-xs text-[#292629]/50 font-medium select-none shrink-0">
                             <div className={`sticky left-0 z-[60] ${CHECK_W} relative bg-white flex items-center justify-center self-stretch before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-white`}>
                                 <input
                                     type="checkbox"
@@ -1347,7 +1347,7 @@ export function ProjectPage({ projectId }: Props) {
                                         if (allDocsSelected) setSelectedDocIds([]);
                                         else setSelectedDocIds(filteredDocs.map((d) => d.id));
                                     }}
-                                    className="h-2.5 w-2.5 rounded border-gray-200 cursor-pointer accent-black"
+                                    className="h-2.5 w-2.5 rounded border-[#C7C7B2] cursor-pointer accent-black"
                                 />
                             </div>
                             <div className={`sticky left-8 z-[60] ${NAME_COL_W} bg-white pl-2 text-left`}>
@@ -1364,7 +1364,7 @@ export function ProjectPage({ projectId }: Props) {
                         {/* Blue ring wraps everything below the header when root-dropping */}
                         <div className="flex-1 flex flex-col min-h-0 relative">
                             {dragOverRoot && dragOverFolderId === null && (
-                                <div className="absolute inset-0 border-2 border-blue-400 pointer-events-none z-20" />
+                                <div className="absolute inset-0 border-2 border-[#898344] pointer-events-none z-20" />
                             )}
 
                         {/* Empty state */}
@@ -1373,8 +1373,8 @@ export function ProjectPage({ projectId }: Props) {
                                 onClick={() => setAddDocsOpen(true)}
                                 className="flex-1 flex cursor-pointer flex-col items-center justify-center py-24 text-center"
                             >
-                                <Upload className="h-8 w-8 text-gray-200 mb-3" />
-                                <p className="text-sm text-gray-400">Drop PDF or DOCX files here</p>
+                                <Upload className="h-8 w-8 text-[#C7C7B2] mb-3" />
+                                <p className="text-sm text-[#292629]/40">Drop PDF or DOCX files here</p>
                             </div>
                         ) : (
                             <div
@@ -1413,49 +1413,49 @@ export function ProjectPage({ projectId }: Props) {
                                     setViewingDocVersion(null);
                                     setViewingDoc(doc);
                                 }}
-                                                    className="group flex items-center h-10 pr-8 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
+                                                    className="group flex items-center h-10 pr-8 border-b border-[#C7C7B2]/30 hover:bg-[#F5F5F5] cursor-pointer transition-colors"
                                                 >
-                                                    <div className={`sticky left-0 z-[60] ${CHECK_W} p-2 flex items-center justify-center ${selectedDocIds.includes(doc.id) ? "bg-gray-50" : "bg-white"} group-hover:bg-gray-50`} onClick={(e) => e.stopPropagation()}>
+                                                    <div className={`sticky left-0 z-[60] ${CHECK_W} p-2 flex items-center justify-center ${selectedDocIds.includes(doc.id) ? "bg-[#F5F5F5]" : "bg-white"} group-hover:bg-[#F5F5F5]`} onClick={(e) => e.stopPropagation()}>
                                                         <input
                                                             type="checkbox"
                                                             checked={selectedDocIds.includes(doc.id)}
                                                             onChange={() => setSelectedDocIds((prev) => prev.includes(doc.id) ? prev.filter((x) => x !== doc.id) : [...prev, doc.id])}
-                                                            className="h-2.5 w-2.5 rounded border-gray-200 cursor-pointer accent-black"
+                                                            className="h-2.5 w-2.5 rounded border-[#C7C7B2] cursor-pointer accent-black"
                                                         />
                                                     </div>
-                                                    <div className={`sticky left-8 z-[60] ${NAME_COL_W} p-2 ${selectedDocIds.includes(doc.id) ? "bg-gray-50" : "bg-white"} group-hover:bg-gray-50`}>
+                                                    <div className={`sticky left-8 z-[60] ${NAME_COL_W} p-2 ${selectedDocIds.includes(doc.id) ? "bg-[#F5F5F5]" : "bg-white"} group-hover:bg-[#F5F5F5]`}>
                                                     <div className="flex items-center gap-2">
-                                                        {isProcessing ? <Loader2 className="h-4 w-4 animate-spin text-gray-400 shrink-0" /> : isError ? <AlertCircle className="h-4 w-4 text-red-500 shrink-0" /> : <DocIcon fileType={doc.file_type} />}
-                                                        <span className="text-sm text-gray-800 truncate">{doc.filename}</span>
+                                                        {isProcessing ? <Loader2 className="h-4 w-4 animate-spin text-[#292629]/40 shrink-0" /> : isError ? <AlertCircle className="h-4 w-4 text-red-500 shrink-0" /> : <DocIcon fileType={doc.file_type} />}
+                                                        <span className="text-sm text-[#292629]/90 truncate">{doc.filename}</span>
                                                     </div>
                                                     </div>
-                                                    <div className="ml-auto w-20 shrink-0 text-xs text-gray-500 uppercase truncate">{doc.file_type ?? <span className="text-gray-300">—</span>}</div>
-                                                    <div className="w-24 shrink-0 text-sm text-gray-500 truncate">{doc.size_bytes != null ? formatBytes(doc.size_bytes) : <span className="text-gray-300">—</span>}</div>
+                                                    <div className="ml-auto w-20 shrink-0 text-xs text-[#292629]/50 uppercase truncate">{doc.file_type ?? <span className="text-[#292629]/30">—</span>}</div>
+                                                    <div className="w-24 shrink-0 text-sm text-[#292629]/50 truncate">{doc.size_bytes != null ? formatBytes(doc.size_bytes) : <span className="text-[#292629]/30">—</span>}</div>
                                                     <div
-                                                        className="w-20 shrink-0 text-sm text-gray-500 flex items-center gap-1"
+                                                        className="w-20 shrink-0 text-sm text-[#292629]/50 flex items-center gap-1"
                                                         onClick={(e) => e.stopPropagation()}
                                                     >
                                                         {hasVersions ? (
                                                             <button
                                                                 onClick={() => void toggleVersions(doc.id)}
-                                                                className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-gray-100 transition-colors"
+                                                                className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-[#F5F5F5] transition-colors"
                                                             >
                                                                 <span>{doc.latest_version_number}</span>
                                                                 {isVersionsOpen ? (
-                                                                    <ChevronDown className="h-3 w-3 text-gray-400" />
+                                                                    <ChevronDown className="h-3 w-3 text-[#292629]/40" />
                                                                 ) : (
-                                                                    <ChevronRight className="h-3 w-3 text-gray-400" />
+                                                                    <ChevronRight className="h-3 w-3 text-[#292629]/40" />
                                                                 )}
                                                             </button>
                                                         ) : (
-                                                            <span className="text-gray-300 pl-1">—</span>
+                                                            <span className="text-[#292629]/30 pl-1">—</span>
                                                         )}
                                                     </div>
-                                                    <div className="w-32 shrink-0 text-sm text-gray-500 truncate">
-                                                        {doc.created_at ? formatDate(doc.created_at) : <span className="text-gray-300">—</span>}
+                                                    <div className="w-32 shrink-0 text-sm text-[#292629]/50 truncate">
+                                                        {doc.created_at ? formatDate(doc.created_at) : <span className="text-[#292629]/30">—</span>}
                                                     </div>
-                                                    <div className="w-32 shrink-0 text-sm text-gray-500 truncate">
-                                                        {doc.updated_at ? formatDate(doc.updated_at) : <span className="text-gray-300">—</span>}
+                                                    <div className="w-32 shrink-0 text-sm text-[#292629]/50 truncate">
+                                                        {doc.updated_at ? formatDate(doc.updated_at) : <span className="text-[#292629]/30">—</span>}
                                                     </div>
                                                     <div className="w-8 shrink-0 flex justify-end">
                                                         {!isProcessing && (
@@ -1505,12 +1505,12 @@ export function ProjectPage({ projectId }: Props) {
                         {contextMenu && (
                             <div
                                 ref={contextMenuRef}
-                                className="fixed z-50 w-44 rounded-lg border border-gray-100 bg-white shadow-lg overflow-hidden text-xs"
+                                className="fixed z-50 w-44 rounded-lg border border-[#C7C7B2]/50 bg-white shadow-lg overflow-hidden text-xs"
                                 style={{ top: contextMenu.y, left: contextMenu.x }}
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <button
-                                    className="w-full px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                    className="w-full px-3 py-1.5 text-left text-[#292629]/80 hover:bg-[#F5F5F5] flex items-center gap-2"
                                     onClick={() => {
                                         setCreatingFolderIn(contextMenu.folderId);
                                         setNewFolderName("");
@@ -1518,13 +1518,13 @@ export function ProjectPage({ projectId }: Props) {
                                         setContextMenu(null);
                                     }}
                                 >
-                                    <FolderPlus className="h-3.5 w-3.5 text-gray-400" />
+                                    <FolderPlus className="h-3.5 w-3.5 text-[#292629]/40" />
                                     {contextMenu.showFolderActions ? "New subfolder inside" : "New subfolder"}
                                 </button>
                                 {contextMenu.showFolderActions && contextMenu.folderId && (
                                     <>
                                         <button
-                                            className="w-full px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50"
+                                            className="w-full px-3 py-1.5 text-left text-[#292629]/80 hover:bg-[#F5F5F5]"
                                             onClick={() => {
                                                 const f = folders.find((x) => x.id === contextMenu.folderId);
                                                 setRenameFolderValue(f?.name ?? "");
@@ -1555,7 +1555,7 @@ export function ProjectPage({ projectId }: Props) {
                 {/* Tab: Assistant */}
                 {tab === "assistant" && (
                     <>
-                        <div className="flex items-center h-8 pr-8 border-b border-gray-200 text-xs text-gray-500 font-medium select-none">
+                        <div className="flex items-center h-8 pr-8 border-b border-[#C7C7B2] text-xs text-[#292629]/50 font-medium select-none">
                             <div className={`sticky left-0 z-[60] ${CHECK_W} relative bg-white flex items-center justify-center self-stretch before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-white`}>
                                 <input
                                     type="checkbox"
@@ -1565,7 +1565,7 @@ export function ProjectPage({ projectId }: Props) {
                                         if (allChatsSelected) setSelectedChatIds([]);
                                         else setSelectedChatIds(filteredChats.map((c) => c.id));
                                     }}
-                                    className="h-2.5 w-2.5 rounded border-gray-200 cursor-pointer accent-black"
+                                    className="h-2.5 w-2.5 rounded border-[#C7C7B2] cursor-pointer accent-black"
                                 />
                             </div>
                             <div className={`sticky left-8 z-[60] ${NAME_COL_W} bg-white pl-2 text-left`}>
@@ -1576,10 +1576,10 @@ export function ProjectPage({ projectId }: Props) {
                         </div>
                         {chats.length === 0 ? (
                             <div className="flex flex-col items-start py-24 w-full max-w-xs mx-auto">
-                                <MessageSquare className="h-8 w-8 text-gray-300 mb-4" />
-                                <p className="text-2xl font-medium font-serif text-gray-900">Assistant</p>
-                                <p className="mt-1 text-xs text-gray-400 max-w-xs">Ask questions and get answers grounded in the documents in this project.</p>
-                                <button onClick={() => handleNewChat()} className="mt-4 inline-flex items-center gap-1 rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white hover:bg-gray-700 transition-colors shadow-md">
+                                <MessageSquare className="h-8 w-8 text-[#292629]/30 mb-4" />
+                                <p className="text-3xl font-bold font-sans text-[#292629]">Assistant</p>
+                                <p className="mt-1 text-xs text-[#292629]/40 max-w-xs">Ask questions and get answers grounded in the documents in this project.</p>
+                                <button onClick={() => handleNewChat()} className="mt-4 inline-flex items-center gap-1 rounded-full bg-[#292629] px-3 py-1 text-xs font-medium text-white hover:bg-[#292629]/90 transition-colors shadow-md">
                                     + Create New
                                 </button>
                             </div>
@@ -1589,19 +1589,19 @@ export function ProjectPage({ projectId }: Props) {
                                     <div
                                         key={chat.id}
                                         onClick={() => { if (renamingChatId === chat.id) return; router.push(`/projects/${projectId}/assistant/chat/${chat.id}`); }}
-                                        className="group flex items-center h-10 pr-8 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
+                                        className="group flex items-center h-10 pr-8 border-b border-[#C7C7B2]/30 hover:bg-[#F5F5F5] cursor-pointer transition-colors"
                                     >
-                                        <div className={`sticky left-0 z-[60] ${CHECK_W} p-2 flex items-center justify-center ${selectedChatIds.includes(chat.id) ? "bg-gray-50" : "bg-white"} group-hover:bg-gray-50`} onClick={(e) => e.stopPropagation()}>
-                                            <input type="checkbox" checked={selectedChatIds.includes(chat.id)} onChange={() => setSelectedChatIds((prev) => prev.includes(chat.id) ? prev.filter((x) => x !== chat.id) : [...prev, chat.id])} className="h-2.5 w-2.5 rounded border-gray-200 cursor-pointer accent-black" />
+                                        <div className={`sticky left-0 z-[60] ${CHECK_W} p-2 flex items-center justify-center ${selectedChatIds.includes(chat.id) ? "bg-[#F5F5F5]" : "bg-white"} group-hover:bg-[#F5F5F5]`} onClick={(e) => e.stopPropagation()}>
+                                            <input type="checkbox" checked={selectedChatIds.includes(chat.id)} onChange={() => setSelectedChatIds((prev) => prev.includes(chat.id) ? prev.filter((x) => x !== chat.id) : [...prev, chat.id])} className="h-2.5 w-2.5 rounded border-[#C7C7B2] cursor-pointer accent-black" />
                                         </div>
-                                        <div className={`sticky left-8 z-[60] ${NAME_COL_W} p-2 ${selectedChatIds.includes(chat.id) ? "bg-gray-50" : "bg-white"} group-hover:bg-gray-50`}>
+                                        <div className={`sticky left-8 z-[60] ${NAME_COL_W} p-2 ${selectedChatIds.includes(chat.id) ? "bg-[#F5F5F5]" : "bg-white"} group-hover:bg-[#F5F5F5]`}>
                                             {renamingChatId === chat.id ? (
-                                                <input autoFocus value={renameChatValue} onChange={(e) => setRenameChatValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitChatRename(chat.id); if (e.key === "Escape") setRenamingChatId(null); }} onBlur={() => submitChatRename(chat.id)} onClick={(e) => e.stopPropagation()} className="w-full text-sm text-gray-800 bg-transparent outline-none" />
+                                                <input autoFocus value={renameChatValue} onChange={(e) => setRenameChatValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitChatRename(chat.id); if (e.key === "Escape") setRenamingChatId(null); }} onBlur={() => submitChatRename(chat.id)} onClick={(e) => e.stopPropagation()} className="w-full text-sm text-[#292629]/90 bg-transparent outline-none" />
                                             ) : (
-                                                <span className="text-sm text-gray-800 truncate block">{chat.title ?? "Untitled Chat"}</span>
+                                                <span className="text-sm text-[#292629]/90 truncate block">{chat.title ?? "Untitled Chat"}</span>
                                             )}
                                         </div>
-                                        <div className="ml-auto w-32 shrink-0 text-sm text-gray-500 truncate">{formatDate(chat.created_at)}</div>
+                                        <div className="ml-auto w-32 shrink-0 text-sm text-[#292629]/50 truncate">{formatDate(chat.created_at)}</div>
                                         <div className="w-8 shrink-0 flex justify-end" onClick={(e) => e.stopPropagation()}>
                                             <RowActions
                                                 onRename={() => {
@@ -1632,7 +1632,7 @@ export function ProjectPage({ projectId }: Props) {
                 {/* Tab: Reviews */}
                 {tab === "reviews" && (
                     <>
-                        <div className="flex items-center h-8 pr-8 border-b border-gray-200 text-xs text-gray-500 font-medium select-none">
+                        <div className="flex items-center h-8 pr-8 border-b border-[#C7C7B2] text-xs text-[#292629]/50 font-medium select-none">
                             <div className={`sticky left-0 z-[60] ${CHECK_W} relative bg-white flex items-center justify-center self-stretch before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-white`}>
                                 <input
                                     type="checkbox"
@@ -1642,7 +1642,7 @@ export function ProjectPage({ projectId }: Props) {
                                         if (allReviewsSelected) setSelectedReviewIds([]);
                                         else setSelectedReviewIds(filteredReviews.map((r) => r.id));
                                     }}
-                                    className="h-2.5 w-2.5 rounded border-gray-200 cursor-pointer accent-black"
+                                    className="h-2.5 w-2.5 rounded border-[#C7C7B2] cursor-pointer accent-black"
                                 />
                             </div>
                             <div className={`sticky left-8 z-[60] ${NAME_COL_W} bg-white pl-2 text-left`}>
@@ -1655,10 +1655,10 @@ export function ProjectPage({ projectId }: Props) {
                         </div>
                         {projectReviews.length === 0 ? (
                             <div className="flex flex-col items-start py-24 w-full max-w-xs mx-auto">
-                                <Table2 className="h-8 w-8 text-gray-300 mb-4" />
-                                <p className="text-2xl font-medium font-serif text-gray-900">Tabular Reviews</p>
-                                <p className="mt-1 text-xs text-gray-400 max-w-xs">Extract data from project documents into tables using AI.</p>
-                                <button onClick={handleNewReview} disabled={creatingReview || docs.length === 0} className="mt-4 inline-flex items-center gap-1 rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white hover:bg-gray-700 transition-colors shadow-md disabled:opacity-40">
+                                <Table2 className="h-8 w-8 text-[#292629]/30 mb-4" />
+                                <p className="text-3xl font-bold font-sans text-[#292629]">Tabular Reviews</p>
+                                <p className="mt-1 text-xs text-[#292629]/40 max-w-xs">Extract data from project documents into tables using AI.</p>
+                                <button onClick={handleNewReview} disabled={creatingReview || docs.length === 0} className="mt-4 inline-flex items-center gap-1 rounded-full bg-[#292629] px-3 py-1 text-xs font-medium text-white hover:bg-[#292629]/90 transition-colors shadow-md disabled:opacity-40">
                                     + Create New
                                 </button>
                             </div>
@@ -1668,21 +1668,21 @@ export function ProjectPage({ projectId }: Props) {
                                     <div
                                         key={review.id}
                                         onClick={() => { if (renamingReviewId === review.id) return; router.push(`/projects/${projectId}/tabular-reviews/${review.id}`); }}
-                                        className="group flex items-center h-10 pr-8 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
+                                        className="group flex items-center h-10 pr-8 border-b border-[#C7C7B2]/30 hover:bg-[#F5F5F5] cursor-pointer transition-colors"
                                     >
-                                        <div className={`sticky left-0 z-[60] ${CHECK_W} p-2 flex items-center justify-center ${selectedReviewIds.includes(review.id) ? "bg-gray-50" : "bg-white"} group-hover:bg-gray-50`} onClick={(e) => e.stopPropagation()}>
-                                            <input type="checkbox" checked={selectedReviewIds.includes(review.id)} onChange={() => setSelectedReviewIds((prev) => prev.includes(review.id) ? prev.filter((x) => x !== review.id) : [...prev, review.id])} className="h-2.5 w-2.5 rounded border-gray-200 cursor-pointer accent-black" />
+                                        <div className={`sticky left-0 z-[60] ${CHECK_W} p-2 flex items-center justify-center ${selectedReviewIds.includes(review.id) ? "bg-[#F5F5F5]" : "bg-white"} group-hover:bg-[#F5F5F5]`} onClick={(e) => e.stopPropagation()}>
+                                            <input type="checkbox" checked={selectedReviewIds.includes(review.id)} onChange={() => setSelectedReviewIds((prev) => prev.includes(review.id) ? prev.filter((x) => x !== review.id) : [...prev, review.id])} className="h-2.5 w-2.5 rounded border-[#C7C7B2] cursor-pointer accent-black" />
                                         </div>
-                                        <div className={`sticky left-8 z-[60] ${NAME_COL_W} p-2 ${selectedReviewIds.includes(review.id) ? "bg-gray-50" : "bg-white"} group-hover:bg-gray-50`}>
+                                        <div className={`sticky left-8 z-[60] ${NAME_COL_W} p-2 ${selectedReviewIds.includes(review.id) ? "bg-[#F5F5F5]" : "bg-white"} group-hover:bg-[#F5F5F5]`}>
                                             {renamingReviewId === review.id ? (
-                                                <input autoFocus value={renameReviewValue} onChange={(e) => setRenameReviewValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitReviewRename(review.id); if (e.key === "Escape") setRenamingReviewId(null); }} onBlur={() => submitReviewRename(review.id)} onClick={(e) => e.stopPropagation()} className="w-full text-sm text-gray-800 bg-transparent outline-none" />
+                                                <input autoFocus value={renameReviewValue} onChange={(e) => setRenameReviewValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitReviewRename(review.id); if (e.key === "Escape") setRenamingReviewId(null); }} onBlur={() => submitReviewRename(review.id)} onClick={(e) => e.stopPropagation()} className="w-full text-sm text-[#292629]/90 bg-transparent outline-none" />
                                             ) : (
-                                                <span className="text-sm text-gray-800 truncate block">{review.title ?? "Untitled Review"}</span>
+                                                <span className="text-sm text-[#292629]/90 truncate block">{review.title ?? "Untitled Review"}</span>
                                             )}
                                         </div>
-                                        <div className="ml-auto w-24 shrink-0 text-sm text-gray-500 truncate">{review.columns_config?.length ?? 0}</div>
-                                        <div className="w-24 shrink-0 text-sm text-gray-500 truncate">{review.document_count ?? 0}</div>
-                                        <div className="w-32 shrink-0 text-sm text-gray-500 truncate">{review.created_at ? formatDate(review.created_at) : <span className="text-gray-300">—</span>}</div>
+                                        <div className="ml-auto w-24 shrink-0 text-sm text-[#292629]/50 truncate">{review.columns_config?.length ?? 0}</div>
+                                        <div className="w-24 shrink-0 text-sm text-[#292629]/50 truncate">{review.document_count ?? 0}</div>
+                                        <div className="w-32 shrink-0 text-sm text-[#292629]/50 truncate">{review.created_at ? formatDate(review.created_at) : <span className="text-[#292629]/30">—</span>}</div>
                                         <div className="w-8 shrink-0 flex justify-end" onClick={(e) => e.stopPropagation()}>
                                             <RowActions
                                                 onRename={() => {

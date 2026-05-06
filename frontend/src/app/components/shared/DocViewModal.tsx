@@ -40,7 +40,7 @@ export function DocViewModal({
 
     return createPortal(
         <div
-            className="fixed inset-0 z-100 flex items-center justify-center bg-black/40"
+            className="fixed inset-0 z-100 flex items-center justify-center bg-[#292629]/40"
             onClick={onClose}
         >
             <div
@@ -49,10 +49,10 @@ export function DocViewModal({
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-3 shrink-0">
-                    <span className="text-base font-medium font-serif text-gray-800 truncate pr-4">
+                    <span className="text-base font-medium font-sans text-[#292629]/90 truncate pr-4">
                         {doc.filename}
                         {versionLabel && (
-                            <span className="ml-2 text-xs font-normal text-gray-500">
+                            <span className="ml-2 text-xs font-normal text-[#292629]/50">
                                 {versionLabel}
                             </span>
                         )}
@@ -60,21 +60,21 @@ export function DocViewModal({
                     <div className="flex items-center gap-1 shrink-0">
                         <button
                             onClick={handleDownload}
-                            className="flex items-center justify-center w-6 h-6 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+                            className="flex items-center justify-center w-6 h-6 rounded hover:bg-[#F5F5F5] text-[#292629]/40 hover:text-[#292629]/80 transition-colors"
                         >
                             <Download className="h-4 w-4" />
                         </button>
                         {onDelete && (
                             <button
                                 onClick={() => { onDelete(doc); onClose(); }}
-                                className="flex items-center justify-center w-6 h-6 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                                className="flex items-center justify-center w-6 h-6 rounded hover:bg-red-50 text-[#292629]/40 hover:text-red-500 transition-colors"
                             >
                                 <Trash2 className="h-4 w-4" />
                             </button>
                         )}
                         <button
                             onClick={onClose}
-                            className="flex items-center justify-center w-6 h-6 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+                            className="flex items-center justify-center w-6 h-6 rounded hover:bg-[#F5F5F5] text-[#292629]/40 hover:text-[#292629]/80 transition-colors"
                         >
                             <X className="h-4 w-4" />
                         </button>

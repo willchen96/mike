@@ -128,7 +128,7 @@ function AssistantGreeting({ username }: { username: string }) {
                 </div>
                 <h1
                     ref={textRef}
-                    className="absolute text-2xl font-serif font-light text-gray-900 whitespace-nowrap"
+                    className="absolute text-2xl font-sans font-light text-[#292629] whitespace-nowrap"
                     style={{
                         left: "50%",
                         transform: loaded
@@ -188,7 +188,7 @@ function Divider({ onDrag }: { onDrag: (dx: number) => void }) {
                 className="absolute inset-y-0 -left-2 -right-2 cursor-col-resize flex items-stretch justify-center"
             >
                 {isDragging && (
-                    <div className="w-1 bg-blue-500 transition-colors" />
+                    <div className="w-1 bg-[#898344] transition-colors" />
                 )}
             </div>
         </div>
@@ -753,47 +753,47 @@ export default function ProjectAssistantChatPage({ params }: Props) {
         <div className="flex flex-col h-full">
             {/* Page header */}
             <div className="flex items-center justify-between px-8 py-4 shrink-0">
-                <div className="flex items-center gap-1.5 text-2xl font-medium font-serif">
+                <div className="flex items-center gap-1.5 text-3xl font-bold font-sans">
                     <button
                         onClick={() => router.push("/projects")}
-                        className="text-gray-500 hover:text-gray-700 transition-colors"
+                        className="text-[#292629]/50 hover:text-[#292629]/80 transition-colors"
                     >
                         Projects
                     </button>
-                    <span className="text-gray-300">›</span>
+                    <span className="text-[#292629]/30">›</span>
                     {project ? (
                         <button
                             onClick={() =>
                                 router.push(`/projects/${projectId}`)
                             }
-                            className="text-gray-500 hover:text-gray-700 transition-colors"
+                            className="text-[#292629]/50 hover:text-[#292629]/80 transition-colors"
                         >
                             {project.name}
                             {project.cm_number && (
-                                <span className="ml-1 text-gray-400">
+                                <span className="ml-1 text-[#292629]/40">
                                     (#{project.cm_number})
                                 </span>
                             )}
                         </button>
                     ) : (
-                        <div className="h-6 w-32 rounded bg-gray-100 animate-pulse" />
+                        <div className="h-6 w-32 rounded bg-[#F5F5F5] animate-pulse" />
                     )}
-                    <span className="text-gray-300">›</span>
+                    <span className="text-[#292629]/30">›</span>
                     <button
                         onClick={() =>
                             router.push(`/projects/${projectId}?tab=assistant`)
                         }
-                        className="text-gray-500 hover:text-gray-700 transition-colors"
+                        className="text-[#292629]/50 hover:text-[#292629]/80 transition-colors"
                     >
                         Assistant
                     </button>
-                    <span className="text-gray-300">›</span>
+                    <span className="text-[#292629]/30">›</span>
                     {chatLoaded ? (
-                        <span className="text-gray-900 truncate max-w-xs">
+                        <span className="text-[#292629] truncate max-w-xs">
                             {chatTitle ?? "Untitled New Chat"}
                         </span>
                     ) : (
-                        <div className="h-6 w-40 rounded bg-gray-100 animate-pulse" />
+                        <div className="h-6 w-40 rounded bg-[#F5F5F5] animate-pulse" />
                     )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -801,7 +801,7 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                         onClick={handleNewChat}
                         disabled={creatingChat}
                         title="New chat"
-                        className="flex items-center justify-center p-1.5 text-gray-500 hover:text-gray-900 transition-colors disabled:opacity-40"
+                        className="flex items-center justify-center p-1.5 text-[#292629]/50 hover:text-[#292629] transition-colors disabled:opacity-40"
                     >
                         {creatingChat ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -813,7 +813,7 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                         onClick={handleDeleteChat}
                         disabled={deletingChat}
                         title="Delete chat"
-                        className="flex items-center justify-center p-1.5 text-gray-500 hover:text-red-600 transition-colors disabled:opacity-40"
+                        className="flex items-center justify-center p-1.5 text-[#292629]/50 hover:text-red-600 transition-colors disabled:opacity-40"
                     >
                         {deletingChat ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -825,13 +825,13 @@ export default function ProjectAssistantChatPage({ params }: Props) {
             </div>
 
             {/* Three-panel body */}
-            <div className="flex flex-1 min-h-0 border-t border-gray-200 overflow-hidden">
+            <div className="flex flex-1 min-h-0 border-t border-[#C7C7B2] overflow-hidden">
                 {/* LEFT: Project Explorer */}
                 {!explorerCollapsed && (
                     <>
                         <div
                             style={{ width: explorerWidth }}
-                            className="shrink-0 flex flex-col border-r border-gray-200"
+                            className="shrink-0 flex flex-col border-r border-[#C7C7B2]"
                             onDragOver={(e) => {
                                 e.preventDefault();
                                 // Only show the upload overlay for external file drags, not internal moves
@@ -855,8 +855,8 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                             onDrop={handleExplorerFileDrop}
                         >
                             {/* Explorer header */}
-                            <div className="h-10 flex items-center justify-between px-3 border-b border-gray-200 shrink-0">
-                                <span className="text-xs text-gray-700">
+                            <div className="h-10 flex items-center justify-between px-3 border-b border-[#C7C7B2] shrink-0">
+                                <span className="text-xs text-[#292629]/80">
                                     Explorer
                                 </span>
                                 <div className="flex items-center gap-1">
@@ -880,7 +880,7 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                                         }
                                         disabled={uploading}
                                         title="Upload documents"
-                                        className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-40"
+                                        className="p-1 rounded text-[#292629]/40 hover:text-[#292629]/80 hover:bg-[#F5F5F5] transition-colors disabled:opacity-40"
                                     >
                                         {uploading ? (
                                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -893,7 +893,7 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                                             setExplorerCollapsed(true)
                                         }
                                         title="Collapse explorer"
-                                        className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                                        className="p-1 rounded text-[#292629]/40 hover:text-[#292629]/80 hover:bg-[#F5F5F5] transition-colors"
                                     >
                                         <ChevronLeft className="h-3.5 w-3.5" />
                                     </button>
@@ -902,7 +902,7 @@ export default function ProjectAssistantChatPage({ params }: Props) {
 
                             {/* Drop overlay */}
                             <div
-                                className={`flex-1 overflow-y-auto relative h-full ${explorerDragOver ? "bg-blue-50" : ""}`}
+                                className={`flex-1 overflow-y-auto relative h-full ${explorerDragOver ? "bg-[#F5F5F5]" : ""}`}
                                 onDragOver={(e) => {
                                     e.preventDefault();
                                 }}
@@ -926,7 +926,7 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                             >
                                 {explorerDragOver && (
                                     <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-                                        <p className="text-xs text-blue-500 font-medium">
+                                        <p className="text-xs text-[#536049] font-medium">
                                             Drop to upload
                                         </p>
                                     </div>
@@ -952,12 +952,12 @@ export default function ProjectAssistantChatPage({ params }: Props) {
 
                 {/* Collapsed explorer toggle */}
                 {explorerCollapsed && (
-                    <div className="shrink-0 flex flex-col border-r border-gray-200">
-                        <div className="h-10 flex items-center justify-center border-b border-gray-200 shrink-0 px-1">
+                    <div className="shrink-0 flex flex-col border-r border-[#C7C7B2]">
+                        <div className="h-10 flex items-center justify-center border-b border-[#C7C7B2] shrink-0 px-1">
                             <button
                                 onClick={() => setExplorerCollapsed(false)}
                                 title="Expand explorer"
-                                className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                                className="p-1 rounded text-[#292629]/40 hover:text-[#292629]/80 hover:bg-[#F5F5F5] transition-colors"
                             >
                                 <ChevronRight className="h-3.5 w-3.5" />
                             </button>
@@ -966,14 +966,14 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                 )}
 
                 {/* CENTER: Document Panel */}
-                <div className="flex-1 flex flex-col min-w-0 border-r border-gray-200">
+                <div className="flex-1 flex flex-col min-w-0 border-r border-[#C7C7B2]">
                     {/* Tab bar */}
                     <div
                         ref={tabBarRef}
-                        className="h-10 flex items-end border-b border-gray-200 shrink-0 overflow-x-auto min-w-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                        className="h-10 flex items-end border-b border-[#C7C7B2] shrink-0 overflow-x-auto min-w-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                     >
                         {tabs.length === 0 ? (
-                            <span className="px-4 self-center text-xs text-gray-700">
+                            <span className="px-4 self-center text-xs text-[#292629]/80">
                                 Document Viewer
                             </span>
                         ) : (
@@ -987,8 +987,8 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                                     ext === "pdf"
                                         ? "text-red-500"
                                         : ext === "doc" || ext === "docx"
-                                          ? "text-blue-500"
-                                          : "text-gray-400";
+                                          ? "text-[#536049]"
+                                          : "text-[#292629]/40";
                                 // Pull the doc's latest_version_number out
                                 // of the project state so the tab shows V#
                                 // whenever the doc has been edited.
@@ -1013,17 +1013,17 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                                         onClick={() =>
                                             switchTab(tab.documentId)
                                         }
-                                        className={`group flex items-center gap-1.5 px-3 h-full border-r border-gray-200 cursor-pointer shrink-0 max-w-[260px] transition-colors ${
+                                        className={`group flex items-center gap-1.5 px-3 h-full border-r border-[#C7C7B2] cursor-pointer shrink-0 max-w-[260px] transition-colors ${
                                             isActive
-                                                ? "bg-gray-100"
-                                                : "bg-white hover:bg-gray-50"
+                                                ? "bg-[#F5F5F5]"
+                                                : "bg-white hover:bg-[#F5F5F5]"
                                         }`}
                                     >
                                         <FileText
                                             className={`h-3.5 w-3.5 shrink-0 ${iconColor}`}
                                         />
                                         <span
-                                            className={`text-xs truncate ${isActive ? "text-gray-900 font-medium" : "text-gray-500"}`}
+                                            className={`text-xs truncate ${isActive ? "text-[#292629] font-medium" : "text-[#292629]/50"}`}
                                         >
                                             {tab.filename}
                                         </span>
@@ -1031,8 +1031,8 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                                             <span
                                                 className={`shrink-0 inline-flex items-center rounded border px-1 py-px text-[9px] font-medium ${
                                                     isActive
-                                                        ? "border-gray-200 bg-white text-gray-600"
-                                                        : "border-gray-200 bg-gray-50 text-gray-500"
+                                                        ? "border-[#C7C7B2] bg-white text-[#292629]/60"
+                                                        : "border-[#C7C7B2] bg-[#F5F5F5] text-[#292629]/50"
                                                 }`}
                                             >
                                                 V{versionNumber}
@@ -1043,7 +1043,7 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                                                 e.stopPropagation();
                                                 closeTab(tab.documentId);
                                             }}
-                                            className={`shrink-0 transition-colors ${isActive ? "text-gray-500 hover:text-gray-700" : "text-gray-300 hover:text-gray-600"}`}
+                                            className={`shrink-0 transition-colors ${isActive ? "text-[#292629]/50 hover:text-[#292629]/80" : "text-[#292629]/30 hover:text-[#292629]/60"}`}
                                         >
                                             <X className="h-3 w-3" />
                                         </button>
@@ -1097,12 +1097,12 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                                 />
                             )
                         ) : (
-                            <div className="flex items-center justify-center h-full px-8 bg-gray-100">
+                            <div className="flex items-center justify-center h-full px-8 bg-[#F5F5F5]">
                                 <div className="text-center space-y-3">
-                                    <p className="font-serif text-gray-700 text-xl">
+                                    <p className="font-sans text-[#292629]/80 text-xl">
                                         Click on a document to display here.
                                     </p>
-                                    <p className="font-serif text-base text-gray-500">
+                                    <p className="font-sans text-base text-[#292629]/50">
                                         Pro tip: Drag a document from the
                                         Project Explorer to the Assistant to
                                         direct it to read or edit.
@@ -1122,9 +1122,9 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={handleChatDrop}
                 >
-                    <div className="h-10 flex items-center gap-2 px-4 border-b border-gray-200 shrink-0">
+                    <div className="h-10 flex items-center gap-2 px-4 border-b border-[#C7C7B2] shrink-0">
                         <MikeIcon size={16} />
-                        <span className="text-xs text-gray-700">
+                        <span className="text-xs text-[#292629]/80">
                             Project Assistant
                         </span>
                     </div>
@@ -1133,15 +1133,15 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                     {!chatLoaded ? (
                         <div className="flex-1 px-4 py-4 space-y-4">
                             <div className="flex justify-end">
-                                <div className="bg-gray-100 rounded-2xl p-4 w-3/4">
-                                    <div className="h-3 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite] rounded w-full" />
+                                <div className="bg-[#F5F5F5] rounded-2xl p-4 w-3/4">
+                                    <div className="h-3 bg-gradient-to-r from-[#EBEBEB] via-[#D8D8D8] to-[#EBEBEB] bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite] rounded w-full" />
                                 </div>
                             </div>
                             <div className="space-y-2">
                                 {[1, 2, 3].map((i) => (
                                     <div
                                         key={i}
-                                        className={`h-3 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite] rounded ${i === 3 ? "w-4/6" : "w-full"}`}
+                                        className={`h-3 bg-gradient-to-r from-[#EBEBEB] via-[#D8D8D8] to-[#EBEBEB] bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite] rounded ${i === 3 ? "w-4/6" : "w-full"}`}
                                     />
                                 ))}
                             </div>

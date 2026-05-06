@@ -53,7 +53,7 @@ export function ModelToggle({ value, onChange, apiKeys }: Props) {
             <DropdownMenuTrigger asChild>
                 <button
                     type="button"
-                    className={`flex items-center gap-1.5 rounded-lg px-2 h-8 text-sm transition-colors cursor-pointer text-gray-400 hover:bg-gray-100 hover:text-gray-700 ${isOpen ? "bg-gray-100 text-gray-700" : ""}`}
+                    className={`flex items-center gap-1.5 rounded-lg px-2 h-8 text-sm transition-colors cursor-pointer text-[#292629]/40 hover:bg-[#F5F5F5] hover:text-[#292629]/80 ${isOpen ? "bg-[#F5F5F5] text-[#292629]/80" : ""}`}
                     title={
                         !selectedAvailable
                             ? "API key missing for selected model"
@@ -76,7 +76,7 @@ export function ModelToggle({ value, onChange, apiKeys }: Props) {
                     return (
                         <div key={group}>
                             {gi > 0 && <DropdownMenuSeparator />}
-                            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-gray-400">
+                            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-[#292629]/40">
                                 {group}
                             </DropdownMenuLabel>
                             {items.map((m) => {
@@ -90,7 +90,7 @@ export function ModelToggle({ value, onChange, apiKeys }: Props) {
                                         onSelect={() => onChange(m.id)}
                                     >
                                         <span
-                                            className={`flex-1 ${available ? "" : "text-gray-400"}`}
+                                            className={`flex-1 ${available ? "" : "text-[#292629]/40"}`}
                                         >
                                             {m.label}
                                         </span>
@@ -101,7 +101,7 @@ export function ModelToggle({ value, onChange, apiKeys }: Props) {
                                             />
                                         )}
                                         {m.id === value && available && (
-                                            <Check className="h-3.5 w-3.5 text-gray-600 ml-1" />
+                                            <Check className="h-3.5 w-3.5 text-[#292629]/60 ml-1" />
                                         )}
                                     </DropdownMenuItem>
                                 );

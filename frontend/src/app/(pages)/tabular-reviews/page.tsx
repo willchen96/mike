@@ -194,29 +194,29 @@ export default function TabularReviewsPage() {
                 onClick={() => setFilterOpen((o) => !o)}
                 className={`flex items-center gap-1 text-xs font-medium transition-colors ${
                     projectFilter
-                        ? "text-gray-700 hover:text-gray-900"
-                        : "text-gray-500 hover:text-gray-700"
+                        ? "text-[#292629]/80 hover:text-[#292629]"
+                        : "text-[#292629]/50 hover:text-[#292629]/80"
                 }`}
             >
                 {selectedProject ? selectedProject.name : "Filter by project"}
                 <ChevronDown className="h-3 w-3" />
             </button>
             {filterOpen && (
-                <div className="absolute right-0 top-full mt-1.5 z-20 w-52 rounded-xl border border-gray-100 bg-white shadow-lg overflow-hidden">
+                <div className="absolute right-0 top-full mt-1.5 z-20 w-52 rounded-xl border border-[#C7C7B2]/50 bg-white shadow-lg overflow-hidden">
                     <button
                         onClick={() => {
                             setProjectFilter(null);
                             setFilterOpen(false);
                         }}
-                        className="flex items-center justify-between w-full px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                        className="flex items-center justify-between w-full px-3 py-2 text-xs text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                     >
                         All Projects
                         {!projectFilter && (
-                            <Check className="h-3.5 w-3.5 text-gray-400" />
+                            <Check className="h-3.5 w-3.5 text-[#292629]/40" />
                         )}
                     </button>
                     {projects.length > 0 && (
-                        <div className="border-t border-gray-100" />
+                        <div className="border-t border-[#C7C7B2]/50" />
                     )}
                     {projects.map((p) => (
                         <button
@@ -225,11 +225,11 @@ export default function TabularReviewsPage() {
                                 setProjectFilter(p.id);
                                 setFilterOpen(false);
                             }}
-                            className="flex items-center justify-between w-full px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                            className="flex items-center justify-between w-full px-3 py-2 text-xs text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                         >
                             <span className="truncate pr-2">{p.name}</span>
                             {projectFilter === p.id && (
-                                <Check className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                                <Check className="h-3.5 w-3.5 shrink-0 text-[#292629]/40" />
                             )}
                         </button>
                     ))}
@@ -244,13 +244,13 @@ export default function TabularReviewsPage() {
                 <div ref={actionsRef} className="relative">
                     <button
                         onClick={() => setActionsOpen((v) => !v)}
-                        className="flex items-center gap-1 text-xs font-medium text-gray-700 hover:text-gray-900 transition-colors"
+                        className="flex items-center gap-1 text-xs font-medium text-[#292629]/80 hover:text-[#292629] transition-colors"
                     >
                         Actions
                         <ChevronDown className="h-3.5 w-3.5" />
                     </button>
                     {actionsOpen && (
-                        <div className="absolute top-full right-0 mt-1 w-36 rounded-lg border border-gray-100 bg-white shadow-lg z-50 overflow-hidden">
+                        <div className="absolute top-full right-0 mt-1 w-36 rounded-lg border border-[#C7C7B2]/50 bg-white shadow-lg z-50 overflow-hidden">
                             <button
                                 onClick={handleDeleteSelected}
                                 className="w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 transition-colors"
@@ -269,7 +269,7 @@ export default function TabularReviewsPage() {
         <div className="flex-1 overflow-y-auto bg-white">
             {/* Page header */}
             <div className="flex items-center justify-between px-8 py-4">
-                <h1 className="text-2xl font-medium font-serif text-gray-900">
+                <h1 className="text-3xl font-bold font-sans text-[#292629]">
                     Tabular Reviews
                 </h1>
                 <div className="flex items-center gap-2">
@@ -277,7 +277,7 @@ export default function TabularReviewsPage() {
                     <button
                         onClick={() => setNewTROpen(true)}
                         disabled={creating}
-                        className="flex items-center justify-center p-1.5 text-gray-500 hover:text-gray-900 transition-colors disabled:opacity-40"
+                        className="flex items-center justify-center p-1.5 text-[#292629]/50 hover:text-[#292629] transition-colors disabled:opacity-40"
                     >
                         {creating ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -298,7 +298,7 @@ export default function TabularReviewsPage() {
             {/* Table */}
             <div className="w-full overflow-x-auto">
                 <div className="min-w-max">
-                <div className="flex items-center h-8 pr-8 border-b border-gray-200 text-xs text-gray-500 font-medium select-none">
+                <div className="flex items-center h-8 pr-8 border-b border-[#C7C7B2] text-xs text-[#292629]/50 font-medium select-none">
                     <div className={`sticky left-0 z-[60] ${CHECK_W} relative bg-white flex items-center justify-center self-stretch before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-white`}>
                         {!loading && (
                             <input
@@ -308,7 +308,7 @@ export default function TabularReviewsPage() {
                                     if (el) el.indeterminate = someSelected;
                                 }}
                                 onChange={toggleAll}
-                                className="h-2.5 w-2.5 rounded border-gray-200 cursor-pointer accent-black"
+                                className="h-2.5 w-2.5 rounded border-[#C7C7B2] cursor-pointer accent-black"
                             />
                         )}
                     </div>
@@ -327,23 +327,23 @@ export default function TabularReviewsPage() {
                         {[1, 2, 3].map((i) => (
                             <div
                                 key={i}
-                                className="flex items-center h-10 pr-8 border-b border-gray-50"
+                                className="flex items-center h-10 pr-8 border-b border-[#C7C7B2]/30"
                             >
                                 <div className="w-8 shrink-0" />
                                 <div className="flex-1 min-w-0 pl-3 pr-4">
-                                    <div className="h-3.5 w-48 rounded bg-gray-100 animate-pulse" />
+                                    <div className="h-3.5 w-48 rounded bg-[#F5F5F5] animate-pulse" />
                                 </div>
                                 <div className="w-24 shrink-0">
-                                    <div className="h-3 w-8 rounded bg-gray-100 animate-pulse" />
+                                    <div className="h-3 w-8 rounded bg-[#F5F5F5] animate-pulse" />
                                 </div>
                                 <div className="w-24 shrink-0">
-                                    <div className="h-3 w-8 rounded bg-gray-100 animate-pulse" />
+                                    <div className="h-3 w-8 rounded bg-[#F5F5F5] animate-pulse" />
                                 </div>
                                 <div className="w-40 shrink-0">
-                                    <div className="h-3 w-24 rounded bg-gray-100 animate-pulse" />
+                                    <div className="h-3 w-24 rounded bg-[#F5F5F5] animate-pulse" />
                                 </div>
                                 <div className="w-32 shrink-0">
-                                    <div className="h-3 w-20 rounded bg-gray-100 animate-pulse" />
+                                    <div className="h-3 w-20 rounded bg-[#F5F5F5] animate-pulse" />
                                 </div>
                                 <div className="w-8 shrink-0" />
                             </div>
@@ -353,24 +353,24 @@ export default function TabularReviewsPage() {
                     <div className="flex flex-col items-start py-24 w-full max-w-xs mx-auto">
                         {activeTab === "all" && !projectFilter ? (
                             <>
-                                <Table2 className="h-8 w-8 text-gray-300 mb-4" />
-                                <p className="text-2xl font-medium font-serif text-gray-900">
+                                <Table2 className="h-8 w-8 text-[#292629]/30 mb-4" />
+                                <p className="text-3xl font-bold font-sans text-[#292629]">
                                     Tabular Reviews
                                 </p>
-                                <p className="mt-1 text-xs text-gray-400 max-w-xs text-left">
+                                <p className="mt-1 text-xs text-[#292629]/40 max-w-xs text-left">
                                     Extract data from documents into tables
                                     using AI.
                                 </p>
                                 <button
                                     onClick={() => setNewTROpen(true)}
                                     disabled={creating}
-                                    className="mt-4 inline-flex items-center gap-1 rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white hover:bg-gray-700 transition-colors shadow-md disabled:opacity-40"
+                                    className="mt-4 inline-flex items-center gap-1 rounded-full bg-[#292629] px-3 py-1 text-xs font-medium text-white hover:bg-[#292629]/90 transition-colors shadow-md disabled:opacity-40"
                                 >
                                     + Create New
                                 </button>
                             </>
                         ) : (
-                            <p className="text-sm text-gray-400">
+                            <p className="text-sm text-[#292629]/40">
                                 No reviews found
                             </p>
                         )}
@@ -382,7 +382,7 @@ export default function TabularReviewsPage() {
                                 (p) => p.id === review.project_id,
                             );
                             const rowBg = selectedIds.includes(review.id)
-                                ? "bg-gray-50"
+                                ? "bg-[#F5F5F5]"
                                 : "bg-white";
                             return (
                                 <div
@@ -395,10 +395,10 @@ export default function TabularReviewsPage() {
                                                 : `/tabular-reviews/${review.id}`,
                                         );
                                     }}
-                                    className="group flex items-center h-10 pr-8 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
+                                    className="group flex items-center h-10 pr-8 border-b border-[#C7C7B2]/30 hover:bg-[#F5F5F5] cursor-pointer transition-colors"
                                 >
                                     <div
-                                        className={`sticky left-0 z-[60] ${CHECK_W} p-2 flex items-center justify-center ${rowBg} group-hover:bg-gray-50`}
+                                        className={`sticky left-0 z-[60] ${CHECK_W} p-2 flex items-center justify-center ${rowBg} group-hover:bg-[#F5F5F5]`}
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         <input
@@ -409,10 +409,10 @@ export default function TabularReviewsPage() {
                                             onChange={() =>
                                                 toggleOne(review.id)
                                             }
-                                            className="h-2.5 w-2.5 rounded border-gray-200 cursor-pointer accent-black"
+                                            className="h-2.5 w-2.5 rounded border-[#C7C7B2] cursor-pointer accent-black"
                                         />
                                     </div>
-                                    <div className={`sticky left-8 z-[60] ${NAME_COL_W} p-2 ${rowBg} group-hover:bg-gray-50`}>
+                                    <div className={`sticky left-8 z-[60] ${NAME_COL_W} p-2 ${rowBg} group-hover:bg-[#F5F5F5]`}>
                                         {renamingId === review.id ? (
                                             <input
                                                 autoFocus
@@ -438,35 +438,35 @@ export default function TabularReviewsPage() {
                                                 onClick={(e) =>
                                                     e.stopPropagation()
                                                 }
-                                                className="w-full text-sm text-gray-800 bg-transparent outline-none"
+                                                className="w-full text-sm text-[#292629]/90 bg-transparent outline-none"
                                             />
                                         ) : (
-                                            <span className="text-sm text-gray-800 truncate block">
+                                            <span className="text-sm text-[#292629]/90 truncate block">
                                                 {review.title ??
                                                     "Untitled Review"}
                                             </span>
                                         )}
                                     </div>
-                                    <div className="ml-auto w-24 shrink-0 text-sm text-gray-500 truncate">
+                                    <div className="ml-auto w-24 shrink-0 text-sm text-[#292629]/50 truncate">
                                         {review.columns_config?.length ?? 0}
                                     </div>
-                                    <div className="w-24 shrink-0 text-sm text-gray-500 truncate">
+                                    <div className="w-24 shrink-0 text-sm text-[#292629]/50 truncate">
                                         {review.document_count ?? 0}
                                     </div>
-                                    <div className="w-40 shrink-0 text-sm text-gray-500 truncate pr-2">
+                                    <div className="w-40 shrink-0 text-sm text-[#292629]/50 truncate pr-2">
                                         {project ? (
                                             project.name
                                         ) : (
-                                            <span className="text-gray-300">
+                                            <span className="text-[#292629]/30">
                                                 —
                                             </span>
                                         )}
                                     </div>
-                                    <div className="w-32 shrink-0 text-sm text-gray-500 truncate">
+                                    <div className="w-32 shrink-0 text-sm text-[#292629]/50 truncate">
                                         {review.created_at ? (
                                             formatDate(review.created_at)
                                         ) : (
-                                            <span className="text-gray-300">
+                                            <span className="text-[#292629]/30">
                                                 —
                                             </span>
                                         )}

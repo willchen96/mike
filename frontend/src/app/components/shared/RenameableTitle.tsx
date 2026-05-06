@@ -53,7 +53,7 @@ export function RenameableTitle({ value, onCommit, suffix }: Props) {
                     }
                 }}
                 onBlur={commit}
-                className="text-gray-900 bg-transparent outline-none min-w-0"
+                className="text-[#292629] bg-transparent outline-none min-w-0"
                 style={{ width: `${draft.length + 1}ch` }}
             />
         );
@@ -61,7 +61,7 @@ export function RenameableTitle({ value, onCommit, suffix }: Props) {
 
     return (
         <span
-            className="text-gray-900 cursor-text hover:text-gray-600 transition-colors"
+            className="text-[#292629] cursor-text hover:text-[#292629]/60 transition-colors"
             onClick={startEditing}
         >
             {value}

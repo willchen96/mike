@@ -47,7 +47,7 @@ export function RowActions({ onDelete, onHide, onUnhide, onDownload, onRemoveFro
             <button
                 ref={btnRef}
                 onClick={handleToggle}
-                className="flex items-center justify-center w-6 h-6 rounded text-gray-700 hover:text-gray-900 hover:bg-gray-100 transition-colors leading-none"
+                className="flex items-center justify-center w-6 h-6 rounded text-[#292629]/80 hover:text-[#292629] hover:bg-[#F5F5F5] transition-colors leading-none"
             >
                 <span className="tracking-widest text-xs">···</span>
             </button>
@@ -55,13 +55,13 @@ export function RowActions({ onDelete, onHide, onUnhide, onDownload, onRemoveFro
             {open && (
                 <div
                     style={{ position: "fixed", top: coords.top, right: coords.right }}
-                    className="z-50 w-48 rounded-xl border border-gray-100 bg-white shadow-lg overflow-hidden"
+                    className="z-50 w-48 rounded-xl border border-[#C7C7B2]/50 bg-white shadow-lg overflow-hidden"
                     onClick={(e) => e.stopPropagation()}
                 >
                     {onRename && (
                         <button
                             onClick={() => { setOpen(false); onRename(); }}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                         >
                             <Pencil className="h-3.5 w-3.5" />
                             Rename
@@ -70,7 +70,7 @@ export function RowActions({ onDelete, onHide, onUnhide, onDownload, onRemoveFro
                     {onUpdateCmNumber && (
                         <button
                             onClick={() => { setOpen(false); onUpdateCmNumber(); }}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                         >
                             <Hash className="h-3.5 w-3.5" />
                             Edit CM No.
@@ -79,7 +79,7 @@ export function RowActions({ onDelete, onHide, onUnhide, onDownload, onRemoveFro
                     {onDownload && (
                         <button
                             onClick={() => { setOpen(false); onDownload(); }}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                         >
                             <Download className="h-3.5 w-3.5" />
                             Download
@@ -88,7 +88,7 @@ export function RowActions({ onDelete, onHide, onUnhide, onDownload, onRemoveFro
                     {onShowAllVersions && (
                         <button
                             onClick={() => { setOpen(false); onShowAllVersions(); }}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-gray-600 hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                         >
                             <History className="h-3.5 w-3.5 shrink-0" />
                             Show all versions
@@ -97,7 +97,7 @@ export function RowActions({ onDelete, onHide, onUnhide, onDownload, onRemoveFro
                     {onUploadNewVersion && (
                         <button
                             onClick={() => { setOpen(false); onUploadNewVersion(); }}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-gray-600 hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                         >
                             <Upload className="h-3.5 w-3.5 shrink-0" />
                             Upload new version
@@ -106,7 +106,7 @@ export function RowActions({ onDelete, onHide, onUnhide, onDownload, onRemoveFro
                     {onRemoveFromFolder && (
                         <button
                             onClick={() => { setOpen(false); onRemoveFromFolder(); }}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-gray-600 hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                         >
                             <FolderMinus className="h-3.5 w-3.5 shrink-0" />
                             Remove from subfolder
@@ -115,7 +115,7 @@ export function RowActions({ onDelete, onHide, onUnhide, onDownload, onRemoveFro
                     {onUnhide && (
                         <button
                             onClick={() => { setOpen(false); onUnhide(); }}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                         >
                             <Eye className="h-3.5 w-3.5" />
                             Unhide
@@ -124,7 +124,7 @@ export function RowActions({ onDelete, onHide, onUnhide, onDownload, onRemoveFro
                     {onHide && (
                         <button
                             onClick={() => { setOpen(false); onHide(); }}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-[#292629]/60 hover:bg-[#F5F5F5] transition-colors"
                         >
                             <EyeOff className="h-3.5 w-3.5" />
                             Hide

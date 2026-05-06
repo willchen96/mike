@@ -33,8 +33,8 @@ export default function AccountLayout({
 
     if (authLoading) {
         return (
-            <div className="h-dvh bg-white flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <div className="h-dvh bg-background flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-[#898344]" />
             </div>
         );
     }
@@ -46,7 +46,7 @@ export default function AccountLayout({
     return (
         <div className="flex flex-col h-full md:overflow-y-auto px-6 py-6 md:py-10">
             <div className="max-w-5xl w-full mx-auto">
-                <h1 className="text-4xl font-medium mb-8 font-eb-garamond">
+                <h1 className="text-4xl font-bold mb-8 font-sans">
                     Settings
                 </h1>
 
@@ -63,8 +63,8 @@ export default function AccountLayout({
                                     onClick={() => router.push(tab.href)}
                                     className={`text-left whitespace-nowrap px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                                         active
-                                            ? "bg-gray-100 text-gray-900"
-                                            : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
+                                            ? "bg-[#F5F5F5] text-[#292629]"
+                                            : "text-[#292629]/50 hover:text-[#292629] hover:bg-[#F5F5F5]"
                                     }`}
                                 >
                                     {tab.label}

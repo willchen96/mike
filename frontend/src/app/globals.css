@@ -6,14 +6,18 @@
 @theme inline {
     --color-background: var(--background);
     --color-foreground: var(--foreground);
-    --font-sans: var(--font-inter);
+    --font-sans: var(--font-plus-jakarta);
     --font-serif: var(--font-eb-garamond);
-    --color-blue: rgb(0, 136, 255);
-    --color-blue-50: rgba(0, 136, 255, 0.05);
-    --color-blue-100: rgba(0, 136, 255, 0.1);
-    --color-blue-200: rgba(0, 136, 255, 0.3);
-    --color-blue-600: rgb(0, 136, 255);
-    --color-blue-700: rgb(0, 120, 230);
+    /* Carbonleo brand color utilities */
+    --color-zombie: #292629;
+    --color-yellow-sig: #FEEA0F;
+    --color-shadow-warm: #C7C7B2;
+    --color-moon-mist: #DBE2D4;
+    --color-jungle-gray: #898344;
+    --color-pacifica: #536049;
+    --color-white-rock: #F5F5F5;
+    --color-woodland: #B99B64;
+    --color-barley-corn: #EC6529;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -50,73 +54,75 @@
 }
 
 :root {
-    --radius: 0.625rem;
-    --color-azure: 0, 136, 255;
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+    --radius: 0.5rem;
+    /* Pacifica RGB components for legal doc links: rgb(var(--color-azure)) */
+    --color-azure: 67, 104, 44;
+    /* Carbonleo / CarbonIQ theme — matched to production */
+    --background: #F5F5F5;
+    --foreground: #292629;
+    --card: #ffffff;
+    --card-foreground: #292629;
+    --popover: #ffffff;
+    --popover-foreground: #292629;
+    --primary: #43682C;
+    --primary-foreground: #ffffff;
+    --secondary: #EC6529;
+    --secondary-foreground: #ffffff;
+    --muted: #EFEFEF;
+    --muted-foreground: rgba(41, 38, 41, 0.55);
+    --accent: #F5F5F5;
+    --accent-foreground: #292629;
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.646 0.222 41.116);
-    --chart-2: oklch(0.6 0.118 184.704);
-    --chart-3: oklch(0.398 0.07 227.392);
-    --chart-4: oklch(0.828 0.189 84.429);
-    --chart-5: oklch(0.769 0.188 70.08);
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --border: #C0C8B8;
+    --input: #C0C8B8;
+    --ring: #43682C;
+    --chart-1: #FEEA0F;
+    --chart-2: #B99B64;
+    --chart-3: #43682C;
+    --chart-4: #898344;
+    --chart-5: #EC6529;
+    --sidebar: #ffffff;
+    --sidebar-foreground: #292629;
+    --sidebar-primary: #43682C;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #F5F5F5;
+    --sidebar-accent-foreground: #292629;
+    --sidebar-border: #C0C8B8;
+    --sidebar-ring: #43682C;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
+    --background: #292629;
+    --foreground: #F5F5F5;
+    --card: #353235;
+    --card-foreground: #F5F5F5;
+    --popover: #353235;
+    --popover-foreground: #F5F5F5;
+    --primary: #F5F5F5;
+    --primary-foreground: #292629;
+    --secondary: #3D3A3D;
+    --secondary-foreground: #F5F5F5;
+    --muted: #3D3A3D;
+    --muted-foreground: #C7C7B2;
+    --accent: #3D3A3D;
+    --accent-foreground: #F5F5F5;
     --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --border: rgba(245, 245, 245, 0.12);
+    --input: rgba(245, 245, 245, 0.15);
+    --ring: #C7C7B2;
+    --chart-1: #FEEA0F;
+    --chart-2: #B99B64;
+    --chart-3: #536049;
+    --chart-4: #898344;
+    --chart-5: #EC6529;
+    --sidebar: #353235;
+    --sidebar-foreground: #F5F5F5;
+    --sidebar-primary: #FEEA0F;
+    --sidebar-primary-foreground: #292629;
+    --sidebar-accent: #3D3A3D;
+    --sidebar-accent-foreground: #F5F5F5;
+    --sidebar-border: rgba(245, 245, 245, 0.1);
+    --sidebar-ring: #C7C7B2;
 }
 
 @layer base {
@@ -257,23 +263,23 @@
 
 .cfr-section th,
 .cfr-section td {
-    border: 1px solid #e2e8f0;
+    border: 1px solid #C7C7B2;
     padding: 0.5em 0.75em;
     text-align: left;
 }
 
 .cfr-section th {
-    background: #f8fafc;
+    background: #EFEFEF;
     font-weight: 600;
 }
 
 .cfr-section .authority-section,
 .cfr-section .source-section {
     font-size: 0.875em;
-    color: #64748b;
+    color: #898344;
     margin: 1em 0;
     padding: 0.75em;
-    border-left: 3px solid #e2e8f0;
+    border-left: 3px solid #C7C7B2;
 }
 
 @layer utilities {
@@ -337,31 +343,31 @@
     padding: 1rem 1.25rem;
     outline: none;
     font-size: 0.875rem;
-    color: #374151;
+    color: #292629;
     line-height: 1.65;
-    font-family: var(--font-serif);
+    font-family: var(--font-plus-jakarta), 'Plus Jakarta Sans', Arial, Helvetica, sans-serif;
 }
 
 .workflow-editor-content h1 {
     font-size: 1rem;
-    font-weight: 600;
-    color: #111827;
+    font-weight: 700;
+    color: #292629;
     margin-top: 1.25rem;
     margin-bottom: 0.375rem;
 }
 
 .workflow-editor-content h2 {
     font-size: 0.875rem;
-    font-weight: 600;
-    color: #111827;
+    font-weight: 700;
+    color: #292629;
     margin-top: 0.875rem;
     margin-bottom: 0.25rem;
 }
 
 .workflow-editor-content h3 {
     font-size: 0.8125rem;
-    font-weight: 600;
-    color: #111827;
+    font-weight: 700;
+    color: #292629;
     margin-top: 0.625rem;
     margin-bottom: 0.125rem;
 }
@@ -401,8 +407,8 @@
 }
 
 .workflow-editor-content strong {
-    font-weight: 600;
-    color: #1f2937;
+    font-weight: 700;
+    color: #292629;
 }
 
 .workflow-editor-content em {
@@ -429,14 +435,14 @@
 }
 
 .pdf-text-layer .pdf-text-highlight {
-    background-color: rgba(37, 99, 235, 0.2);
+    background-color: rgba(254, 234, 15, 0.45);
     border-radius: 2px;
     position: static;
 }
 
 .docx-view-container span.docx-text-highlight,
 .docx-view-container .docx-text-highlight {
-    background-color: rgba(37, 99, 235, 0.35) !important;
+    background-color: rgba(254, 234, 15, 0.55) !important;
     border-radius: 2px;
     padding: 0 1px;
     color: inherit !important;
@@ -487,11 +493,11 @@
 
 @keyframes docxEditFlash {
     0%, 20% {
-        background-color: rgba(59, 130, 246, 0.45);
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.45);
+        background-color: rgba(254, 234, 15, 0.55);
+        box-shadow: 0 0 0 2px rgba(254, 234, 15, 0.55);
     }
     100% {
-        background-color: rgba(59, 130, 246, 0);
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0);
+        background-color: rgba(254, 234, 15, 0);
+        box-shadow: 0 0 0 2px rgba(254, 234, 15, 0);
     }
 }

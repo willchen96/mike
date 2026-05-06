@@ -136,11 +136,11 @@ export function DocPanel({
             ) : (
                 <div className="flex items-center justify-end gap-2 py-2">
                     <div className="mr-auto flex min-w-0 items-center gap-2">
-                        <span className="truncate text-sm text-gray-700">
+                        <span className="truncate text-sm text-[#292629]/80">
                             {filename}
                         </span>
                         {versionNumber && versionNumber > 0 && (
-                            <span className="shrink-0 inline-flex items-center rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                            <span className="shrink-0 inline-flex items-center rounded-md border border-[#C7C7B2] bg-white px-1.5 py-0.5 text-[10px] font-medium text-[#292629]/60">
                                 V{versionNumber}
                             </span>
                         )}
@@ -183,7 +183,7 @@ export function DocPanel({
 // ---------------------------------------------------------------------------
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-    return <p className="text-xs font-medium text-gray-700">{children}</p>;
+    return <p className="text-xs font-medium text-[#292629]/80">{children}</p>;
 }
 
 function CitationHeader({
@@ -214,11 +214,11 @@ function CitationHeader({
                     />
                 </div>
             </div>
-            <div className="w-full rounded-md bg-gray-50 border border-gray-200 px-2 py-2">
-                <p className="text-sm font-serif text-gray-600">
+            <div className="w-full rounded-md bg-[#F5F5F5] border border-[#C7C7B2] px-2 py-2">
+                <p className="text-sm font-sans text-[#292629]/60">
                     &ldquo;{displayQuote}&rdquo;
                     {pagesLabel && (
-                        <span className="ml-1 text-gray-400">
+                        <span className="ml-1 text-[#292629]/40">
                             ({pagesLabel})
                         </span>
                     )}
@@ -263,10 +263,10 @@ function TrackedChangeHeader({
                 </div>
             </div>
             {edit.reason && (
-                <p className="mb-2 text-xs text-gray-500">{edit.reason}</p>
+                <p className="mb-2 text-xs text-[#292629]/50">{edit.reason}</p>
             )}
-            <div className="w-full rounded-md bg-gray-50 border border-gray-200 px-2 py-2">
-                <div className="text-sm leading-relaxed font-serif">
+            <div className="w-full rounded-md bg-[#F5F5F5] border border-[#C7C7B2] px-2 py-2">
+                <div className="text-sm leading-relaxed font-sans">
                     {edit.inserted_text && (
                         <span className="text-green-700">
                             {edit.inserted_text}
@@ -421,14 +421,14 @@ function EditResolveButtons({
             <button
                 onClick={() => handle("accept")}
                 disabled={inFlight || resolved}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-900 bg-gray-900 px-2 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1 rounded-lg border border-[#292629] bg-[#292629] px-2 py-1.5 text-xs font-medium text-white hover:bg-[#292629]/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 {status === "accepted" ? "Accepted" : "Accept"}
             </button>
             <button
                 onClick={() => handle("reject")}
                 disabled={inFlight || resolved}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1 rounded-lg border border-[#C7C7B2] bg-white px-2 py-1.5 text-xs font-medium text-[#292629]/80 hover:bg-[#F5F5F5] disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 {status === "rejected" ? "Rejected" : "Reject"}
             </button>
@@ -492,7 +492,7 @@ function DownloadButton({
         <button
             onClick={handleClick}
             disabled={spinning}
-            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-1 rounded-lg border border-[#C7C7B2] px-2 py-1.5 text-xs font-medium text-[#292629]/60 hover:bg-[#F5F5F5] hover:text-[#292629]/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
             {spinning ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
