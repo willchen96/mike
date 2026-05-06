@@ -28,7 +28,7 @@ export async function getUserModelSettings(
 ): Promise<UserModelSettings> {
     const client = db ?? createServerSupabase();
     const { data } = await client
-        .from("user_profiles")
+        .from("mike_user_profiles")
         .select("tabular_model, claude_api_key, gemini_api_key")
         .eq("user_id", userId)
         .single();
@@ -51,7 +51,7 @@ export async function getUserApiKeys(
 ): Promise<UserApiKeys> {
     const client = db ?? createServerSupabase();
     const { data } = await client
-        .from("user_profiles")
+        .from("mike_user_profiles")
         .select("claude_api_key, gemini_api_key")
         .eq("user_id", userId)
         .single();

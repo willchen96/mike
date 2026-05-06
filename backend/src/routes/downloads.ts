@@ -34,7 +34,7 @@ downloadsRouter.get("/:token", requireAuth, async (req, res) => {
         | null = null;
 
     const { data: byStoragePath } = await db
-        .from("document_versions")
+        .from("mike_document_versions")
         .select("id, document_id")
         .eq("storage_path", info.path)
         .maybeSingle();
@@ -46,7 +46,7 @@ downloadsRouter.get("/:token", requireAuth, async (req, res) => {
         return void res.status(404).json({ detail: "File not found" });
 
     const { data: doc } = await db
-        .from("documents")
+        .from("mike_documents")
         .select("id, user_id, project_id")
         .eq("id", version.document_id)
         .single();

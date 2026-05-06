@@ -9,7 +9,7 @@ userRouter.post("/profile", requireAuth, async (req, res) => {
   const userId = res.locals.userId as string;
   const db = createServerSupabase();
   const { error } = await db
-    .from("user_profiles")
+    .from("mike_user_profiles")
     .upsert(
       { user_id: userId },
       { onConflict: "user_id", ignoreDuplicates: true },

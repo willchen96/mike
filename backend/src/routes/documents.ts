@@ -32,7 +32,7 @@ documentsRouter.get("/", requireAuth, async (req, res) => {
   const userId = res.locals.userId as string;
   const db = createServerSupabase();
   const { data, error } = await db
-    .from("documents")
+    .from("mike_documents")
     .select("*")
     .eq("user_id", userId)
     .is("project_id", null)
@@ -66,7 +66,7 @@ documentsRouter.delete("/:documentId", requireAuth, async (req, res) => {
   const db = createServerSupabase();
 
   const { data: doc, error } = await db
-    .from("documents")
+    .from("mike_documents")
     .select("id")
     .eq("id", documentId)
     .eq("user_id", userId)
@@ -77,7 +77,7 @@ documentsRouter.delete("/:documentId", requireAuth, async (req, res) => {
   // Storage now lives on document_versions — fan out and delete each
   // version's bytes (DOCX + PDF rendition) before dropping rows.
   const { data: versions } = await db
-    .from("document_versions")
+    .from("mike_document_versions")
     .select("storage_path, pdf_storage_path")
     .eq("document_id", documentId);
   await Promise.all(
@@ -87,7 +87,7 @@ documentsRouter.delete("/:documentId", requireAuth, async (req, res) => {
         .map((p) => deleteFile(p).catch(() => {})),
     ),
   );
-  await db.from("documents").delete().eq("id", documentId);
+  await db.from("mike_documents").delete().eq("id", documentId);
   res.status(204).send();
 });
 
@@ -103,7 +103,7 @@ documentsRouter.get("/:documentId/display", requireAuth, async (req, res) => {
   const db = createServerSupabase();
 
   const { data: doc } = await db
-    .from("documents")
+    .from("mike_documents")
     .select("id, filename, file_type, user_id, project_id")
     .eq("id", documentId)
     .single();
@@ -163,7 +163,7 @@ documentsRouter.post("/download-zip", requireAuth, async (req, res) => {
 
   const db = createServerSupabase();
   const { data: rawDocs, error } = await db
-    .from("documents")
+    .from("mike_documents")
     .select("id, filename, file_type, current_version_id, user_id, project_id")
     .in("id", document_ids);
 
@@ -216,7 +216,7 @@ documentsRouter.get("/:documentId/url", requireAuth, async (req, res) => {
   const db = createServerSupabase();
 
   const { data: doc, error } = await db
-    .from("documents")
+    .from("mike_documents")
     .select("id, filename, user_id, project_id")
     .eq("id", documentId)
     .single();
@@ -267,7 +267,7 @@ documentsRouter.get("/:documentId/docx", requireAuth, async (req, res) => {
   const db = createServerSupabase();
 
   const { data: doc, error } = await db
-    .from("documents")
+    .from("mike_documents")
     .select("id, filename, user_id, project_id")
     .eq("id", documentId)
     .single();
@@ -350,7 +350,7 @@ documentsRouter.get("/:documentId/versions", requireAuth, async (req, res) => {
   const db = createServerSupabase();
 
   const { data: doc } = await db
-    .from("documents")
+    .from("mike_documents")
     .select("id, current_version_id, user_id, project_id")
     .eq("id", documentId)
     .single();
@@ -361,7 +361,7 @@ documentsRouter.get("/:documentId/versions", requireAuth, async (req, res) => {
     return void res.status(404).json({ detail: "Document not found" });
 
   const { data: rows } = await db
-    .from("document_versions")
+    .from("mike_document_versions")
     .select("id, version_number, source, created_at, display_name")
     .eq("document_id", documentId)
     .order("created_at", { ascending: true });
@@ -391,7 +391,7 @@ documentsRouter.post(
       return void res.status(400).json({ detail: "file is required" });
 
     const { data: doc } = await db
-      .from("documents")
+      .from("mike_documents")
       .select("id, filename, file_type, user_id, project_id")
       .eq("id", documentId)
       .single();
@@ -472,7 +472,7 @@ documentsRouter.post(
     // Per-document sequential version_number — the upload is V1 and
     // user_upload + assistant_edit count forward from there.
     const { data: maxRow } = await db
-      .from("document_versions")
+      .from("mike_document_versions")
       .select("version_number")
       .eq("document_id", documentId)
       .in("source", ["upload", "user_upload", "assistant_edit"])
@@ -489,7 +489,7 @@ documentsRouter.post(
         : file.originalname;
 
     const { data: versionRow, error: verErr } = await db
-      .from("document_versions")
+      .from("mike_document_versions")
       .insert({
         document_id: documentId,
         storage_path: key,
@@ -529,7 +529,7 @@ documentsRouter.post(
       documentsUpdate.filename = `${providedDisplayName}${ext}`;
     }
     await db
-      .from("documents")
+      .from("mike_documents")
       .update(documentsUpdate)
       .eq("id", documentId);
 
@@ -550,7 +550,7 @@ documentsRouter.patch(
     const db = createServerSupabase();
 
     const { data: doc } = await db
-      .from("documents")
+      .from("mike_documents")
       .select("id, user_id, project_id")
       .eq("id", documentId)
       .single();
@@ -565,7 +565,7 @@ documentsRouter.patch(
       typeof raw === "string" && raw.trim() ? raw.trim().slice(0, 200) : null;
 
     const { data: updated, error } = await db
-      .from("document_versions")
+      .from("mike_document_versions")
       .update({ display_name: displayName })
       .eq("id", versionId)
       .eq("document_id", documentId)
@@ -595,7 +595,7 @@ documentsRouter.get(
     const db = createServerSupabase();
 
     const { data: doc } = await db
-      .from("documents")
+      .from("mike_documents")
       .select("id, user_id, project_id")
       .eq("id", documentId)
       .single();
@@ -639,7 +639,7 @@ async function handleEditResolution(
   });
 
   const { data: edit, error: editErr } = await db
-    .from("document_edits")
+    .from("mike_document_edits")
     .select("id, document_id, change_id, del_w_id, ins_w_id, status")
     .eq("id", editId)
     .eq("document_id", documentId)
@@ -658,7 +658,7 @@ async function handleEditResolution(
       status: edit.status,
     });
     const { data: doc } = await db
-      .from("documents")
+      .from("mike_documents")
       .select("current_version_id, filename, user_id, project_id")
       .eq("id", documentId)
       .single();
@@ -690,7 +690,7 @@ async function handleEditResolution(
   }
 
   const { data: doc, error: docErr } = await db
-    .from("documents")
+    .from("mike_documents")
     .select("id, current_version_id, user_id, project_id")
     .eq("id", documentId)
     .single();
@@ -739,12 +739,12 @@ async function handleEditResolution(
     // Still update DB status so the UI reflects the decision — the change
     // may have been auto-consumed by a previous accept/reject pass.
     const { error: updErr } = await db
-      .from("document_edits")
+      .from("mike_document_edits")
       .update({ status: mode === "accept" ? "accepted" : "rejected", resolved_at: new Date().toISOString() })
       .eq("id", editId);
     console.log(`[edit-resolution] status-only update`, { updErr });
     const { data: filenameRow } = await db
-      .from("documents")
+      .from("mike_documents")
       .select("filename")
       .eq("id", documentId)
       .single();
@@ -781,7 +781,7 @@ async function handleEditResolution(
   );
 
   const { error: statusErr } = await db
-    .from("document_edits")
+    .from("mike_document_edits")
     .update({
       status: mode === "accept" ? "accepted" : "rejected",
       resolved_at: new Date().toISOString(),
@@ -794,14 +794,14 @@ async function handleEditResolution(
   });
 
   const { count: remainingPending } = await db
-    .from("document_edits")
+    .from("mike_document_edits")
     .select("id", { count: "exact", head: true })
     .eq("document_id", documentId)
     .eq("status", "pending");
   console.log(`[edit-resolution] remaining pending count`, { remainingPending });
 
   const { data: filenameRow } = await db
-    .from("documents")
+    .from("mike_documents")
     .select("filename")
     .eq("id", documentId)
     .single();
@@ -853,7 +853,7 @@ async function handleDocumentUpload(
 
   const content = file.buffer;
   const { data: doc, error: insertErr } = await db
-    .from("documents")
+    .from("mike_documents")
     .insert({
       project_id: projectId,
       user_id: userId,
@@ -921,7 +921,7 @@ async function handleDocumentUpload(
     // create the V1 "upload" row and point documents.current_version_id
     // at it.
     const { data: versionRow, error: verErr } = await db
-      .from("document_versions")
+      .from("mike_document_versions")
       .insert({
         document_id: docId,
         storage_path: key,
@@ -939,7 +939,7 @@ async function handleDocumentUpload(
     }
 
     await db
-      .from("documents")
+      .from("mike_documents")
       .update({
         current_version_id: versionRow.id,
         size_bytes: content.byteLength,
@@ -951,7 +951,7 @@ async function handleDocumentUpload(
       .eq("id", docId);
 
     const { data: updated } = await db
-      .from("documents")
+      .from("mike_documents")
       .select("*")
       .eq("id", docId)
       .single();
@@ -961,7 +961,7 @@ async function handleDocumentUpload(
       : updated;
     return void res.status(201).json(responseDoc);
   } catch (e) {
-    await db.from("documents").update({ status: "error" }).eq("id", doc.id);
+    await db.from("mike_documents").update({ status: "error" }).eq("id", doc.id);
     return void res
       .status(500)
       .json({ detail: `Document processing failed: ${String(e)}` });

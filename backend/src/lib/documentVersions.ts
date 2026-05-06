@@ -41,7 +41,7 @@ export async function loadActiveVersion(
     versionId?: string | null,
 ): Promise<ActiveVersion | null> {
     const { data: doc } = await db
-        .from("documents")
+        .from("mike_documents")
         .select("current_version_id")
         .eq("id", documentId)
         .single();
@@ -52,7 +52,7 @@ export async function loadActiveVersion(
     if (!targetVersionId) return null;
 
     const { data: v } = await db
-        .from("document_versions")
+        .from("mike_document_versions")
         .select(
             "id, document_id, storage_path, pdf_storage_path, version_number, display_name, source",
         )
@@ -91,7 +91,7 @@ export async function attachActiveVersionPaths<T extends VersionPathRow>(
         return docs;
     }
     const { data: rows } = await db
-        .from("document_versions")
+        .from("mike_document_versions")
         .select("id, storage_path, pdf_storage_path, version_number")
         .in("id", versionIds);
     const byId = new Map<
@@ -136,7 +136,7 @@ export async function attachLatestVersionNumbers<T extends DocRow>(
     if (docs.length === 0) return docs;
     const ids = docs.map((d) => d.id);
     const { data: rows } = await db
-        .from("document_versions")
+        .from("mike_document_versions")
         .select("document_id, version_number")
         .in("document_id", ids)
         .eq("source", "assistant_edit")

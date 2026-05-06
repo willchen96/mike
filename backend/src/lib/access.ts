@@ -34,7 +34,7 @@ export async function checkProjectAccess(
     db: Db,
 ): Promise<ProjectAccess> {
     const { data: project } = await db
-        .from("projects")
+        .from("mike_projects")
         .select("id, user_id, shared_with")
         .eq("id", projectId)
         .single();
@@ -130,10 +130,10 @@ export async function listAccessibleProjectIds(
     db: Db,
 ): Promise<string[]> {
     const [{ data: own }, { data: shared }] = await Promise.all([
-        db.from("projects").select("id").eq("user_id", userId),
+        db.from("mike_projects").select("id").eq("user_id", userId),
         userEmail
             ? db
-                  .from("projects")
+                  .from("mike_projects")
                   .select("id")
                   .contains("shared_with", [userEmail])
                   .neq("user_id", userId)

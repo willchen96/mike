@@ -64,7 +64,7 @@ export default function SignupPage() {
                     // so we UPDATE rather than upsert — RLS permits update
                     // of the user's own row but blocks self-INSERT.
                     const { error: profileError } = await supabase
-                        .from("user_profiles")
+                        .from("mike_user_profiles")
                         .update({
                             ...(trimmedName && { display_name: trimmedName }),
                             ...(trimmedOrg && { organisation: trimmedOrg }),

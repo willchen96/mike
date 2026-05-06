@@ -52,7 +52,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     const loadProfile = useCallback(async (userId: string) => {
         try {
             const { data, error } = await supabase
-                .from("user_profiles")
+                .from("mike_user_profiles")
                 .select("*")
                 .eq("user_id", userId)
                 .single();
@@ -116,7 +116,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                 // 2. Update database in background if needed
                 if (shouldUpdateDb) {
                     supabase
-                        .from("user_profiles")
+                        .from("mike_user_profiles")
                         .update({
                             message_credits_used: 0,
                             credits_reset_date: resetDate,
@@ -172,7 +172,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
             try {
                 const { error } = await supabase
-                    .from("user_profiles")
+                    .from("mike_user_profiles")
                     .update({
                         display_name: displayName,
                         updated_at: new Date().toISOString(),
@@ -197,7 +197,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             if (!user) return false;
             try {
                 const { error } = await supabase
-                    .from("user_profiles")
+                    .from("mike_user_profiles")
                     .update({
                         organisation,
                         updated_at: new Date().toISOString(),
@@ -225,7 +225,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             if (!dbField) return false;
             try {
                 const { error } = await supabase
-                    .from("user_profiles")
+                    .from("mike_user_profiles")
                     .update({
                         [dbField]: value,
                         updated_at: new Date().toISOString(),
@@ -256,7 +256,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             const normalized = value?.trim() ? value.trim() : null;
             try {
                 const { error } = await supabase
-                    .from("user_profiles")
+                    .from("mike_user_profiles")
                     .update({
                         [dbField]: normalized,
                         updated_at: new Date().toISOString(),
@@ -294,7 +294,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             const newCreditsUsed = profile.messageCreditsUsed + 1;
 
             const { error } = await supabase
-                .from("user_profiles")
+                .from("mike_user_profiles")
                 .update({
                     message_credits_used: newCreditsUsed,
                     updated_at: new Date().toISOString(),
@@ -309,10 +309,10 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             setProfile((prev) =>
                 prev
                     ? {
-                          ...prev,
-                          messageCreditsUsed: newCreditsUsed,
-                          creditsRemaining: 999999 - newCreditsUsed, // temporarily unlimited
-                      }
+                        ...prev,
+                        messageCreditsUsed: newCreditsUsed,
+                        creditsRemaining: 999999 - newCreditsUsed, // temporarily unlimited
+                    }
                     : null,
             );
 

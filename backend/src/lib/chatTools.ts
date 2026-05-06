@@ -493,7 +493,7 @@ export async function enrichWithPriorEvents(
 ): Promise<ChatMessage[]> {
     if (!chatId) return messages;
     const { data: rows } = await db
-        .from("chat_messages")
+        .from("mike_chat_messages")
         .select("content, created_at")
         .eq("chat_id", chatId)
         .eq("role", "assistant")
@@ -853,7 +853,7 @@ export async function generateDocx(
         // sidebar; in the general chat we leave project_id null and it
         // stays a standalone document.
         const { data: docRow, error: docErr } = await db
-            .from("documents")
+            .from("mike_documents")
             .insert({
                 project_id: options?.projectId ?? null,
                 user_id: userId,
@@ -872,7 +872,7 @@ export async function generateDocx(
         const documentId = docRow.id as string;
 
         const { data: versionRow, error: verErr } = await db
-            .from("document_versions")
+            .from("mike_document_versions")
             .insert({
                 document_id: documentId,
                 storage_path: key,
@@ -890,7 +890,7 @@ export async function generateDocx(
         const versionId = versionRow.id as string;
 
         await db
-            .from("documents")
+            .from("mike_documents")
             .update({ current_version_id: versionId })
             .eq("id", documentId);
 
@@ -964,7 +964,7 @@ export async function runEditDocument(params: {
     const { documentId, userId, edits, db, reuseVersion } = params;
 
     const { data: doc } = await db
-        .from("documents")
+        .from("mike_documents")
         .select("id, filename")
         .eq("id", documentId)
         .single();
@@ -1021,7 +1021,7 @@ export async function runEditDocument(params: {
         // version. The counter spans upload + user_upload + assistant_edit
         // so the original upload is V1 and the first assistant edit is V2.
         const { data: maxRow } = await db
-            .from("document_versions")
+            .from("mike_document_versions")
             .select("version_number")
             .eq("document_id", documentId)
             .in("source", ["upload", "user_upload", "assistant_edit"])
@@ -1037,7 +1037,7 @@ export async function runEditDocument(params: {
         // doc). We intentionally do NOT append "[Edited Vn]" — the version
         // number is surfaced separately as a tag in the UI.
         const { data: prevRow } = await db
-            .from("document_versions")
+            .from("mike_document_versions")
             .select("display_name, created_at")
             .eq("document_id", documentId)
             .order("created_at", { ascending: false })
@@ -1049,7 +1049,7 @@ export async function runEditDocument(params: {
             null;
 
         const { data: versionRow, error: verErr } = await db
-            .from("document_versions")
+            .from("mike_document_versions")
             .insert({
                 document_id: documentId,
                 storage_path: newPath,
@@ -1079,7 +1079,7 @@ export async function runEditDocument(params: {
         status: "pending" as const,
     }));
     const { data: insertedEdits, error: editsErr } = await db
-        .from("document_edits")
+        .from("mike_document_edits")
         .insert(editRows)
         .select("id, change_id, del_w_id, ins_w_id, deleted_text, inserted_text, context_before, context_after");
 
@@ -1088,7 +1088,7 @@ export async function runEditDocument(params: {
     }
 
     await db
-        .from("documents")
+        .from("mike_documents")
         .update({ current_version_id: versionRowId })
         .eq("id", documentId);
 
@@ -1930,7 +1930,7 @@ export async function runToolCalls(
                             status: "ready",
                         }));
                         const { data: insertedDocs, error: docErr } = await db
-                            .from("documents")
+                            .from("mike_documents")
                             .insert(docRows)
                             .select("id, filename");
                         if (docErr || !insertedDocs || insertedDocs.length === 0) {
@@ -1996,7 +1996,7 @@ export async function runToolCalls(
                             }));
                             const { data: insertedVersions, error: verErr } =
                                 await db
-                                    .from("document_versions")
+                                    .from("mike_document_versions")
                                     .insert(versionRows)
                                     .select("id, document_id");
                             if (
@@ -2023,7 +2023,7 @@ export async function runToolCalls(
                                 await Promise.all(
                                     newDocs.map((d) =>
                                         db
-                                            .from("documents")
+                                            .from("mike_documents")
                                             .update({
                                                 current_version_id:
                                                     versionByDocId.get(d.id),
@@ -2643,7 +2643,7 @@ export async function buildDocContext(
     // them, and can't call edit_document / read_document on them.
     if (chatId) {
         const { data: rows } = await db
-            .from("chat_messages")
+            .from("mike_chat_messages")
             .select("content")
             .eq("chat_id", chatId)
             .eq("role", "assistant");
@@ -2665,7 +2665,7 @@ export async function buildDocContext(
     const ids = [...documentIds];
     if (ids.length > 0) {
         const { data: docs } = await db
-            .from("documents")
+            .from("mike_documents")
             .select("id, filename, file_type, current_version_id, status")
             .in("id", ids)
             .eq("user_id", userId)
@@ -2718,12 +2718,12 @@ export async function buildProjectDocContext(
     const docStore: DocStore = new Map();
 
     const [{ data: docs }, { data: folders }] = await Promise.all([
-        db.from("documents")
+        db.from("mike_documents")
             .select("id, filename, file_type, current_version_id, status, folder_id")
             .eq("project_id", projectId)
             .eq("status", "ready")
             .order("created_at", { ascending: true }),
-        db.from("project_subfolders")
+        db.from("mike_project_subfolders")
             .select("id, name, parent_folder_id")
             .eq("project_id", projectId),
     ]);
@@ -2804,7 +2804,7 @@ export async function buildWorkflowStore(
 
     // Then overlay user-owned assistant workflows.
     const { data: workflows } = await db
-        .from("workflows")
+        .from("mike_workflows")
         .select("id, title, prompt_md")
         .eq("user_id", userId)
         .eq("type", "assistant");
@@ -2817,13 +2817,13 @@ export async function buildWorkflowStore(
     // Shared assistant workflows must also be readable by workflow tools.
     if (normalizedUserEmail) {
         const { data: shares } = await db
-            .from("workflow_shares")
+            .from("mike_workflow_shares")
             .select("workflow_id")
             .eq("shared_with_email", normalizedUserEmail);
         const sharedIds = [...new Set((shares ?? []).map((share) => share.workflow_id))];
         if (sharedIds.length > 0) {
             const { data: sharedWorkflows } = await db
-                .from("workflows")
+                .from("mike_workflows")
                 .select("id, title, prompt_md")
                 .in("id", sharedIds)
                 .eq("type", "assistant");

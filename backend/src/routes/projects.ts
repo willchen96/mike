@@ -21,7 +21,7 @@ projectsRouter.get("/", requireAuth, async (req, res) => {
   const db = createServerSupabase();
 
   const { data: ownProjects, error: ownError } = await db
-    .from("projects")
+    .from("mike_projects")
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
@@ -29,7 +29,7 @@ projectsRouter.get("/", requireAuth, async (req, res) => {
 
   const { data: sharedProjects, error: sharedError } = userEmail
     ? await db
-        .from("projects")
+        .from("mike_projects")
         .select("*")
         .contains("shared_with", [userEmail])
         .neq("user_id", userId)
@@ -47,15 +47,15 @@ projectsRouter.get("/", requireAuth, async (req, res) => {
     projects.map(async (p) => {
       const [docs, chats, reviews] = await Promise.all([
         db
-          .from("documents")
+          .from("mike_documents")
           .select("id", { count: "exact", head: true })
           .eq("project_id", p.id),
         db
-          .from("chats")
+          .from("mike_chats")
           .select("id", { count: "exact", head: true })
           .eq("project_id", p.id),
         db
-          .from("tabular_reviews")
+          .from("mike_tabular_reviews")
           .select("id", { count: "exact", head: true })
           .eq("project_id", p.id),
       ]);
@@ -84,7 +84,7 @@ projectsRouter.post("/", requireAuth, async (req, res) => {
 
   const db = createServerSupabase();
   const { data, error } = await db
-    .from("projects")
+    .from("mike_projects")
     .insert({
       user_id: userId,
       name: name.trim(),
@@ -105,7 +105,7 @@ projectsRouter.get("/:projectId", requireAuth, async (req, res) => {
   const db = createServerSupabase();
 
   const { data: project, error } = await db
-    .from("projects")
+    .from("mike_projects")
     .select("*")
     .eq("id", projectId)
     .single();
@@ -121,8 +121,8 @@ projectsRouter.get("/:projectId", requireAuth, async (req, res) => {
     return void res.status(404).json({ detail: "Project not found" });
 
   const [{ data: docs }, { data: folderData }] = await Promise.all([
-    db.from("documents").select("*").eq("project_id", projectId).order("created_at", { ascending: true }),
-    db.from("project_subfolders").select("*").eq("project_id", projectId).order("created_at", { ascending: true }),
+    db.from("mike_documents").select("*").eq("project_id", projectId).order("created_at", { ascending: true }),
+    db.from("mike_project_subfolders").select("*").eq("project_id", projectId).order("created_at", { ascending: true }),
   ]);
   const docsTyped = (docs ?? []) as unknown as {
     id: string;
@@ -149,7 +149,7 @@ projectsRouter.get("/:projectId/people", requireAuth, async (req, res) => {
   const db = createServerSupabase();
 
   const { data: project } = await db
-    .from("projects")
+    .from("mike_projects")
     .select("id, user_id, shared_with")
     .eq("id", projectId)
     .single();
@@ -197,7 +197,7 @@ projectsRouter.get("/:projectId/people", requireAuth, async (req, res) => {
   >();
   if (profileIds.length > 0) {
     const { data: profiles } = await db
-      .from("user_profiles")
+      .from("mike_user_profiles")
       .select("user_id, display_name, organisation")
       .in("user_id", profileIds);
     for (const p of profiles ?? []) {
@@ -249,7 +249,7 @@ projectsRouter.patch("/:projectId", requireAuth, async (req, res) => {
 
   const db = createServerSupabase();
   const { data, error } = await db
-    .from("projects")
+    .from("mike_projects")
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq("id", projectId)
     .eq("user_id", userId)
@@ -259,8 +259,8 @@ projectsRouter.patch("/:projectId", requireAuth, async (req, res) => {
     return void res.status(404).json({ detail: "Project not found" });
 
   const [{ data: docs }, { data: folderData }] = await Promise.all([
-    db.from("documents").select("*").eq("project_id", projectId).order("created_at", { ascending: true }),
-    db.from("project_subfolders").select("*").eq("project_id", projectId).order("created_at", { ascending: true }),
+    db.from("mike_documents").select("*").eq("project_id", projectId).order("created_at", { ascending: true }),
+    db.from("mike_project_subfolders").select("*").eq("project_id", projectId).order("created_at", { ascending: true }),
   ]);
   const docsTyped = (docs ?? []) as unknown as {
     id: string;
@@ -276,7 +276,7 @@ projectsRouter.delete("/:projectId", requireAuth, async (req, res) => {
   const { projectId } = req.params;
   const db = createServerSupabase();
   const { error } = await db
-    .from("projects")
+    .from("mike_projects")
     .delete()
     .eq("id", projectId)
     .eq("user_id", userId);
@@ -296,7 +296,7 @@ projectsRouter.get("/:projectId/documents", requireAuth, async (req, res) => {
     return void res.status(404).json({ detail: "Project not found" });
 
   const { data: docs } = await db
-    .from("documents")
+    .from("mike_documents")
     .select("*")
     .eq("project_id", projectId)
     .order("created_at", { ascending: true });
@@ -326,7 +326,7 @@ projectsRouter.post(
     // is allowed to do that, so other people's standalone docs can't be
     // siphoned into a project the requester happens to share.
     const { data: doc } = await db
-      .from("documents")
+      .from("mike_documents")
       .select("*")
       .eq("id", documentId)
       .eq("user_id", userId)
@@ -340,7 +340,7 @@ projectsRouter.post(
     if (doc.project_id === null) {
       // Standalone → assign project_id
       const { data: updated, error } = await db
-        .from("documents")
+        .from("mike_documents")
         .update({ project_id: projectId, updated_at: new Date().toISOString() })
         .eq("id", documentId)
         .select("*")
@@ -354,7 +354,7 @@ projectsRouter.post(
       // independent (edits/version bumps on one don't leak into the
       // other).
       const { data: copy, error } = await db
-        .from("documents")
+        .from("mike_documents")
         .insert({
           project_id: projectId,
           user_id: userId,
@@ -373,7 +373,7 @@ projectsRouter.post(
       let copyVersionRowId: string | null = null;
       if (doc.current_version_id) {
         const { data: srcV } = await db
-          .from("document_versions")
+          .from("mike_document_versions")
           .select(
             "storage_path, pdf_storage_path, version_number, display_name, source",
           )
@@ -412,7 +412,7 @@ projectsRouter.post(
           }
 
           const { data: newV } = await db
-            .from("document_versions")
+            .from("mike_document_versions")
             .insert({
               document_id: copy.id,
               storage_path: newKey,
@@ -426,7 +426,7 @@ projectsRouter.post(
           copyVersionRowId = (newV?.id as string | null) ?? null;
           if (copyVersionRowId) {
             await db
-              .from("documents")
+              .from("mike_documents")
               .update({ current_version_id: copyVersionRowId })
               .eq("id", copy.id);
           }
@@ -472,7 +472,7 @@ projectsRouter.get("/:projectId/chats", requireAuth, async (req, res) => {
     return void res.status(404).json({ detail: "Project not found" });
 
   const { data, error } = await db
-    .from("chats")
+    .from("mike_chats")
     .select("*")
     .eq("project_id", projectId)
     .order("created_at", { ascending: false });
@@ -496,11 +496,11 @@ projectsRouter.post("/:projectId/folders", requireAuth, async (req, res) => {
 
   // Verify parent folder belongs to this project
   if (parent_folder_id) {
-    const { data: parent } = await db.from("project_subfolders").select("id").eq("id", parent_folder_id).eq("project_id", projectId).single();
+    const { data: parent } = await db.from("mike_project_subfolders").select("id").eq("id", parent_folder_id).eq("project_id", projectId).single();
     if (!parent) return void res.status(404).json({ detail: "Parent folder not found" });
   }
 
-  const { data, error } = await db.from("project_subfolders").insert({
+  const { data, error } = await db.from("mike_project_subfolders").insert({
     project_id: projectId,
     user_id: userId,
     name: name.trim(),
@@ -530,14 +530,14 @@ projectsRouter.patch("/:projectId/folders/:folderId", requireAuth, async (req, r
       while (cur) {
         if (cur === folderId) return void res.status(400).json({ detail: "Cannot move a folder into itself or a descendant" });
         const { data: p }: { data: { parent_folder_id: string | null } | null } =
-          await db.from("project_subfolders").select("parent_folder_id").eq("id", cur).single();
+          await db.from("mike_project_subfolders").select("parent_folder_id").eq("id", cur).single();
         cur = p?.parent_folder_id ?? null;
       }
     }
     updates.parent_folder_id = body.parent_folder_id ?? null;
   }
 
-  const { data, error } = await db.from("project_subfolders")
+  const { data, error } = await db.from("mike_project_subfolders")
     .update(updates)
     .eq("id", folderId).eq("project_id", projectId)
     .select("*").single();
@@ -556,9 +556,9 @@ projectsRouter.delete("/:projectId/folders/:folderId", requireAuth, async (req, 
   if (!access.ok) return void res.status(404).json({ detail: "Project not found" });
 
   // Move direct documents to root before cascade-deleting subfolders
-  await db.from("documents").update({ folder_id: null }).eq("folder_id", folderId);
+  await db.from("mike_documents").update({ folder_id: null }).eq("folder_id", folderId);
 
-  const { error } = await db.from("project_subfolders")
+  const { error } = await db.from("mike_project_subfolders")
     .delete().eq("id", folderId).eq("project_id", projectId);
   if (error) return void res.status(500).json({ detail: error.message });
   res.status(204).send();
@@ -575,7 +575,7 @@ projectsRouter.patch("/:projectId/documents/:documentId/folder", requireAuth, as
   const access = await checkProjectAccess(projectId, userId, userEmail, db);
   if (!access.ok) return void res.status(404).json({ detail: "Project not found" });
 
-  const { data, error } = await db.from("documents")
+  const { data, error } = await db.from("mike_documents")
     .update({ folder_id: folder_id ?? null, updated_at: new Date().toISOString() })
     .eq("id", documentId).eq("project_id", projectId)
     .select("*").single();
@@ -606,7 +606,7 @@ export async function handleDocumentUpload(
 
   const content = file.buffer;
   const { data: doc, error: insertErr } = await db
-    .from("documents")
+    .from("mike_documents")
     .insert({
       project_id: projectId,
       user_id: userId,
@@ -674,7 +674,7 @@ export async function handleDocumentUpload(
     // Storage paths live on document_versions — create the V1 row and
     // point documents.current_version_id at it.
     const { data: versionRow, error: verErr } = await db
-      .from("document_versions")
+      .from("mike_document_versions")
       .insert({
         document_id: docId,
         storage_path: key,
@@ -692,7 +692,7 @@ export async function handleDocumentUpload(
     }
 
     await db
-      .from("documents")
+      .from("mike_documents")
       .update({
         current_version_id: versionRow.id,
         size_bytes: content.byteLength,
@@ -704,7 +704,7 @@ export async function handleDocumentUpload(
       .eq("id", docId);
 
     const { data: updated } = await db
-      .from("documents")
+      .from("mike_documents")
       .select("*")
       .eq("id", docId)
       .single();
@@ -717,7 +717,7 @@ export async function handleDocumentUpload(
       : updated;
     return void res.status(201).json(responseDoc);
   } catch (e) {
-    await db.from("documents").update({ status: "error" }).eq("id", doc.id);
+    await db.from("mike_documents").update({ status: "error" }).eq("id", doc.id);
     return void res
       .status(500)
       .json({ detail: `Document processing failed: ${String(e)}` });

@@ -23,9 +23,10 @@ export const MODELS: ModelOption[] = [
     { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", group: "Anthropic" },
     { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", group: "Google" },
     { id: "gemini-3-flash-preview", label: "Gemini 3 Flash", group: "Google" },
+    { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", group: "Google" },
 ];
 
-export const DEFAULT_MODEL_ID = "gemini-3-flash-preview";
+export const DEFAULT_MODEL_ID = "gemini-2.5-flash-lite";
 
 export const ALLOWED_MODEL_IDS = new Set(MODELS.map((m) => m.id));
 
