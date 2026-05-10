@@ -1,7 +1,9 @@
 FROM node:22-slim AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+# --legacy-peer-deps: @opennextjs/cloudflare has a peer dep on next versions
+# that doesn't exactly match the pinned version in this repo
+RUN npm ci --legacy-peer-deps
 
 FROM node:22-slim AS build
 WORKDIR /app
