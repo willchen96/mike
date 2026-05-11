@@ -38,6 +38,7 @@
         "mammoth": "^1.11.0",
         "marked": "^17.0.1",
         "next": "16.0.3",
+        "next-intl": "^4.11.2",
         "nextjs-toploader": "^3.9.17",
         "pdfjs-dist": "4.10.38",
         "react": "19.2.0",

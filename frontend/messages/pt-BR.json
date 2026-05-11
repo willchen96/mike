@@ -1,0 +1,39 @@
+{
+  "auth": {
+    "signIn": "Entrar",
+    "signUp": "Cadastrar",
+    "signOut": "Sair",
+    "email": "E-mail",
+    "password": "Senha",
+    "forgotPassword": "Esqueceu a senha?",
+    "noAccount": "Não tem uma conta?",
+    "hasAccount": "Já tem uma conta?"
+  },
+  "common": {
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "submit": "Enviar",
+    "confirm": "Confirmar",
+    "back": "Voltar",
+    "next": "Próximo",
+    "loading": "Carregando...",
+    "error": "Erro",
+    "success": "Sucesso"
+  },
+  "projects": {
+    "title": "Projetos",
+    "new": "Novo Projeto",
+    "noProjects": "Nenhum projeto encontrado"
+  },
+  "documents": {
+    "title": "Documentos",
+    "upload": "Enviar Documento",
+    "noDocuments": "Nenhum documento encontrado"
+  },
+  "assistant": {
+    "title": "Assistente",
+    "placeholder": "Digite sua mensagem...",
+    "send": "Enviar"
+  }
+}
