@@ -1,0 +1,12 @@
+{
+  "name": "mike-monorepo",
+  "private": true,
+  "scripts": {
+    "deploy": "sst deploy --stage production",
+    "dev:sst": "sst dev",
+    "secrets:set": "sst secret set"
+  },
+  "devDependencies": {
+    "sst": "^3.0.0"
+  }
+}
