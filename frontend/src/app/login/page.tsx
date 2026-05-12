@@ -50,7 +50,13 @@ export default function LoginPage() {
 
     const handleOAuth = async (provider: "azure") => {
         const redirectTo = `${window.location.origin}/auth/callback`;
-        await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
+        await supabase.auth.signInWithOAuth({
+            provider,
+            options: {
+                redirectTo,
+                scopes: "email",
+            },
+        });
     };
 
     if (authLoading) {
