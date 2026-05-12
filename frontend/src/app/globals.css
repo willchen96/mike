@@ -50,6 +50,11 @@
 }
 
 :root {
+    --font-inter:
+        "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --font-eb-garamond:
+        "EB Garamond", Garamond, "Iowan Old Style", "Times New Roman",
+        serif;
     --radius: 0.625rem;
     --color-azure: 0, 136, 255;
     --background: oklch(1 0 0);
