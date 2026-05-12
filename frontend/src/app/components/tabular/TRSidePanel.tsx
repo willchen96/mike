@@ -31,6 +31,7 @@ function isDocxDocument(d: {
 interface Props {
     cell: TabularCell;
     document: MikeDocument;
+    documents?: MikeDocument[];
     column: ColumnConfig;
     columns: ColumnConfig[];
     onClose: () => void;
@@ -42,6 +43,7 @@ interface Props {
     citationQuote?: string;
     /** Page to scroll to when opening document panel */
     citationPage?: number;
+    citationDocumentId?: string;
 }
 
 const FLAG_BADGE: Record<string, string> = {
@@ -58,6 +60,7 @@ const FLAG_BADGE: Record<string, string> = {
 export function TRSidePanel({
     cell,
     document: doc,
+    documents = [doc],
     column,
     columns,
     onClose,
@@ -66,6 +69,7 @@ export function TRSidePanel({
     displayDocument = false,
     citationQuote,
     citationPage,
+    citationDocumentId,
 }: Props) {
     const sortedColumns = [...columns].sort((a, b) => a.index - b.index);
     const currentPos = sortedColumns.findIndex((c) => c.index === column.index);
@@ -81,22 +85,26 @@ export function TRSidePanel({
 
     // Internal state — initialised from props, also toggled by badge clicks inside the panel
     const [docCitation, setDocCitation] = useState<
-        { quote: string; page: number } | undefined
+        { quote: string; page: number; documentId?: string } | undefined
     >(
         displayDocument && citationQuote
-            ? { quote: citationQuote, page: citationPage ?? 1 }
+            ? { quote: citationQuote, page: citationPage ?? 1, documentId: citationDocumentId }
             : undefined,
     );
+    const displayDoc =
+        (docCitation?.documentId
+            ? documents.find((candidate) => candidate.id === docCitation.documentId)
+            : null) ?? doc;
 
     // Re-sync when the panel opens for a different cell or citation
     useEffect(() => {
         setDocCitation(
             displayDocument && citationQuote
-                ? { quote: citationQuote, page: citationPage ?? 1 }
+                ? { quote: citationQuote, page: citationPage ?? 1, documentId: citationDocumentId }
                 : undefined,
         );
         setQuoteExpanded(false);
-    }, [cell.id, displayDocument, citationQuote, citationPage]);
+    }, [cell.id, displayDocument, citationQuote, citationPage, citationDocumentId]);
 
     useEffect(() => {
         const el = quoteParagraphRef.current;
@@ -129,9 +137,9 @@ export function TRSidePanel({
                     <div className="flex items-center gap-2 pt-3 shrink-0 border-b border-white/30">
                         <p
                             className="flex-1 truncate text-sm font-semibold font-sans text-slate-700 font-serif"
-                            title={doc.filename}
+                            title={displayDoc.filename}
                         >
-                            {doc.filename}
+                            {displayDoc.filename}
                         </p>
                         <button
                             onClick={() => setDocCitation(undefined)}
@@ -167,9 +175,9 @@ export function TRSidePanel({
                             </div>
                         </div>
                     )}
-                    {isDocxDocument(doc) && !doc.pdf_storage_path ? (
+                    {isDocxDocument(displayDoc) && !displayDoc.pdf_storage_path ? (
                         <DocxView
-                            documentId={doc.id}
+                            documentId={displayDoc.id}
                             quotes={[
                                 {
                                     page: docCitation.page,
@@ -179,7 +187,7 @@ export function TRSidePanel({
                         />
                     ) : (
                         <DocView
-                            doc={{ document_id: doc.id }}
+                            doc={{ document_id: displayDoc.id }}
                             quote={docCitation.quote}
                             fallbackPage={docCitation.page}
                         />
@@ -278,11 +286,18 @@ export function TRSidePanel({
                                 Results
                             </h4>
                             <div className="text-xs leading-relaxed text-slate-600">
-                                <MarkdownContent
-                                    citations={summaryCitations}
-                                    onCitationClick={setDocCitation}
-                                    column={column}
-                                >
+                                    <MarkdownContent
+                                        citations={summaryCitations}
+                                        onCitationClick={(citation) => {
+                                            if (
+                                                documents.length > 1 &&
+                                                !citation.documentId
+                                            )
+                                                return;
+                                            setDocCitation(citation);
+                                        }}
+                                        column={column}
+                                    >
                                     {summaryText || "—"}
                                 </MarkdownContent>
                             </div>
@@ -297,7 +312,14 @@ export function TRSidePanel({
                                 <div className="text-xs leading-relaxed text-slate-600">
                                     <MarkdownContent
                                         citations={reasoningCitations}
-                                        onCitationClick={setDocCitation}
+                                        onCitationClick={(citation) => {
+                                            if (
+                                                documents.length > 1 &&
+                                                !citation.documentId
+                                            )
+                                                return;
+                                            setDocCitation(citation);
+                                        }}
                                         citationOffset={summaryCitations.length}
                                         column={column}
                                         inline
@@ -325,7 +347,7 @@ function CitationBadge({
 }: {
     index: number;
     citation: ParsedCitation;
-    onClick: (c: { quote: string; page: number }) => void;
+    onClick: (c: { quote: string; page: number; documentId?: string }) => void;
 }) {
     return (
         <button
@@ -334,7 +356,11 @@ function CitationBadge({
             data-quote={citation.quote}
             title={`Page ${citation.page}: "${citation.quote}"`}
             onClick={() =>
-                onClick({ quote: citation.quote, page: citation.page })
+                onClick({
+                    quote: citation.quote,
+                    page: citation.page,
+                    documentId: citation.documentId,
+                })
             }
             className="inline-flex items-center justify-center rounded-full bg-gray-200 w-3.5 h-3.5 text-[9px] font-medium text-gray-700 align-super cursor-pointer hover:bg-gray-300 transition-colors"
         >
@@ -353,7 +379,7 @@ function MarkdownContent({
 }: {
     children: string;
     citations: ParsedCitation[];
-    onCitationClick: (c: { quote: string; page: number }) => void;
+    onCitationClick: (c: { quote: string; page: number; documentId?: string }) => void;
     inline?: boolean;
     citationOffset?: number;
     column?: ColumnConfig;

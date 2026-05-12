@@ -11,6 +11,7 @@ import { getUserApiKeys as getStoredUserApiKeys } from "./userApiKeys";
 export type UserModelSettings = {
     title_model: string;
     tabular_model: string;
+    tabular_max_pages: number;
     api_keys: UserApiKeys;
 };
 
@@ -32,7 +33,7 @@ export async function getUserModelSettings(
     const client = db ?? createServerSupabase();
     const { data } = await client
         .from("user_profiles")
-        .select("tabular_model")
+        .select("tabular_model, tabular_max_pages")
         .eq("user_id", userId)
         .single();
     const api_keys = await getStoredUserApiKeys(userId, client);
@@ -40,6 +41,7 @@ export async function getUserModelSettings(
     return {
         title_model: resolveTitleModel(api_keys),
         tabular_model: resolveModel(data?.tabular_model, DEFAULT_TABULAR_MODEL),
+        tabular_max_pages: (data?.tabular_max_pages as number | null) ?? 250,
         api_keys,
     };
 }

@@ -299,6 +299,7 @@ create table if not exists public.tabular_reviews (
   columns_config jsonb,
   workflow_id uuid references public.workflows(id) on delete set null,
   practice text,
+  document_grouping text not null default 'document' check (document_grouping in ('document', 'folder')),
   shared_with jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -313,10 +314,36 @@ create index if not exists idx_tabular_reviews_project
 create index if not exists tabular_reviews_shared_with_idx
   on public.tabular_reviews using gin (shared_with);
 
+create table if not exists public.tabular_review_rows (
+  id uuid primary key default gen_random_uuid(),
+  review_id uuid not null references public.tabular_reviews(id) on delete cascade,
+  label text not null,
+  row_type text not null check (row_type in ('document', 'folder')),
+  folder_id uuid references public.project_subfolders(id) on delete set null,
+  document_id uuid references public.documents(id) on delete set null,
+  sort_index integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_tabular_review_rows_review
+  on public.tabular_review_rows(review_id, sort_index);
+
+create table if not exists public.tabular_review_row_sources (
+  row_id uuid not null references public.tabular_review_rows(id) on delete cascade,
+  document_id uuid not null references public.documents(id) on delete cascade,
+  sort_index integer not null default 0,
+  created_at timestamptz not null default now(),
+  primary key (row_id, document_id)
+);
+
+create index if not exists idx_tabular_review_row_sources_document
+  on public.tabular_review_row_sources(document_id);
+
 create table if not exists public.tabular_cells (
   id uuid primary key default gen_random_uuid(),
   review_id uuid not null references public.tabular_reviews(id) on delete cascade,
-  document_id uuid not null references public.documents(id) on delete cascade,
+  row_id uuid references public.tabular_review_rows(id) on delete cascade,
+  document_id uuid references public.documents(id) on delete cascade,
   column_index integer not null,
   content text,
   citations jsonb,
@@ -326,6 +353,9 @@ create table if not exists public.tabular_cells (
 
 create index if not exists idx_tabular_cells_review
   on public.tabular_cells(review_id, document_id, column_index);
+
+create index if not exists idx_tabular_cells_review_row
+  on public.tabular_cells(review_id, row_id, column_index);
 
 create table if not exists public.tabular_review_chats (
   id uuid primary key default gen_random_uuid(),
@@ -491,6 +521,8 @@ alter table public.workflow_shares enable row level security;
 alter table public.chats enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.tabular_reviews enable row level security;
+alter table public.tabular_review_rows enable row level security;
+alter table public.tabular_review_row_sources enable row level security;
 alter table public.tabular_cells enable row level security;
 alter table public.tabular_review_chats enable row level security;
 alter table public.tabular_review_chat_messages enable row level security;
@@ -910,6 +942,115 @@ create policy "Review owners can delete tabular reviews"
   on public.tabular_reviews for delete
   using (user_id = public.current_user_id_text());
 
+drop policy if exists "Users can view accessible tabular review rows" on public.tabular_review_rows;
+create policy "Users can view accessible tabular review rows"
+  on public.tabular_review_rows for select
+  using (public.review_is_accessible(review_id));
+
+drop policy if exists "Review owners can insert tabular review rows" on public.tabular_review_rows;
+create policy "Review owners can insert tabular review rows"
+  on public.tabular_review_rows for insert
+  with check (
+    exists (
+      select 1
+      from public.tabular_reviews r
+      where r.id = review_id
+        and r.user_id = public.current_user_id_text()
+    )
+  );
+
+drop policy if exists "Review owners can update tabular review rows" on public.tabular_review_rows;
+create policy "Review owners can update tabular review rows"
+  on public.tabular_review_rows for update
+  using (
+    exists (
+      select 1
+      from public.tabular_reviews r
+      where r.id = review_id
+        and r.user_id = public.current_user_id_text()
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.tabular_reviews r
+      where r.id = review_id
+        and r.user_id = public.current_user_id_text()
+    )
+  );
+
+drop policy if exists "Review owners can delete tabular review rows" on public.tabular_review_rows;
+create policy "Review owners can delete tabular review rows"
+  on public.tabular_review_rows for delete
+  using (
+    exists (
+      select 1
+      from public.tabular_reviews r
+      where r.id = review_id
+        and r.user_id = public.current_user_id_text()
+    )
+  );
+
+drop policy if exists "Users can view accessible tabular row sources" on public.tabular_review_row_sources;
+create policy "Users can view accessible tabular row sources"
+  on public.tabular_review_row_sources for select
+  using (
+    exists (
+      select 1
+      from public.tabular_review_rows trr
+      where trr.id = row_id
+        and public.review_is_accessible(trr.review_id)
+    )
+  );
+
+drop policy if exists "Review owners can insert tabular row sources" on public.tabular_review_row_sources;
+create policy "Review owners can insert tabular row sources"
+  on public.tabular_review_row_sources for insert
+  with check (
+    exists (
+      select 1
+      from public.tabular_review_rows trr
+      join public.tabular_reviews review on review.id = trr.review_id
+      where trr.id = row_id
+        and review.user_id = public.current_user_id_text()
+    )
+  );
+
+drop policy if exists "Review owners can update tabular row sources" on public.tabular_review_row_sources;
+create policy "Review owners can update tabular row sources"
+  on public.tabular_review_row_sources for update
+  using (
+    exists (
+      select 1
+      from public.tabular_review_rows trr
+      join public.tabular_reviews review on review.id = trr.review_id
+      where trr.id = row_id
+        and review.user_id = public.current_user_id_text()
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.tabular_review_rows trr
+      join public.tabular_reviews review on review.id = trr.review_id
+      where trr.id = row_id
+        and review.user_id = public.current_user_id_text()
+    )
+  );
+
+drop policy if exists "Review owners can delete tabular row sources" on public.tabular_review_row_sources;
+create policy "Review owners can delete tabular row sources"
+  on public.tabular_review_row_sources for delete
+  using (
+    exists (
+      select 1
+      from public.tabular_review_rows trr
+      join public.tabular_reviews review on review.id = trr.review_id
+      where trr.id = row_id
+        and review.user_id = public.current_user_id_text()
+    )
+  );
+
 drop policy if exists "Users can view accessible tabular cells" on public.tabular_cells;
 create policy "Users can view accessible tabular cells"
   on public.tabular_cells for select
@@ -1067,6 +1208,8 @@ revoke all on public.workflow_shares from anon, authenticated;
 revoke all on public.chats from anon, authenticated;
 revoke all on public.chat_messages from anon, authenticated;
 revoke all on public.tabular_reviews from anon, authenticated;
+revoke all on public.tabular_review_rows from anon, authenticated;
+revoke all on public.tabular_review_row_sources from anon, authenticated;
 revoke all on public.tabular_cells from anon, authenticated;
 revoke all on public.tabular_review_chats from anon, authenticated;
 revoke all on public.tabular_review_chat_messages from anon, authenticated;

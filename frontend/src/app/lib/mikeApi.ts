@@ -105,6 +105,7 @@ export interface UserProfile {
     creditsRemaining: number;
     tier: string;
     tabularModel: string;
+    tabularMaxPages: number;
     apiKeyStatus: ApiKeyStatus;
 }
 
@@ -116,6 +117,7 @@ export async function updateUserProfile(payload: {
     displayName?: string | null;
     organisation?: string | null;
     tabularModel?: string;
+    tabularMaxPages?: number;
 }): Promise<UserProfile> {
     return apiRequest<UserProfile>("/user/profile", {
         method: "PATCH",
@@ -545,6 +547,7 @@ export async function createTabularReview(payload: {
     columns_config: { index: number; name: string; prompt: string }[];
     workflow_id?: string;
     project_id?: string;
+    document_grouping?: "document" | "folder";
 }): Promise<TabularReview> {
     return apiRequest<TabularReview>("/tabular-review", {
         method: "POST",
@@ -566,6 +569,7 @@ export async function updateTabularReview(
         columns_config?: { index: number; name: string; prompt: string }[];
         document_ids?: string[];
         project_id?: string | null;
+        document_grouping?: "document" | "folder";
         shared_with?: string[];
     },
 ): Promise<TabularReview> {
@@ -739,7 +743,7 @@ export async function deleteTabularChat(
 
 export async function regenerateTabularCell(
     reviewId: string,
-    documentId: string,
+    rowId: string,
     columnIndex: number,
 ): Promise<{
     summary: string;
@@ -750,7 +754,7 @@ export async function regenerateTabularCell(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            document_id: documentId,
+            row_id: rowId,
             column_index: columnIndex,
         }),
     });
@@ -758,12 +762,12 @@ export async function regenerateTabularCell(
 
 export async function clearTabularCells(
     reviewId: string,
-    documentIds: string[],
+    rowIds: string[],
 ): Promise<void> {
     await apiRequest(`/tabular-review/${reviewId}/clear-cells`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ document_ids: documentIds }),
+        body: JSON.stringify({ row_ids: rowIds }),
     });
 }
 

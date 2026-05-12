@@ -692,6 +692,7 @@ export function ProjectPage({ projectId, initialTab = "documents" }: Props) {
         _projectId?: string,
         documentIds?: string[],
         columnsConfig?: any,
+        documentGrouping?: "document" | "folder",
     ) {
         setCreatingReview(true);
         try {
@@ -701,6 +702,7 @@ export function ProjectPage({ projectId, initialTab = "documents" }: Props) {
                 document_ids: documentIds ?? docs.map((d) => d.id),
                 columns_config: columnsConfig ?? [],
                 project_id: projectId,
+                document_grouping: documentGrouping,
             });
             router.push(`/projects/${projectId}/tabular-reviews/${review.id}`);
         } finally {

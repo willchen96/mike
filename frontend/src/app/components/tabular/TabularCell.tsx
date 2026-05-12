@@ -12,7 +12,7 @@ interface Props {
     cell: TCell;
     column?: ColumnConfig;
     onExpand: () => void;
-    onCitationClick?: (page: number, quote: string) => void;
+    onCitationClick?: (page: number, quote: string, documentId?: string) => void;
 }
 
 const FLAG_STYLES = {
@@ -53,7 +53,7 @@ function CellMarkdown({
     citations: ParsedCitation[];
     pills: string[];
     column?: ColumnConfig;
-    onCitationClick?: (page: number, quote: string) => void;
+    onCitationClick?: (page: number, quote: string, documentId?: string) => void;
     onExpand: () => void;
     inline?: boolean;
 }) {
@@ -105,6 +105,7 @@ function CellMarkdown({
                                             onCitationClick(
                                                 citation.page,
                                                 citation.quote,
+                                                citation.documentId,
                                             );
                                         } else {
                                             onExpand();
@@ -179,8 +180,9 @@ export function TabularCell({
     }
 
     if (cell.status === "error") {
+        const errorMsg = cell.content?.summary || "Generation failed";
         return (
-            <div className="h-10 flex items-center justify-center text-gray-300">
+            <div className="h-10 flex items-center justify-center text-gray-300" title={errorMsg}>
                 <AlertCircle className="h-4 w-4 text-red-300" />
             </div>
         );
@@ -197,9 +199,9 @@ export function TabularCell({
     const firstLine = processed.split("\n").find((l) => l.trim()) ?? processed;
     const collapsedDisplay = firstLine.replace(/^[-*•]\s+/, "");
 
-    function handleCitationClickInOverlay(page: number, quote: string) {
+    function handleCitationClickInOverlay(page: number, quote: string, documentId?: string) {
         setInlineExpanded(false);
-        onCitationClick?.(page, quote);
+        onCitationClick?.(page, quote, documentId);
     }
 
     function handleSeeDetails() {

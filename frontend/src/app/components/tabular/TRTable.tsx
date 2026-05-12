@@ -1,8 +1,8 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useRef } from "react";
-import { Plus, Table2 } from "lucide-react";
-import type { ColumnConfig, MikeDocument, TabularCell } from "../shared/types";
+import { AlertCircle, Plus, Table2 } from "lucide-react";
+import type { ColumnConfig, TabularCell, TabularReviewRow } from "../shared/types";
 import { TabularCell as TabularCellComponent } from "./TabularCell";
 import { TREditColumnMenu } from "./TREditColumnMenu";
 
@@ -25,15 +25,15 @@ export interface TRTableHandle {
 interface Props {
     loading: boolean;
     columns: ColumnConfig[];
-    documents: MikeDocument[];
+    rows: TabularReviewRow[];
     cells: TabularCell[];
     savingColumn: boolean;
     savingColumnsConfig: boolean;
-    selectedDocIds: string[];
+    selectedRowIds: string[];
     highlightedCell?: { colIdx: number; rowIdx: number } | null;
     onSelectionChange: (ids: string[]) => void;
     onExpand: (cell: TabularCell) => void;
-    onCitationClick: (cell: TabularCell, page: number, quote: string) => void;
+    onCitationClick: (cell: TabularCell, page: number, quote: string, documentId?: string) => void;
     onUpdateColumn: (col: ColumnConfig) => void;
     onDeleteColumn: (colIndex: number) => void;
     onAddColumn: () => void;
@@ -44,11 +44,11 @@ export const TRTable = forwardRef<TRTableHandle, Props>(function TRTable(
     {
         loading,
         columns,
-        documents,
+        rows,
         cells,
         savingColumn,
         savingColumnsConfig,
-        selectedDocIds,
+        selectedRowIds,
         highlightedCell,
         onSelectionChange,
         onExpand,
@@ -92,31 +92,31 @@ export const TRTable = forwardRef<TRTableHandle, Props>(function TRTable(
         },
     }));
 
-    function getCell(docId: string, colIdx: number) {
+    function getCell(rowId: string, colIdx: number) {
         return cells.find(
-            (c) => c.document_id === docId && c.column_index === colIdx,
+            (c) => (c.row_id ?? c.document_id) === rowId && c.column_index === colIdx,
         );
     }
 
     const allSelected =
-        documents.length > 0 &&
-        documents.every((d) => selectedDocIds.includes(d.id));
+        rows.length > 0 &&
+        rows.every((row) => selectedRowIds.includes(row.id));
     const someSelected =
-        !allSelected && documents.some((d) => selectedDocIds.includes(d.id));
+        !allSelected && rows.some((row) => selectedRowIds.includes(row.id));
 
     function toggleAll() {
         if (allSelected) {
             onSelectionChange([]);
         } else {
-            onSelectionChange(documents.map((d) => d.id));
+            onSelectionChange(rows.map((row) => row.id));
         }
     }
 
-    function toggleDoc(id: string) {
-        if (selectedDocIds.includes(id)) {
-            onSelectionChange(selectedDocIds.filter((x) => x !== id));
+    function toggleRow(id: string) {
+        if (selectedRowIds.includes(id)) {
+            onSelectionChange(selectedRowIds.filter((x) => x !== id));
         } else {
-            onSelectionChange([...selectedDocIds, id]);
+            onSelectionChange([...selectedRowIds, id]);
         }
     }
 
@@ -165,7 +165,7 @@ export const TRTable = forwardRef<TRTableHandle, Props>(function TRTable(
         );
     }
 
-    if (columns.length === 0 && documents.length === 0) {
+    if (columns.length === 0 && rows.length === 0) {
         return (
             <div className="flex flex-1 flex-col overflow-hidden">
                 <div className="flex items-center border-b border-gray-200">
@@ -258,15 +258,24 @@ export const TRTable = forwardRef<TRTableHandle, Props>(function TRTable(
             </div>
 
             {/* Rows */}
-            {documents.map((doc, docIdx) => {
-                const rowBg = selectedDocIds.includes(doc.id)
+            {rows.map((row, rowIdx) => {
+                const sourceCount = row.source_document_ids?.length ?? 0;
+                const rowBg = selectedRowIds.includes(row.id)
                     ? "bg-gray-100"
-                    : docIdx % 2 === 0
+                    : rowIdx % 2 === 0
                       ? "bg-white"
                       : "bg-gray-50";
+
+                // Detect page-limit error: all cells for this row are errors
+                // with a "Not processed" summary (page limit hit).
+                const rowCells = columns.map((col) => getCell(row.id, col.index)).filter(Boolean);
+                const pageLimitMessage = rowCells.length > 0 && rowCells.every(
+                    (c) => c!.status === "error" && c!.content?.summary?.startsWith("Not processed:"),
+                ) ? rowCells[0]!.content!.summary : null;
+
                 return (
                     <div
-                        key={doc.id}
+                        key={row.id}
                         className={`flex ${rowBg}`}
                         style={{ minWidth: totalContentWidth }}
                     >
@@ -275,49 +284,66 @@ export const TRTable = forwardRef<TRTableHandle, Props>(function TRTable(
                         >
                             <input
                                 type="checkbox"
-                                checked={selectedDocIds.includes(doc.id)}
-                                onChange={() => toggleDoc(doc.id)}
+                                checked={selectedRowIds.includes(row.id)}
+                                onChange={() => toggleRow(row.id)}
                                 className="h-2.5 w-2.5 shrink-0 rounded border-gray-200 cursor-pointer accent-black"
                             />
                         </div>
                         <div
                             className={`sticky left-8 z-[60] ${COL_W} border-b border-r border-gray-200 p-2 text-xs text-gray-800 flex items-center ${rowBg}`}
                         >
-                            <span className="line-clamp-1" title={doc.filename}>
-                                {doc.filename}
-                            </span>
+                            <div className="min-w-0">
+                                <span className="line-clamp-1" title={row.label}>
+                                    {row.label}
+                                </span>
+                                {row.row_type === "folder" && (
+                                    <span className="block text-[10px] text-gray-400">
+                                        {sourceCount} documents
+                                    </span>
+                                )}
+                            </div>
                         </div>
-                        {columns.map((col) => {
-                            const cell = getCell(doc.id, col.index);
-                            const colPos = sortedColumns.findIndex(
-                                (c) => c.index === col.index,
-                            );
-                            const isHighlighted =
-                                highlightedCell?.colIdx === colPos &&
-                                highlightedCell?.rowIdx === docIdx;
-                            return (
-                                <div
-                                    key={col.index}
-                                    className={`${COL_W} border-b border-r border-gray-200 transition-colors ${isHighlighted ? "bg-blue-200" : ""}`}
-                                >
-                                    {cell && (
-                                        <TabularCellComponent
-                                            cell={cell}
-                                            column={col}
-                                            onExpand={() => onExpand(cell)}
-                                            onCitationClick={(page, quote) =>
-                                                onCitationClick(
-                                                    cell,
-                                                    page,
-                                                    quote,
-                                                )
-                                            }
-                                        />
-                                    )}
-                                </div>
-                            );
-                        })}
-                        <div className="flex-1 border-b border-gray-200 min-h-8 min-w-8" />
+                        {pageLimitMessage ? (
+                            <div className="flex-1 border-b border-gray-200 flex items-center gap-2 px-3 min-h-10">
+                                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-400" />
+                                <span className="text-xs text-red-500">{pageLimitMessage}</span>
+                            </div>
+                        ) : (
+                            <>
+                                {columns.map((col) => {
+                                    const cell = getCell(row.id, col.index);
+                                    const colPos = sortedColumns.findIndex(
+                                        (c) => c.index === col.index,
+                                    );
+                                    const isHighlighted =
+                                        highlightedCell?.colIdx === colPos &&
+                                        highlightedCell?.rowIdx === rowIdx;
+                                    return (
+                                        <div
+                                            key={col.index}
+                                            className={`${COL_W} border-b border-r border-gray-200 transition-colors ${isHighlighted ? "bg-blue-200" : ""}`}
+                                        >
+                                            {cell && (
+                                                <TabularCellComponent
+                                                    cell={cell}
+                                                    column={col}
+                                                    onExpand={() => onExpand(cell)}
+                                                    onCitationClick={(page, quote, documentId) =>
+                                                        onCitationClick(
+                                                            cell,
+                                                            page,
+                                                            quote,
+                                                            documentId,
+                                                        )
+                                                    }
+                                                />
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                <div className="flex-1 border-b border-gray-200 min-h-8 min-w-8" />
+                            </>
+                        )}
                     </div>
                 );
             })}

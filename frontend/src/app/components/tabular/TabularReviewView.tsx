@@ -20,6 +20,7 @@ import type {
     MikeProject,
     TabularCell,
     TabularReview,
+    TabularReviewRow,
 } from "../shared/types";
 import { AddColumnModal } from "./AddColumnModal";
 import { AddDocumentsModal } from "../shared/AddDocumentsModal";
@@ -53,6 +54,7 @@ export function TRView({ reviewId, projectId }: Props) {
     const [project, setProject] = useState<MikeProject | null>(null);
     const [cells, setCells] = useState<TabularCell[]>([]);
     const [documents, setDocuments] = useState<MikeDocument[]>([]);
+    const [rows, setRows] = useState<TabularReviewRow[]>([]);
     const [columns, setColumns] = useState<ColumnConfig[]>([]);
     const [loading, setLoading] = useState(true);
     const [generating, setGenerating] = useState(false);
@@ -65,9 +67,9 @@ export function TRView({ reviewId, projectId }: Props) {
     const { user } = useAuth();
     const [expandedCell, setExpandedCell] = useState<TabularCell | null>(null);
     const [expandedCellCitation, setExpandedCellCitation] = useState<
-        { quote: string; page: number } | undefined
+        { quote: string; page: number; documentId?: string } | undefined
     >(undefined);
-    const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+    const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
     const [actionsOpen, setActionsOpen] = useState(false);
     const [search, setSearch] = useState("");
     const searchParams = useSearchParams();
@@ -118,10 +120,11 @@ export function TRView({ reviewId, projectId }: Props) {
 
     useEffect(() => {
         const fetches: Promise<unknown>[] = [
-            getTabularReview(reviewId).then(({ review, cells, documents }) => {
+            getTabularReview(reviewId).then(({ review, cells, documents, rows }) => {
                 setReview(review);
                 setCells(cells);
                 setDocuments(documents);
+                setRows(rows);
                 setColumns(review.columns_config || []);
             }),
         ];
@@ -146,10 +149,13 @@ export function TRView({ reviewId, projectId }: Props) {
         try {
             const updated = await updateTabularReview(reviewId, {
                 columns_config: nextColumns,
-                document_ids: documents.map((document) => document.id),
             });
             setReview(updated);
             setColumns(updated.columns_config || nextColumns);
+            const refreshed = await getTabularReview(reviewId);
+            setCells(refreshed.cells);
+            setDocuments(refreshed.documents);
+            setRows(refreshed.rows);
         } finally {
             setSavingColumnsConfig(false);
         }
@@ -169,29 +175,17 @@ export function TRView({ reviewId, projectId }: Props) {
             document_ids: allIds,
             columns_config: columns,
         });
-        setDocuments((prev) => [...prev, ...toAdd]);
-        if (columns.length > 0) {
-            setCells((prev) => [
-                ...prev,
-                ...toAdd.flatMap((doc) =>
-                    columns.map((col) => ({
-                        id: `new-${doc.id}-${col.index}`,
-                        review_id: reviewId,
-                        document_id: doc.id,
-                        column_index: col.index,
-                        content: null,
-                        status: "pending" as const,
-                        created_at: new Date().toISOString(),
-                    })),
-                ),
-            ]);
-        }
+        const refreshed = await getTabularReview(reviewId);
+        setReview(refreshed.review);
+        setCells(refreshed.cells);
+        setDocuments(refreshed.documents);
+        setRows(refreshed.rows);
     }
 
-    async function handleRegenerateCell(docId: string, colIndex: number) {
+    async function handleRegenerateCell(rowId: string, colIndex: number) {
         setCells((prev) =>
             prev.map((c) =>
-                c.document_id === docId && c.column_index === colIndex
+                (c.row_id ?? c.document_id) === rowId && c.column_index === colIndex
                     ? { ...c, status: "generating" as const, content: null }
                     : c,
             ),
@@ -204,12 +198,12 @@ export function TRView({ reviewId, projectId }: Props) {
         try {
             const result = await regenerateTabularCell(
                 reviewId,
-                docId,
+                rowId,
                 colIndex,
             );
             setCells((prev) =>
                 prev.map((c) =>
-                    c.document_id === docId && c.column_index === colIndex
+                    (c.row_id ?? c.document_id) === rowId && c.column_index === colIndex
                         ? { ...c, status: "done" as const, content: result }
                         : c,
                 ),
@@ -223,7 +217,7 @@ export function TRView({ reviewId, projectId }: Props) {
             console.error("Regeneration failed", err);
             setCells((prev) =>
                 prev.map((c) =>
-                    c.document_id === docId && c.column_index === colIndex
+                    (c.row_id ?? c.document_id) === rowId && c.column_index === colIndex
                         ? { ...c, status: "error" as const }
                         : c,
                 ),
@@ -249,11 +243,11 @@ export function TRView({ reviewId, projectId }: Props) {
 
         // Optimistically set empty/pending/error cells to generating (skip done cells)
         setCells((prev) =>
-            documents.flatMap((doc) =>
+            rows.flatMap((row) =>
                 columns.map((col) => {
                     const existing = prev.find(
                         (c) =>
-                            c.document_id === doc.id &&
+                            (c.row_id ?? c.document_id) === row.id &&
                             c.column_index === col.index,
                     );
                     if (existing?.status === "done" && existing?.content) {
@@ -266,9 +260,10 @@ export function TRView({ reviewId, projectId }: Props) {
                               content: null,
                           }
                         : {
-                              id: `${doc.id}-${col.index}`,
+                              id: `${row.id}-${col.index}`,
                               review_id: reviewId,
-                              document_id: doc.id,
+                              row_id: row.id,
+                              document_id: row.document_id,
                               column_index: col.index,
                               content: null,
                               status: "generating" as const,
@@ -302,7 +297,8 @@ export function TRView({ reviewId, projectId }: Props) {
                         if (data.type === "cell_update") {
                             setCells((prev) =>
                                 prev.map((c) =>
-                                    c.document_id === data.document_id &&
+                                    (c.row_id ?? c.document_id) ===
+                                        (data.row_id ?? data.document_id) &&
                                     c.column_index === data.column_index
                                         ? {
                                               ...c,
@@ -334,31 +330,32 @@ export function TRView({ reviewId, projectId }: Props) {
         setColumns(newCols);
         setCells((prev) => [
             ...prev,
-            ...documents
-                .filter((doc) =>
+            ...rows
+                .filter((row) =>
                     normalizedColumns.some(
                         (column) =>
                             !prev.some(
                                 (cell) =>
-                                    cell.document_id === doc.id &&
+                                    (cell.row_id ?? cell.document_id) === row.id &&
                                     cell.column_index === column.index,
                             ),
                     ),
                 )
-                .flatMap((doc) =>
+                .flatMap((row) =>
                     normalizedColumns
                         .filter(
                             (column) =>
                                 !prev.some(
                                     (cell) =>
-                                        cell.document_id === doc.id &&
+                                        (cell.row_id ?? cell.document_id) === row.id &&
                                         cell.column_index === column.index,
                                 ),
                         )
                         .map((column) => ({
-                            id: `new-${doc.id}-${column.index}`,
+                            id: `new-${row.id}-${column.index}`,
                             review_id: reviewId,
-                            document_id: doc.id,
+                            row_id: row.id,
+                            document_id: row.document_id,
                             column_index: column.index,
                             content: null,
                             status: "pending" as const,
@@ -422,34 +419,42 @@ export function TRView({ reviewId, projectId }: Props) {
     }
 
     async function handleDeleteDocuments() {
+        const removedDocIds = rows
+            .filter((row) => selectedRowIds.includes(row.id))
+            .flatMap((row) => row.source_document_ids);
         const remaining = documents.filter(
-            (d) => !selectedDocIds.includes(d.id),
+            (d) => !removedDocIds.includes(d.id),
         );
         setDocuments(remaining);
+        setRows((prev) => prev.filter((row) => !selectedRowIds.includes(row.id)));
         setCells((prev) =>
-            prev.filter((c) => !selectedDocIds.includes(c.document_id)),
+            prev.filter((c) => !selectedRowIds.includes(c.row_id ?? c.document_id ?? "")),
         );
-        setSelectedDocIds([]);
+        setSelectedRowIds([]);
         setActionsOpen(false);
         await updateTabularReview(reviewId, {
             document_ids: remaining.map((d) => d.id),
             columns_config: columns,
         });
+        const refreshed = await getTabularReview(reviewId);
+        setCells(refreshed.cells);
+        setDocuments(refreshed.documents);
+        setRows(refreshed.rows);
     }
 
     async function handleClearResults() {
-        const docIds = [...selectedDocIds];
-        if (docIds.length === 0) return;
+        const rowIds = [...selectedRowIds];
+        if (rowIds.length === 0) return;
         setCells((prev) =>
             prev.map((c) =>
-                docIds.includes(c.document_id)
+                rowIds.includes(c.row_id ?? c.document_id ?? "")
                     ? { ...c, content: null, status: "pending" }
                     : c,
             ),
         );
-        setSelectedDocIds([]);
+        setSelectedRowIds([]);
         setActionsOpen(false);
-        await clearTabularCells(reviewId, docIds);
+        await clearTabularCells(reviewId, rowIds);
     }
 
     async function handleTitleCommit(newTitle: string) {
@@ -459,9 +464,9 @@ export function TRView({ reviewId, projectId }: Props) {
     }
 
     const q = search.toLowerCase();
-    const filteredDocuments = q
-        ? documents.filter((d) => d.filename.toLowerCase().includes(q))
-        : documents;
+    const filteredRows = q
+        ? rows.filter((row) => row.label.toLowerCase().includes(q))
+        : rows;
 
     return (
         <div className="flex h-full overflow-hidden bg-white">
@@ -551,14 +556,14 @@ export function TRView({ reviewId, projectId }: Props) {
                                     exportTabularReviewToExcel({
                                         reviewTitle: review?.title || "Tabular Review",
                                         columns,
-                                        documents,
+                                        rows,
                                         cells,
                                     })
                                 }
-                                disabled={columns.length === 0 || documents.length === 0}
+                                disabled={columns.length === 0 || rows.length === 0}
                                 title="Export to Excel"
                                 className={`flex h-8 items-center justify-center gap-1.5 px-3 text-sm transition-colors ${
-                                    columns.length === 0 || documents.length === 0
+                                    columns.length === 0 || rows.length === 0
                                         ? "text-gray-300 cursor-default"
                                         : "text-gray-700 hover:text-gray-900 cursor-pointer"
                                 }`}
@@ -571,13 +576,13 @@ export function TRView({ reviewId, projectId }: Props) {
                                 disabled={
                                     generating ||
                                     columns.length === 0 ||
-                                    documents.length === 0 ||
+                                    rows.length === 0 ||
                                     savingColumnsConfig
                                 }
                                 className={`flex h-8 items-center justify-center gap-1.5 px-3 text-sm transition-colors ${
                                     generating ||
                                     columns.length === 0 ||
-                                    documents.length === 0 ||
+                                    rows.length === 0 ||
                                     savingColumnsConfig
                                         ? "text-gray-300 cursor-default"
                                         : "text-gray-700 hover:text-gray-900 cursor-pointer"
@@ -602,9 +607,9 @@ export function TRView({ reviewId, projectId }: Props) {
                             if (chatOpen) setSelectedChatId(null);
                             setChatOpen((v) => !v);
                         }}
-                        disabled={loading || columns.length === 0 || documents.length === 0}
+                        disabled={loading || columns.length === 0 || rows.length === 0}
                         className={`flex items-center gap-1 text-xs font-medium transition-colors ${
-                            loading || columns.length === 0 || documents.length === 0
+                            loading || columns.length === 0 || rows.length === 0
                                 ? "text-gray-300 cursor-default"
                                 : "text-gray-700 hover:text-gray-900"
                         }`}
@@ -613,7 +618,7 @@ export function TRView({ reviewId, projectId }: Props) {
                         Assistant in Tabular Review
                     </button>
                     <div className="ml-auto flex items-center gap-4">
-                        {selectedDocIds.length > 0 && (
+                        {selectedRowIds.length > 0 && (
                             <div ref={actionsRef} className="relative">
                                 <button
                                     onClick={() => setActionsOpen((v) => !v)}
@@ -691,20 +696,26 @@ export function TRView({ reviewId, projectId }: Props) {
                         ref={tableRef}
                         loading={loading}
                         columns={columns}
-                        documents={filteredDocuments}
+                        rows={filteredRows}
                         cells={cells}
                         highlightedCell={highlightedCell}
                         savingColumn={savingColumn}
                         savingColumnsConfig={savingColumnsConfig}
-                        selectedDocIds={selectedDocIds}
-                        onSelectionChange={setSelectedDocIds}
+                        selectedRowIds={selectedRowIds}
+                        onSelectionChange={setSelectedRowIds}
                         onExpand={(cell) => {
                             setExpandedCell(cell);
                             setExpandedCellCitation(undefined);
                         }}
-                        onCitationClick={(cell, page, quote) => {
+                        onCitationClick={(cell, page, quote, documentId) => {
+                            const rowId = cell.row_id ?? cell.document_id ?? "";
+                            const row = rows.find((candidate) => candidate.id === rowId);
                             setExpandedCell(cell);
-                            setExpandedCellCitation({ quote, page });
+                            if (row?.row_type === "folder" && !documentId) {
+                                setExpandedCellCitation(undefined);
+                                return;
+                            }
+                            setExpandedCellCitation({ quote, page, documentId });
                         }}
                         onUpdateColumn={handleUpdateColumn}
                         onDeleteColumn={handleDeleteColumn}
@@ -717,9 +728,22 @@ export function TRView({ reviewId, projectId }: Props) {
             {/* Cell detail side panel */}
             {expandedCell &&
                 (() => {
-                    const expandedDoc = documents.find(
-                        (d) => d.id === expandedCell.document_id,
+                    const expandedRowId = expandedCell.row_id ?? expandedCell.document_id ?? "";
+                    const expandedRow = rows.find((row) => row.id === expandedRowId);
+                    const sourceDocIds =
+                        expandedRow?.source_document_ids ??
+                        (expandedCell.document_id ? [expandedCell.document_id] : []);
+                    const sourceDocs = documents.filter((d) =>
+                        sourceDocIds.includes(d.id),
                     );
+                    const expandedDoc =
+                        (expandedCellCitation?.documentId
+                            ? sourceDocs.find(
+                                  (d) => d.id === expandedCellCitation.documentId,
+                              )
+                            : null) ??
+                        sourceDocs[0] ??
+                        documents.find((d) => d.id === expandedCell.document_id);
                     const expandedCol = columns.find(
                         (c) => c.index === expandedCell.column_index,
                     );
@@ -728,6 +752,7 @@ export function TRView({ reviewId, projectId }: Props) {
                         <TRSidePanel
                             cell={expandedCell}
                             document={expandedDoc}
+                            documents={sourceDocs.length ? sourceDocs : documents}
                             column={expandedCol}
                             columns={columns}
                             onClose={() => {
@@ -737,8 +762,8 @@ export function TRView({ reviewId, projectId }: Props) {
                             onNavigate={(columnIndex) => {
                                 const nextCell = cells.find(
                                     (c) =>
-                                        c.document_id ===
-                                            expandedCell.document_id &&
+                                        (c.row_id ?? c.document_id) ===
+                                            expandedRowId &&
                                         c.column_index === columnIndex,
                                 );
                                 if (nextCell) {
@@ -748,13 +773,14 @@ export function TRView({ reviewId, projectId }: Props) {
                             }}
                             onRegenerate={() =>
                                 handleRegenerateCell(
-                                    expandedCell.document_id,
+                                    expandedRowId,
                                     expandedCell.column_index,
                                 )
                             }
                             displayDocument={expandedCellCitation !== undefined}
                             citationQuote={expandedCellCitation?.quote}
                             citationPage={expandedCellCitation?.page}
+                            citationDocumentId={expandedCellCitation?.documentId}
                         />
                     );
                 })()}

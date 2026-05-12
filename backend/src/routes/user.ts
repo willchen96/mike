@@ -14,6 +14,8 @@ export const userRouter = Router();
 
 const MONTHLY_CREDIT_LIMIT = 999999;
 
+const DEFAULT_TABULAR_MAX_PAGES = 250;
+
 type UserProfileRow = {
   display_name: string | null;
   organisation: string | null;
@@ -21,6 +23,12 @@ type UserProfileRow = {
   credits_reset_date: string;
   tier: string;
   tabular_model: string;
+  tabular_max_pages: number;
+};
+
+type OAuthProfileMetadata = {
+  displayName?: string | null;
+  organisation?: string | null;
 };
 
 function serializeProfile(
@@ -36,8 +44,41 @@ function serializeProfile(
     creditsRemaining: Math.max(MONTHLY_CREDIT_LIMIT - creditsUsed, 0),
     tier: row.tier || "Free",
     tabularModel: resolveModel(row.tabular_model, DEFAULT_TABULAR_MODEL),
+    tabularMaxPages: row.tabular_max_pages ?? DEFAULT_TABULAR_MAX_PAGES,
     ...(apiKeyStatus ? { apiKeyStatus } : {}),
   };
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function profileMetadataFromOAuth(
+  metadata: unknown,
+  email: string,
+): OAuthProfileMetadata {
+  const raw =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  const displayName = firstString(
+    raw.full_name,
+    raw.name,
+    raw.display_name,
+    raw.user_name,
+  );
+  const organisation = firstString(
+    raw.organization,
+    raw.organisation,
+    raw.company,
+    email.endsWith("@kairosvista.com") ? "KairosVista" : null,
+  );
+  return { displayName, organisation };
 }
 
 function validateProfilePayload(body: unknown):
@@ -60,6 +101,7 @@ function validateProfilePayload(body: unknown):
     "displayName",
     "organisation",
     "tabularModel",
+    "tabularMaxPages",
   ]);
   const invalidField = Object.keys(raw).find((key) => !allowedFields.has(key));
   if (invalidField) {
@@ -70,6 +112,7 @@ function validateProfilePayload(body: unknown):
     display_name?: string | null;
     organisation?: string | null;
     tabular_model?: string;
+    tabular_max_pages?: number;
     updated_at: string;
   } = { updated_at: new Date().toISOString() };
 
@@ -98,31 +141,81 @@ function validateProfilePayload(body: unknown):
     update.tabular_model = resolved;
   }
 
+  if ("tabularMaxPages" in raw) {
+    const v = Number(raw.tabularMaxPages);
+    if (!Number.isInteger(v) || v < 10 || v > 2000) {
+      return { ok: false, detail: "tabularMaxPages must be an integer between 10 and 2000" };
+    }
+    update.tabular_max_pages = v;
+  }
+
   return { ok: true, update };
 }
 
 async function ensureProfileRow(
   db: ReturnType<typeof createServerSupabase>,
   userId: string,
+  defaults: OAuthProfileMetadata = {},
 ) {
   const { error } = await db
     .from("user_profiles")
     .upsert(
-      { user_id: userId },
+      {
+        user_id: userId,
+        ...(defaults.displayName && { display_name: defaults.displayName }),
+        ...(defaults.organisation && { organisation: defaults.organisation }),
+      },
       { onConflict: "user_id", ignoreDuplicates: true },
     );
   return error;
 }
 
+async function backfillBlankProfileFields(
+  db: ReturnType<typeof createServerSupabase>,
+  userId: string,
+  row: UserProfileRow,
+  defaults: OAuthProfileMetadata,
+): Promise<{ data: UserProfileRow; error: Error | null }> {
+  const update: {
+    display_name?: string;
+    organisation?: string;
+    updated_at: string;
+  } = { updated_at: new Date().toISOString() };
+
+  if (!row.display_name && defaults.displayName) {
+    update.display_name = defaults.displayName;
+  }
+  if (!row.organisation && defaults.organisation) {
+    update.organisation = defaults.organisation;
+  }
+  if (!update.display_name && !update.organisation) {
+    return { data: row, error: null };
+  }
+
+  const { data, error } = await db
+    .from("user_profiles")
+    .update(update)
+    .eq("user_id", userId)
+    .select(
+      "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model, tabular_max_pages",
+    )
+    .single();
+  if (error) return { data: row, error };
+  return { data: data as UserProfileRow, error: null };
+}
+
 async function loadProfile(
   db: ReturnType<typeof createServerSupabase>,
   userId: string,
-  options: { repairMissing?: boolean } = {},
+  options: {
+    repairMissing?: boolean;
+    defaults?: OAuthProfileMetadata;
+  } = {},
 ) {
   let { data, error } = await db
     .from("user_profiles")
     .select(
-      "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model",
+      "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model, tabular_max_pages",
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -133,13 +226,13 @@ async function loadProfile(
       return { data: null, error: new Error("Profile not found") };
     }
 
-    const ensureError = await ensureProfileRow(db, userId);
+    const ensureError = await ensureProfileRow(db, userId, options.defaults);
     if (ensureError) return { data: null, error: ensureError };
 
     const created = await db
       .from("user_profiles")
       .select(
-        "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model",
+        "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model, tabular_max_pages",
       )
       .eq("user_id", userId)
       .single();
@@ -148,6 +241,15 @@ async function loadProfile(
   }
 
   let row = data as UserProfileRow;
+  const backfilled = await backfillBlankProfileFields(
+    db,
+    userId,
+    row,
+    options.defaults ?? {},
+  );
+  if (backfilled.error) return { data: null, error: backfilled.error };
+  row = backfilled.data;
+
   if (row.credits_reset_date && new Date() > new Date(row.credits_reset_date)) {
     const creditsResetDate = new Date();
     creditsResetDate.setDate(creditsResetDate.getDate() + 30);
@@ -160,7 +262,7 @@ async function loadProfile(
       })
       .eq("user_id", userId)
       .select(
-        "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model",
+        "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model, tabular_max_pages",
       )
       .single();
 
@@ -174,8 +276,13 @@ async function loadProfile(
 // POST /user/profile
 userRouter.post("/profile", requireAuth, async (_req, res) => {
   const userId = res.locals.userId as string;
+  const userEmail = res.locals.userEmail as string;
+  const defaults = profileMetadataFromOAuth(
+    res.locals.userMetadata,
+    userEmail,
+  );
   const db = createServerSupabase();
-  const error = await ensureProfileRow(db, userId);
+  const error = await ensureProfileRow(db, userId, defaults);
   if (error) return void res.status(500).json({ detail: error.message });
   res.json({ ok: true });
 });
@@ -183,9 +290,15 @@ userRouter.post("/profile", requireAuth, async (_req, res) => {
 // GET /user/profile
 userRouter.get("/profile", requireAuth, async (_req, res) => {
   const userId = res.locals.userId as string;
+  const userEmail = res.locals.userEmail as string;
+  const defaults = profileMetadataFromOAuth(
+    res.locals.userMetadata,
+    userEmail,
+  );
   const db = createServerSupabase();
   const { data, error } = await loadProfile(db, userId, {
     repairMissing: true,
+    defaults,
   });
   if (error) return void res.status(500).json({ detail: error.message });
   const apiKeyStatus = await getUserApiKeyStatus(userId, db);

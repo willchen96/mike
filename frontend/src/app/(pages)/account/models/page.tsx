@@ -40,7 +40,7 @@ const API_KEY_FIELDS = [
 ] as const;
 
 export default function ModelsAndApiKeysPage() {
-    const { profile, updateModelPreference, updateApiKey } = useUserProfile();
+    const { profile, updateModelPreference, updateTabularMaxPages, updateApiKey } = useUserProfile();
 
     return (
         <div className="space-y-4">
@@ -69,6 +69,18 @@ export default function ModelsAndApiKeysPage() {
                             onChange={(id) =>
                                 updateModelPreference("tabularModel", id)
                             }
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-gray-600 block mb-2">
+                            Max pages per grouped row
+                        </label>
+                        <p className="text-xs text-gray-400 mb-2">
+                            Rows exceeding this page count will be skipped with an error. Range: 10–2000.
+                        </p>
+                        <MaxPagesField
+                            value={profile?.tabularMaxPages ?? 250}
+                            onSave={updateTabularMaxPages}
                         />
                     </div>
                 </div>
@@ -207,6 +219,53 @@ function TabularModelDropdown({
                 })}
             </DropdownMenuContent>
         </DropdownMenu>
+    );
+}
+
+function MaxPagesField({
+    value,
+    onSave,
+}: {
+    value: number;
+    onSave: (v: number) => Promise<boolean>;
+}) {
+    const [input, setInput] = useState(String(value));
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+
+    const parsed = Number(input);
+    const valid = Number.isInteger(parsed) && parsed >= 10 && parsed <= 2000;
+    const dirty = parsed !== value && valid;
+
+    const handleSave = async () => {
+        if (!valid) return;
+        setSaving(true);
+        const ok = await onSave(parsed);
+        setSaving(false);
+        if (ok) {
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+        }
+    };
+
+    return (
+        <div className="flex gap-2 max-w-xs">
+            <Input
+                type="number"
+                min={10}
+                max={2000}
+                value={input}
+                onChange={(e) => { setInput(e.target.value); setSaved(false); }}
+                className="w-32"
+            />
+            <Button
+                onClick={handleSave}
+                disabled={saving || !dirty || saved}
+                className="min-w-20 transition-all bg-black hover:bg-gray-900 text-white"
+            >
+                {saving ? "Saving..." : saved ? <><Check className="h-4 w-3" />Saved</> : "Save"}
+            </Button>
+        </div>
     );
 }
 

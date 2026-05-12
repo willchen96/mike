@@ -58,7 +58,7 @@ export type DocIndex = Record<
 export type TabularCellStore = {
     columns: { index: number; name: string }[];
     documents: { id: string; filename: string }[];
-    /** key: `${colIndex}:${docId}` */
+    /** key: `${colIndex}:${rowId}` */
     cells: Map<
         string,
         { summary: string; flag?: string; reasoning?: string } | null
@@ -712,6 +712,7 @@ export async function extractPdfText(buf: ArrayBuffer): Promise<string> {
         ).getDocument({
             data: new Uint8Array(buf),
             standardFontDataUrl: STANDARD_FONT_DATA_URL,
+            verbosity: 0,
         }).promise;
         const parts: string[] = [];
         for (let i = 1; i <= pdf.numPages; i++) {

@@ -26,6 +26,7 @@ interface UserProfile {
     creditsRemaining: number;
     tier: string;
     tabularModel: string;
+    tabularMaxPages: number;
     apiKeys: ApiKeyState;
 }
 
@@ -38,6 +39,7 @@ interface UserProfileContextType {
         field: "tabularModel",
         value: string,
     ) => Promise<boolean>;
+    updateTabularMaxPages: (value: number) => Promise<boolean>;
     updateApiKey: (
         provider: ApiKeyProvider,
         value: string | null,
@@ -158,9 +160,23 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             if (!user) return false;
             if (field !== "tabularModel") return false;
             try {
-                const updated = await updateUserProfile({
-                    tabularModel: value,
-                });
+                const updated = await updateUserProfile({ tabularModel: value });
+                setProfile((prev) =>
+                    prev ? { ...prev, ...toProfile(updated) } : null,
+                );
+                return true;
+            } catch {
+                return false;
+            }
+        },
+        [user],
+    );
+
+    const updateTabularMaxPages = useCallback(
+        async (value: number): Promise<boolean> => {
+            if (!user) return false;
+            try {
+                const updated = await updateUserProfile({ tabularMaxPages: value });
                 setProfile((prev) =>
                     prev ? { ...prev, ...toProfile(updated) } : null,
                 );
@@ -230,6 +246,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
                 updateDisplayName,
                 updateOrganisation,
                 updateModelPreference,
+                updateTabularMaxPages,
                 updateApiKey,
                 reloadProfile,
                 incrementMessageCredits,

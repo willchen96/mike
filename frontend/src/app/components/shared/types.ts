@@ -45,6 +45,18 @@ export interface MikeDocument {
   latest_version_number?: number | null;
 }
 
+export interface TabularReviewRow {
+  id: string;
+  review_id: string;
+  label: string;
+  row_type: "document" | "folder";
+  folder_id: string | null;
+  document_id: string | null;
+  sort_index: number;
+  source_document_ids: string[];
+  created_at?: string | null;
+}
+
 export interface StructureNode {
   id: string;
   title: string;
@@ -247,6 +259,7 @@ export interface TabularReview {
   columns_config: ColumnConfig[] | null;
   workflow_id: string | null;
   practice?: string | null;
+  document_grouping: "document" | "folder";
   /** Per-review email list. Used so standalone (project_id null) reviews can be shared directly. */
   shared_with?: string[];
   /** Server-set: true when the requesting user is the review's creator. */
@@ -259,7 +272,8 @@ export interface TabularReview {
 export interface TabularCell {
   id: string;
   review_id: string;
-  document_id: string;
+  row_id?: string | null;
+  document_id?: string | null;
   column_index: number;
   content: {
     summary: string;
@@ -298,4 +312,5 @@ export interface TabularReviewDetailOut {
   review: TabularReview;
   cells: TabularCell[];
   documents: MikeDocument[];
+  rows: TabularReviewRow[];
 }

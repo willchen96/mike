@@ -1,3 +1,4 @@
+import path from "path";
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
 import { createServerSupabase } from "../lib/supabase";
@@ -26,6 +27,15 @@ import { singleFileUpload } from "../lib/upload";
 
 export const documentsRouter = Router();
 const ALLOWED_TYPES = new Set(["pdf", "docx", "doc"]);
+
+const STANDARD_FONT_DATA_URL = (() => {
+    try {
+        const pkgPath = require.resolve("pdfjs-dist/package.json");
+        return path.join(path.dirname(pkgPath), "standard_fonts") + path.sep;
+    } catch {
+        return undefined;
+    }
+})();
 
 // GET /single-documents
 documentsRouter.get("/", requireAuth, async (req, res) => {
@@ -977,7 +987,7 @@ async function countPdfPages(buf: ArrayBuffer): Promise<number | null> {
           promise: Promise<{ numPages: number }>;
         };
       }
-    ).getDocument({ data: new Uint8Array(buf) }).promise;
+    ).getDocument({ data: new Uint8Array(buf), standardFontDataUrl: STANDARD_FONT_DATA_URL, verbosity: 0 }).promise;
     return pdf.numPages;
   } catch {
     return null;
