@@ -368,7 +368,7 @@
     "appSidebar": {
       "navAssistente": "Assistente",
       "navProjetos": "Projetos",
-      "navRevisoesTabulares": "Revisões Tabulares",
+      "navRevisoesTabulares": "Dados",
       "navWorkflows": "Workflows",
       "fecharMenu": "Fechar menu lateral",
       "abrirMenu": "Abrir menu lateral",
@@ -474,7 +474,8 @@
       "colDocumentos": "Documentos",
       "colProjeto": "Projeto",
       "colCriadoEm": "Criado em",
-      "tituloVazio": "Revisões Tabulares",
+      "titulo": "Extração e comparação de dados entre documentos",
+      "tituloVazio": "Extração e comparação de dados entre documentos",
       "descricaoVazio": "Extraia dados de documentos em tabelas usando IA.",
       "criarNova": "+ Criar Nova",
       "nenhumaEncontrada": "Nenhuma revisão encontrada",

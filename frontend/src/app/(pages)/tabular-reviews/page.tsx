@@ -273,7 +273,7 @@ export default function TabularReviewsPage() {
             {/* Page header */}
             <div className="flex items-center justify-between px-8 py-4">
                 <h1 className="text-2xl font-medium font-serif text-gray-900">
-                    Tabular Reviews
+                    {t("titulo")}
                 </h1>
                 <div className="flex items-center gap-2">
                     <HeaderSearchBtn value={search} onChange={setSearch} placeholder={t("buscar")} />
