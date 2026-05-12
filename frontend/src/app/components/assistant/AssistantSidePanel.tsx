@@ -28,6 +28,7 @@ type CommonTab = {
     versionNumber: number | null;
     warning?: string | null;
     initialScrollTop?: number | null;
+    refetchKey?: number;
 };
 
 export type DocumentTab = CommonTab & { kind: "document" };
@@ -264,6 +265,7 @@ export function AssistantSidePanel({
                                 onScrollChange={(scrollTop) =>
                                     onScrollChange?.(tab.id, scrollTop)
                                 }
+                                refetchKey={tab.refetchKey}
                             />
                         </div>
                     );

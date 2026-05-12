@@ -242,15 +242,21 @@ export function ChatView({
             // (their sync effect keys off edit.status). Without this, a
             // resolve triggered from the inline EditCard or BulkEditActions
             // leaves the panel buttons looking live.
+            // Also bump refetchKey for all tabs showing this document to
+            // trigger a re-fetch of the updated bytes.
             setTabs((prev) =>
-                prev.map((t) =>
-                    t.kind === "edit" && t.edit.edit_id === args.editId
-                        ? {
-                              ...t,
-                              edit: { ...t.edit, status: args.status },
-                          }
-                        : t,
-                ),
+                prev.map((t) => {
+                    if (t.documentId !== args.documentId) return t;
+                    const refetchKey = (t.refetchKey ?? 0) + 1;
+                    if (t.kind === "edit" && t.edit.edit_id === args.editId) {
+                        return {
+                            ...t,
+                            edit: { ...t.edit, status: args.status },
+                            refetchKey,
+                        };
+                    }
+                    return { ...t, refetchKey };
+                }),
             );
             // Accept/reject mutates bytes for this document's current
             // version; drop the cache so the next DocxView render (or an

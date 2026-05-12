@@ -72,6 +72,8 @@ interface Props {
     onWarningDismiss?: () => void;
     initialScrollTop?: number | null;
     onScrollChange?: (scrollTop: number) => void;
+    /** Force re-fetch of docx bytes when this changes. */
+    refetchKey?: number;
 }
 
 /**
@@ -91,6 +93,7 @@ export function DocPanel({
     onWarningDismiss,
     initialScrollTop,
     onScrollChange,
+    refetchKey,
 }: Props) {
     // Pick the viewer from the filename only, not from mode. Switching
     // headers (citation ↔ edit ↔ document) for the same document must
@@ -158,6 +161,7 @@ export function DocPanel({
                 <DocxView
                     documentId={documentId}
                     versionId={versionId ?? undefined}
+                    refetchKey={refetchKey}
                     quotes={quotes}
                     highlightEdit={highlightEdit}
                     warning={warning ?? null}

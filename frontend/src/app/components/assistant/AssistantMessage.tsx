@@ -1102,7 +1102,6 @@ export function AssistantMessage({
         versionId: string | null;
         downloadUrl: string | null;
     }) => {
-        console.log("[AssistantMessage] handleEditResolved", args);
         if (args.downloadUrl) {
             setResolvedOverrides((prev) => ({
                 ...prev,
