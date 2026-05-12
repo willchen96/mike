@@ -14,10 +14,9 @@ function findMatch(
     opts: { w_id?: string | null; text?: string },
 ): HTMLElement | null {
     if (opts.w_id) {
-        // Values are numeric strings from our own backend — CSS.escape
-        // makes them hex-encoded which works but is harder to debug.
+        // Use CSS.escape for safety with non-numeric IDs from docx-track-changes
         const byId = container.querySelector(
-            `${tag}[data-w-id="${opts.w_id}"]`,
+            `${tag}[data-w-id="${CSS.escape(opts.w_id)}"]`,
         ) as HTMLElement | null;
         console.log("[EditCard] findMatch by w_id", {
             tag,
@@ -70,10 +69,18 @@ export function applyOptimisticResolution(
     if (typeof document === "undefined") return () => {};
 
     const hide = (el: HTMLElement) => {
+        console.log("[EditCard] hide() called on", el.tagName, el.textContent?.slice(0, 30), {
+            currentDisplay: getComputedStyle(el).display,
+            classList: [...el.classList],
+        });
         el.classList.add("docx-edit-hidden");
         const prev = el.style.getPropertyValue("display");
         const prevPriority = el.style.getPropertyPriority("display");
         el.style.setProperty("display", "none", "important");
+        console.log("[EditCard] hide() after setting style", {
+            inlineStyle: el.style.cssText,
+            computedDisplay: getComputedStyle(el).display,
+        });
         reverts.push(() => {
             el.classList.remove("docx-edit-hidden");
             if (prev) el.style.setProperty("display", prev, prevPriority);
@@ -81,6 +88,7 @@ export function applyOptimisticResolution(
         });
     };
     const keep = (el: HTMLElement) => {
+        console.log("[EditCard] keep() called on", el.tagName, el.textContent?.slice(0, 30));
         el.classList.add("docx-edit-kept");
         const snapshot = {
             color: [

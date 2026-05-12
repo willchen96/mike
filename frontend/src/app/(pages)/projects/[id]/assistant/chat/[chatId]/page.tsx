@@ -545,6 +545,7 @@ export default function ProjectAssistantChatPage({ params }: Props) {
         status: "accepted" | "rejected";
         versionId: string | null;
         downloadUrl: string | null;
+        isBulk?: boolean;
     }) => {
         // Mark edit as resolved so EditCard UI updates
         setResolvedEditStatuses((prev) => ({
@@ -564,11 +565,24 @@ export default function ProjectAssistantChatPage({ params }: Props) {
             next.delete(args.editId);
             return next;
         });
+        // For bulk operations, skip refetchKey bump (handled by handleBulkComplete)
+        if (args.isBulk) return;
         // Bump refetchKey to invalidate the cached docx bytes and re-render
         // with the resolved changes.
         setTabs((prev) =>
             prev.map((t) =>
                 t.documentId === args.documentId
+                    ? { ...t, refetchKey: (t.refetchKey ?? 0) + 1 }
+                    : t,
+            ),
+        );
+    };
+
+    const handleBulkComplete = (documentIds: string[]) => {
+        // Bump refetchKey once for all affected documents after bulk operation
+        setTabs((prev) =>
+            prev.map((t) =>
+                documentIds.includes(t.documentId)
                     ? { ...t, refetchKey: (t.refetchKey ?? 0) + 1 }
                     : t,
             ),
@@ -1252,6 +1266,7 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                                                 handleEditResolveStart
                                             }
                                             onEditResolved={handleEditResolved}
+                                            onBulkComplete={handleBulkComplete}
                                             onEditError={handleEditError}
                                             isDocReloading={(docId) =>
                                                 reloadingDocIds.has(docId)

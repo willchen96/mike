@@ -133,10 +133,9 @@ function scrollToHighlight(
 }
 
 /**
- * Fetch the ordered list of w:ids for every w:ins/w:del in the current
- * version and tag each rendered <ins>/<del> with data-w-id. The backend
- * returns ids in document order, and docx-preview emits <ins>/<del>
- * in the same order, so we can align by index.
+ * Fetch tracked change IDs with their text content and tag each rendered
+ * <ins>/<del> with data-w-id. We match by normalized text content since
+ * the backend order may not match DOM document order.
  */
 async function tagWIdsOnRenderedDom(
     container: HTMLElement,
@@ -165,23 +164,30 @@ async function tagWIdsOnRenderedDom(
             return;
         }
         const data = (await resp.json()) as {
-            ids: { kind: "ins" | "del"; w_id: string }[];
+            ids: { kind: "ins" | "del"; w_id: string; text: string }[];
         };
-        const domEls = Array.from(
-            container.querySelectorAll("ins, del"),
-        ) as HTMLElement[];
         const ids = data.ids ?? [];
-        let tagged = 0;
-        let mismatched = 0;
-        for (let i = 0; i < Math.min(domEls.length, ids.length); i++) {
-            const el = domEls[i];
-            const info = ids[i];
-            if (el.tagName.toLowerCase() !== info.kind) {
-                mismatched++;
-                continue;
+
+        // Normalize text for matching (collapse whitespace)
+        const normalize = (s: string) => s.replace(/\s+/g, " ").trim();
+
+        // Match by text content instead of relying on order
+        for (const info of ids) {
+            const selector = info.kind; // "ins" or "del"
+            const candidates = Array.from(
+                container.querySelectorAll(selector),
+            ) as HTMLElement[];
+
+            // Find element with matching text that hasn't been tagged yet
+            const targetText = normalize(info.text);
+            const match = candidates.find((el) => {
+                if (el.hasAttribute("data-w-id")) return false; // already tagged
+                return normalize(el.textContent ?? "") === targetText;
+            });
+
+            if (match) {
+                match.setAttribute("data-w-id", info.w_id);
             }
-            el.setAttribute("data-w-id", info.w_id);
-            tagged++;
         }
     } catch (e) {
         console.warn("[DocxView] tagWIdsOnRenderedDom failed", e);

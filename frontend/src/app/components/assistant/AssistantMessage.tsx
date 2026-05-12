@@ -48,6 +48,7 @@ function BulkEditActions({
     onViewClick,
     onResolveStart,
     onResolved,
+    onBulkComplete,
     onError,
 }: {
     pending: {
@@ -67,7 +68,11 @@ function BulkEditActions({
         status: "accepted" | "rejected";
         versionId: string | null;
         downloadUrl: string | null;
+        /** True when called from bulk operation (skip refetch, wait for onBulkComplete) */
+        isBulk?: boolean;
     }) => void;
+    /** Called once after all bulk operations complete with affected documentIds */
+    onBulkComplete?: (documentIds: string[]) => void;
     onError?: (args: {
         editId: string;
         documentId: string;
@@ -98,6 +103,7 @@ function BulkEditActions({
             // Sequential so the per-document version counter advances in a
             // predictable order and the viewer doesn't race between bumps.
             let done = 0;
+            const affectedDocIds = new Set<string>();
             for (const { annotation } of pending) {
                 onResolveStart?.({
                     editId: annotation.edit_id,
@@ -135,12 +141,14 @@ function BulkEditActions({
                     const nextStatus =
                         data.status ??
                         (verb === "accept" ? "accepted" : "rejected");
+                    affectedDocIds.add(annotation.document_id);
                     onResolved?.({
                         editId: annotation.edit_id,
                         documentId: annotation.document_id,
                         status: nextStatus,
                         versionId: data.version_id,
                         downloadUrl: data.download_url,
+                        isBulk: true,
                     });
                 } catch (e) {
                     console.error("[BulkEditActions] resolve failed", e);
@@ -164,6 +172,10 @@ function BulkEditActions({
                 }
                 done++;
                 setProgress({ done, total: pending.length });
+            }
+            // Trigger single refetch after all edits complete
+            if (affectedDocIds.size > 0) {
+                onBulkComplete?.([...affectedDocIds]);
             }
         } finally {
             setBusy(null);
@@ -230,6 +242,7 @@ function EditCardsSection({
     onViewClick,
     onResolveStart,
     onResolved,
+    onBulkComplete,
     onError,
 }: {
     pending: {
@@ -251,7 +264,9 @@ function EditCardsSection({
         status: "accepted" | "rejected";
         versionId: string | null;
         downloadUrl: string | null;
+        isBulk?: boolean;
     }) => void;
+    onBulkComplete?: (documentIds: string[]) => void;
     onError?: (args: {
         editId: string;
         documentId: string;
@@ -298,6 +313,7 @@ function EditCardsSection({
                         onViewClick={onViewClick}
                         onResolveStart={onResolveStart}
                         onResolved={onResolved}
+                        onBulkComplete={onBulkComplete}
                         onError={onError}
                     />
                 </div>
@@ -1044,7 +1060,10 @@ interface Props {
         status: "accepted" | "rejected";
         versionId: string | null;
         downloadUrl: string | null;
+        isBulk?: boolean;
     }) => void;
+    /** Called once after bulk accept/reject completes with affected documentIds */
+    onBulkComplete?: (documentIds: string[]) => void;
     onEditError?: (args: {
         editId: string;
         documentId: string;
@@ -1081,6 +1100,7 @@ export function AssistantMessage({
     onOpenDocument,
     onEditResolveStart,
     onEditResolved,
+    onBulkComplete,
     onEditError,
     isDocReloading,
     isEditReloading,
@@ -1101,6 +1121,7 @@ export function AssistantMessage({
         status: "accepted" | "rejected";
         versionId: string | null;
         downloadUrl: string | null;
+        isBulk?: boolean;
     }) => {
         if (args.downloadUrl) {
             setResolvedOverrides((prev) => ({
@@ -1486,6 +1507,7 @@ export function AssistantMessage({
                                         onViewClick={onEditViewClick}
                                         onResolveStart={onEditResolveStart}
                                         onResolved={handleEditResolved}
+                                        onBulkComplete={onBulkComplete}
                                         onError={onEditError}
                                     />
                                 );

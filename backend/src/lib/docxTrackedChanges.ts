@@ -11,6 +11,7 @@ import {
     type ContentRun,
     type EditResult,
     type AppliedEdit,
+    type TrackedChange,
 } from "docx-track-changes";
 
 // ---------------------------------------------------------------------------
@@ -140,8 +141,15 @@ export async function applyTrackedEdits(
         };
     }
 
+    // Get tracked changes from the result to properly identify del vs ins IDs
+    // (the library doesn't guarantee order in changeIds, so we look up by ID)
+    const trackedChangesMap = new Map<string, TrackedChange>();
+    for (const tc of doc.getTrackedChanges()) {
+        trackedChangesMap.set(tc.id, tc);
+    }
+
     // Build response
-    const changes = buildChanges(result, edits, indexMap, originalText);
+    const changes = buildChanges(result, edits, indexMap, originalText, trackedChangesMap);
     const errors = [
         ...validationErrors,
         ...buildErrors(result, indexMap),
@@ -247,6 +255,7 @@ function buildChanges(
     inputs: EditInput[],
     indexMap: Map<Edit, number>,
     originalText: Map<string, string>,
+    trackedChangesMap: Map<string, TrackedChange>,
 ): AppliedChange[] {
     return result.applied.map((applied) => {
         const inputIdx = indexMap.get(applied.edit) ?? -1;
@@ -254,6 +263,7 @@ function buildChanges(
         const { deletedText, insertedText, delId, insId } = extractChangeDetails(
             applied,
             originalText,
+            trackedChangesMap,
         );
 
         return {
@@ -267,36 +277,61 @@ function buildChanges(
     });
 }
 
+/**
+ * Identify del and ins IDs from changeIds by looking up their types in trackedChangesMap.
+ * This is more robust than assuming a specific order in the changeIds array.
+ */
+function identifyChangeIds(
+    changeIds: string[],
+    trackedChangesMap: Map<string, TrackedChange>,
+): { delId?: string; insId?: string } {
+    let delId: string | undefined;
+    let insId: string | undefined;
+
+    for (const id of changeIds) {
+        const tc = trackedChangesMap.get(id);
+        if (!tc) continue;
+        if (tc.type === "deletion" && !delId) {
+            delId = id;
+        } else if (tc.type === "insertion" && !insId) {
+            insId = id;
+        }
+    }
+
+    return { delId, insId };
+}
+
 function extractChangeDetails(
     applied: AppliedEdit,
     originalText: Map<string, string>,
+    trackedChangesMap: Map<string, TrackedChange>,
 ): { deletedText: string; insertedText: string; delId?: string; insId?: string } {
     const edit = applied.edit;
     const ids = applied.changeIds;
 
+    // Use the tracked changes map to correctly identify del vs ins IDs
+    const { delId, insId } = identifyChangeIds(ids, trackedChangesMap);
+
     switch (edit.type) {
-        case "replaceText": {
-            const hasDel = edit.find.length > 0;
-            const hasIns = edit.replace.length > 0;
+        case "replaceText":
             return {
                 deletedText: edit.find,
                 insertedText: edit.replace,
-                delId: hasDel ? ids[0] : undefined,
-                insId: hasIns ? ids[hasDel ? 1 : 0] : undefined,
+                delId,
+                insId,
             };
-        }
         case "replaceParagraph":
             return {
                 deletedText: originalText.get(edit.paraId) ?? "",
                 insertedText: contentToText(edit.content),
-                delId: ids[0],
-                insId: ids[1],
+                delId,
+                insId,
             };
         case "deleteParagraph":
             return {
                 deletedText: originalText.get(edit.paraId) ?? "",
                 insertedText: "",
-                delId: ids[0],
+                delId,
                 insId: undefined,
             };
         case "insertAfter":
@@ -305,7 +340,7 @@ function extractChangeDetails(
                 deletedText: "",
                 insertedText: contentToText(edit.content),
                 delId: undefined,
-                insId: ids[0],
+                insId,
             };
         default:
             return { deletedText: "", insertedText: "" };
@@ -328,16 +363,18 @@ function buildErrors(result: EditResult, indexMap: Map<Edit, number>): EditError
 // ---------------------------------------------------------------------------
 
 /**
- * Return all tracked change IDs in document order.
+ * Return all tracked change IDs with their text content.
  * Used by the frontend to map rendered <ins>/<del> elements to w:id values.
+ * Includes text so frontend can match by content (more reliable than index order).
  */
 export async function extractTrackedChangeIds(
     bytes: Buffer,
-): Promise<{ kind: "ins" | "del"; w_id: string }[]> {
+): Promise<{ kind: "ins" | "del"; w_id: string; text: string }[]> {
     const doc = await loadTrackable(bytes);
     return doc.getTrackedChanges().map((c) => ({
         kind: c.type === "insertion" ? "ins" : "del",
         w_id: c.id,
+        text: c.text,
     }));
 }
 
