@@ -5,6 +5,7 @@ const withNextIntl = createNextIntlPlugin();
 
 const nextConfig: NextConfig = {
     reactCompiler: true,
+    devIndicators: false,
     async rewrites() {
         return [
             {
