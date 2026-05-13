@@ -46,8 +46,23 @@ describe("user_id uuid migration", () => {
         expect(fkCount).toBeGreaterThanOrEqual(TABLES_REQUIRING_UUID.length);
     });
 
-    it("includes ON DELETE CASCADE for all FK constraints", () => {
-        const cascadeCount = (migrationSrc.match(/ON DELETE CASCADE/g) ?? []).length;
+    it("includes ON DELETE CASCADE or SET NULL for all FK constraints", () => {
+        const cascadeCount = (migrationSrc.match(/ON DELETE CASCADE|ON DELETE SET NULL/g) ?? []).length;
         expect(cascadeCount).toBeGreaterThanOrEqual(TABLES_REQUIRING_UUID.length);
+    });
+
+    it("workflows uses ON DELETE SET NULL to preserve shared workflows", () => {
+        // The workflows ALTER TABLE section starts after the section comment
+        const sectionStart = migrationSrc.indexOf("ALTER TABLE public.workflows");
+        const sectionEnd = migrationSrc.indexOf("public.hidden_workflows", sectionStart);
+        const workflowsSection = migrationSrc.slice(sectionStart, sectionEnd);
+        expect(workflowsSection).toMatch(/ON DELETE SET NULL/);
+    });
+
+    it("rollback script exists", async () => {
+        const { existsSync } = await import("fs");
+        expect(
+            existsSync(join(__dirname, "../../../migrations/20260513_userid_text_to_uuid.rollback.sql")),
+        ).toBe(true);
     });
 });

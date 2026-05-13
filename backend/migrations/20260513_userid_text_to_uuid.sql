@@ -104,6 +104,9 @@ ALTER TABLE public.tabular_review_chats
 
 -- ---------------------------------------------------------------------------
 -- workflows (user_id is nullable — system workflows have NULL)
+-- ON DELETE SET NULL rather than CASCADE: deleting a user orphans their
+-- workflows rather than deleting them, preserving shared workflow access
+-- for other users who have workflow_shares rows referencing these workflows.
 -- ---------------------------------------------------------------------------
 ALTER TABLE public.workflows
   ALTER COLUMN user_id TYPE uuid USING user_id::uuid;
@@ -112,7 +115,7 @@ ALTER TABLE public.workflows
   ADD CONSTRAINT workflows_user_id_fkey
   FOREIGN KEY (user_id)
   REFERENCES auth.users(id)
-  ON DELETE CASCADE;
+  ON DELETE SET NULL;
 
 -- ---------------------------------------------------------------------------
 -- hidden_workflows
