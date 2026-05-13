@@ -22,6 +22,22 @@ const devLog = (...args: Parameters<typeof console.log>) => {
     if (isDev) console.log(...args);
 };
 
+/** Extract a human-readable message from any thrown value. */
+function extractErrorMessage(err: unknown): string {
+    if (err && typeof err === "object") {
+        // Anthropic / OpenAI SDK errors nest the real message inside
+        // err.error.error.message or err.error.message
+        const e = err as Record<string, unknown>;
+        const inner = e.error as Record<string, unknown> | undefined;
+        const innerInner = inner?.error as Record<string, unknown> | undefined;
+        if (typeof innerInner?.message === "string") return innerInner.message;
+        if (typeof inner?.message === "string") return inner.message;
+        if (err instanceof Error) return err.message;
+    }
+    if (err instanceof Error) return err.message;
+    return "Unexpected stream error";
+}
+
 type AccessibleChat = {
     id: string;
     title: string | null;
@@ -589,7 +605,7 @@ chatRouter.post("/", requireAuth, async (req, res) => {
         console.error("[chat/stream] error:", err);
         try {
             write(
-                `data: ${JSON.stringify({ type: "error", message: "Stream error" })}\n\n`,
+                `data: ${JSON.stringify({ type: "error", message: extractErrorMessage(err) })}\n\n`,
             );
             write("data: [DONE]\n\n");
         } catch {

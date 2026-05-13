@@ -24,6 +24,20 @@ When the user wants to use an existing project document as a starting point for 
 
 export const projectChatRouter = Router({ mergeParams: true });
 
+/** Extract a human-readable message from any thrown value. */
+function extractErrorMessage(err: unknown): string {
+    if (err && typeof err === "object") {
+        const e = err as Record<string, unknown>;
+        const inner = e.error as Record<string, unknown> | undefined;
+        const innerInner = inner?.error as Record<string, unknown> | undefined;
+        if (typeof innerInner?.message === "string") return innerInner.message;
+        if (typeof inner?.message === "string") return inner.message;
+        if (err instanceof Error) return err.message;
+    }
+    if (err instanceof Error) return err.message;
+    return "Unexpected stream error";
+}
+
 // POST /projects/:projectId/chat — streaming
 projectChatRouter.post("/", requireAuth, async (req, res) => {
     const userId = res.locals.userId as string;
@@ -189,7 +203,7 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
         console.error("[project-chat/stream] error:", err);
         try {
             write(
-                `data: ${JSON.stringify({ type: "error", message: "Stream error" })}\n\n`,
+                `data: ${JSON.stringify({ type: "error", message: extractErrorMessage(err) })}\n\n`,
             );
             write("data: [DONE]\n\n");
         } catch {

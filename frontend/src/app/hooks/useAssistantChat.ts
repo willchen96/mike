@@ -411,6 +411,14 @@ export function useAssistantChat({
                             continue;
                         }
 
+                        if (data.type === "error") {
+                            throw new Error(
+                                typeof data.message === "string" && data.message
+                                    ? data.message
+                                    : t("erroGenerico"),
+                            );
+                        }
+
                         if (data.type === "content_done") {
                             setIsLoadingCitations(true);
                             continue;
