@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { signDownload, verifyDownload } from "../downloadTokens";
 import { saveUserApiKey } from "../userApiKeys";
 import { assertSecretIsolation } from "../startup";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const ENV_KEYS = [
     "DOWNLOAD_SIGNING_SECRET",
@@ -35,7 +36,7 @@ const mockDb = {
             }),
         }),
     }),
-};
+} as unknown as SupabaseClient;
 
 describe("downloadTokens secret isolation", () => {
     it("throws when DOWNLOAD_SIGNING_SECRET is absent even if SUPABASE_SECRET_KEY is set", () => {
@@ -63,7 +64,7 @@ describe("userApiKeys encryption secret isolation", () => {
     it("throws when USER_API_KEYS_ENCRYPTION_SECRET is absent even if SUPABASE_SECRET_KEY is set", async () => {
         process.env.SUPABASE_SECRET_KEY = "supabase-service-key";
         await expect(
-            saveUserApiKey("user-id", "claude", "sk-ant-valid", mockDb as never),
+            saveUserApiKey("user-id", "claude", "sk-ant-valid", mockDb),
         ).rejects.toThrow();
     });
 
@@ -71,7 +72,7 @@ describe("userApiKeys encryption secret isolation", () => {
         process.env.USER_API_KEYS_ENCRYPTION_SECRET =
             "dedicated-encryption-secret-32ch";
         await expect(
-            saveUserApiKey("user-id", "claude", "sk-ant-valid", mockDb as never),
+            saveUserApiKey("user-id", "claude", "sk-ant-valid", mockDb),
         ).resolves.not.toThrow();
     });
 });
@@ -102,6 +103,15 @@ describe("assertSecretIsolation", () => {
         process.env.USER_API_KEYS_ENCRYPTION_SECRET = "shared-secret";
         expect(() => assertSecretIsolation()).toThrow(
             /USER_API_KEYS_ENCRYPTION_SECRET/,
+        );
+    });
+
+    it("throws when DOWNLOAD_SIGNING_SECRET equals USER_API_KEYS_ENCRYPTION_SECRET", () => {
+        process.env.SUPABASE_SECRET_KEY = "supabase-secret";
+        process.env.DOWNLOAD_SIGNING_SECRET = "shared-app-secret";
+        process.env.USER_API_KEYS_ENCRYPTION_SECRET = "shared-app-secret";
+        expect(() => assertSecretIsolation()).toThrow(
+            /DOWNLOAD_SIGNING_SECRET.*USER_API_KEYS_ENCRYPTION_SECRET/,
         );
     });
 

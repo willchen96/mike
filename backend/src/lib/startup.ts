@@ -23,4 +23,9 @@ export function assertSecretIsolation(): void {
             "USER_API_KEYS_ENCRYPTION_SECRET must not be the same as SUPABASE_SECRET_KEY.",
         );
     }
+    if (downloadSecret === encryptionSecret) {
+        throw new Error(
+            "DOWNLOAD_SIGNING_SECRET and USER_API_KEYS_ENCRYPTION_SECRET must not be the same value.",
+        );
+    }
 }
