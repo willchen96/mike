@@ -16,6 +16,8 @@ import { checkProjectAccess } from "../lib/access";
 
 export const chatRouter = Router();
 
+const STREAM_TIMEOUT_MS = 180_000;
+
 type Db = ReturnType<typeof createServerSupabase>;
 const isDev = process.env.NODE_ENV !== "production";
 const devLog = (...args: Parameters<typeof console.log>) => {
@@ -553,18 +555,27 @@ chatRouter.post("/", requireAuth, async (req, res) => {
     try {
         write(`data: ${JSON.stringify({ type: "chat_id", chatId })}\n\n`);
 
-        const { fullText, events } = await runLLMStream({
-            apiMessages,
-            docStore,
-            docIndex,
-            userId,
-            db,
-            write,
-            workflowStore,
-            model,
-            apiKeys,
-            projectId: resolvedProjectId,
-        });
+        const streamTimeout = new Promise<never>((_, reject) =>
+            setTimeout(
+                () => reject(new Error("Stream timed out")),
+                STREAM_TIMEOUT_MS,
+            ),
+        );
+        const { fullText, events } = await Promise.race([
+            runLLMStream({
+                apiMessages,
+                docStore,
+                docIndex,
+                userId,
+                db,
+                write,
+                workflowStore,
+                model,
+                apiKeys,
+                projectId: resolvedProjectId,
+            }),
+            streamTimeout,
+        ]);
 
         devLog("[chat/stream] LLM stream finished", {
             fullTextLen: fullText?.length ?? 0,
@@ -587,9 +598,10 @@ chatRouter.post("/", requireAuth, async (req, res) => {
         }
     } catch (err) {
         console.error("[chat/stream] error:", err);
+        const isTimeout = err instanceof Error && err.message === "Stream timed out";
         try {
             write(
-                `data: ${JSON.stringify({ type: "error", message: "Stream error" })}\n\n`,
+                `data: ${JSON.stringify({ type: "error", message: isTimeout ? "Request timed out" : "Stream error" })}\n\n`,
             );
             write("data: [DONE]\n\n");
         } catch {

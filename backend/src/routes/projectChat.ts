@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
 import { createServerSupabase } from "../lib/supabase";
+
+const STREAM_TIMEOUT_MS = 180_000;
 import {
     buildProjectDocContext,
     buildMessages,
@@ -157,19 +159,28 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
     try {
         write(`data: ${JSON.stringify({ type: "chat_id", chatId })}\n\n`);
 
-        const { fullText, events } = await runLLMStream({
-            apiMessages,
-            docStore,
-            docIndex,
-            userId,
-            db,
-            write,
-            extraTools: PROJECT_EXTRA_TOOLS,
-            workflowStore,
-            model,
-            apiKeys,
-            projectId,
-        });
+        const streamTimeout = new Promise<never>((_, reject) =>
+            setTimeout(
+                () => reject(new Error("Stream timed out")),
+                STREAM_TIMEOUT_MS,
+            ),
+        );
+        const { fullText, events } = await Promise.race([
+            runLLMStream({
+                apiMessages,
+                docStore,
+                docIndex,
+                userId,
+                db,
+                write,
+                extraTools: PROJECT_EXTRA_TOOLS,
+                workflowStore,
+                model,
+                apiKeys,
+                projectId,
+            }),
+            streamTimeout,
+        ]);
 
         const annotations = extractAnnotations(fullText, docIndex, events);
         await db.from("chat_messages").insert({
@@ -187,9 +198,10 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
         }
     } catch (err) {
         console.error("[project-chat/stream] error:", err);
+        const isTimeout = err instanceof Error && err.message === "Stream timed out";
         try {
             write(
-                `data: ${JSON.stringify({ type: "error", message: "Stream error" })}\n\n`,
+                `data: ${JSON.stringify({ type: "error", message: isTimeout ? "Request timed out" : "Stream error" })}\n\n`,
             );
             write("data: [DONE]\n\n");
         } catch {
