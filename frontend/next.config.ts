@@ -21,6 +21,16 @@ const nextConfig: NextConfig = {
     async headers() {
         const supabaseOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
         const apiOrigin = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+
+        // These env vars must be set at build time for production CSP to allow
+        // API and Supabase traffic. Without them, connect-src degrades to 'self'
+        // and all API calls will be blocked by the browser.
+        if (!isDev && (!supabaseOrigin || !apiOrigin)) {
+            throw new Error(
+                "NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_API_BASE_URL must be set at build time for production builds.",
+            );
+        }
+
         const allowedConnectSrc = ["'self'", supabaseOrigin, apiOrigin]
             .filter(Boolean)
             .join(" ");
