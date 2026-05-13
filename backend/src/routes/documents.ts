@@ -705,10 +705,14 @@ async function handleEditResolution(
   if (!found) {
     // Still update DB status so the UI reflects the decision — the change
     // may have been auto-consumed by a previous accept/reject pass.
-    await db
+    const { error: notFoundUpdErr } = await db
       .from("document_edits")
       .update({ status: mode === "accept" ? "accepted" : "rejected", resolved_at: new Date().toISOString() })
       .eq("id", editId);
+    if (notFoundUpdErr) {
+      console.error("[edit-resolution] failed to update edit status", { error: notFoundUpdErr.message });
+      return void res.status(500).json({ detail: "Failed to save resolution" });
+    }
     const { data: filenameRow } = await db
       .from("documents")
       .select("filename")
@@ -741,13 +745,17 @@ async function handleEditResolution(
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   );
 
-  await db
+  const { error: statusErr } = await db
     .from("document_edits")
     .update({
       status: mode === "accept" ? "accepted" : "rejected",
       resolved_at: new Date().toISOString(),
     })
     .eq("id", editId);
+  if (statusErr) {
+    console.error("[edit-resolution] failed to update edit status", { error: statusErr.message });
+    return void res.status(500).json({ detail: "Failed to save resolution" });
+  }
 
   const { count: remainingPending } = await db
     .from("document_edits")
