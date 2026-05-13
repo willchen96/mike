@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { assertSecretIsolation } from "./lib/startup";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -11,6 +12,8 @@ import { tabularRouter } from "./routes/tabular";
 import { workflowsRouter } from "./routes/workflows";
 import { userRouter } from "./routes/user";
 import { downloadsRouter } from "./routes/downloads";
+
+assertSecretIsolation();
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;

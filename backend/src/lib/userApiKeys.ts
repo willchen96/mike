@@ -37,12 +37,12 @@ export function hasEnvApiKey(provider: ApiKeyProvider): boolean {
 }
 
 function encryptionKey(): Buffer {
-    const secret =
-        process.env.USER_API_KEYS_ENCRYPTION_SECRET ||
-        process.env.API_KEYS_ENCRYPTION_SECRET ||
-        process.env.SUPABASE_SECRET_KEY;
+    const secret = process.env.USER_API_KEYS_ENCRYPTION_SECRET;
     if (!secret) {
-        throw new Error("API key encryption secret is not configured");
+        throw new Error(
+            "USER_API_KEYS_ENCRYPTION_SECRET must be set. " +
+                "Generate a strong random value (e.g. `openssl rand -hex 32`) and set it in the environment.",
+        );
     }
     return crypto.createHash("sha256").update(secret).digest();
 }
