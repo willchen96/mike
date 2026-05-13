@@ -1,17 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock @supabase/supabase-js before importing the module under test
+// Stable mock reference shared across module resets
+const { mockGetUser } = vi.hoisted(() => ({
+    mockGetUser: vi
+        .fn()
+        .mockResolvedValue({ data: { user: { id: "real-user-id" } } }),
+}));
+
 vi.mock("@supabase/supabase-js", () => ({
     createClient: vi.fn(() => ({
-        auth: {
-            getUser: vi.fn().mockResolvedValue({ data: { user: { id: "real-user-id" } } }),
-        },
+        auth: { getUser: mockGetUser },
     })),
 }));
 
 describe("getUserIdFromRequest", () => {
     beforeEach(() => {
         vi.resetModules();
+        mockGetUser.mockResolvedValue({ data: { user: { id: "real-user-id" } } });
         delete process.env.NEXT_PUBLIC_SUPABASE_URL;
         delete process.env.SUPABASE_SECRET_KEY;
     });
@@ -22,8 +27,8 @@ describe("getUserIdFromRequest", () => {
         const req = new Request("http://localhost", {
             headers: { authorization: "Bearer any-uuid-here" },
         });
-        await expect(getUserIdFromRequest(req)).rejects.toBeInstanceOf(Response);
-        const err = await getUserIdFromRequest(req).catch((r: Response) => r);
+        const err = await getUserIdFromRequest(req).catch((r) => r);
+        expect(err).toBeInstanceOf(Response);
         expect((err as Response).status).toBe(500);
     });
 
@@ -33,7 +38,8 @@ describe("getUserIdFromRequest", () => {
         const req = new Request("http://localhost", {
             headers: { authorization: "Bearer any-uuid-here" },
         });
-        const err = await getUserIdFromRequest(req).catch((r: Response) => r);
+        const err = await getUserIdFromRequest(req).catch((r) => r);
+        expect(err).toBeInstanceOf(Response);
         expect((err as Response).status).toBe(500);
     });
 
@@ -42,7 +48,8 @@ describe("getUserIdFromRequest", () => {
         const req = new Request("http://localhost", {
             headers: { authorization: "Bearer any-uuid-here" },
         });
-        const err = await getUserIdFromRequest(req).catch((r: Response) => r);
+        const err = await getUserIdFromRequest(req).catch((r) => r);
+        expect(err).toBeInstanceOf(Response);
         expect((err as Response).status).toBe(500);
     });
 
@@ -51,7 +58,32 @@ describe("getUserIdFromRequest", () => {
         process.env.SUPABASE_SECRET_KEY = "service-key";
         const { getUserIdFromRequest } = await import("../supabase-server");
         const req = new Request("http://localhost");
-        const err = await getUserIdFromRequest(req).catch((r: Response) => r);
+        const err = await getUserIdFromRequest(req).catch((r) => r);
+        expect(err).toBeInstanceOf(Response);
+        expect((err as Response).status).toBe(401);
+    });
+
+    it("returns the user ID for a valid token", async () => {
+        process.env.NEXT_PUBLIC_SUPABASE_URL = "https://project.supabase.co";
+        process.env.SUPABASE_SECRET_KEY = "service-key";
+        const { getUserIdFromRequest } = await import("../supabase-server");
+        const req = new Request("http://localhost", {
+            headers: { authorization: "Bearer valid-jwt-token" },
+        });
+        const userId = await getUserIdFromRequest(req);
+        expect(userId).toBe("real-user-id");
+    });
+
+    it("throws 401 when the token is invalid or expired", async () => {
+        mockGetUser.mockResolvedValueOnce({ data: { user: null } });
+        process.env.NEXT_PUBLIC_SUPABASE_URL = "https://project.supabase.co";
+        process.env.SUPABASE_SECRET_KEY = "service-key";
+        const { getUserIdFromRequest } = await import("../supabase-server");
+        const req = new Request("http://localhost", {
+            headers: { authorization: "Bearer expired-token" },
+        });
+        const err = await getUserIdFromRequest(req).catch((r) => r);
+        expect(err).toBeInstanceOf(Response);
         expect((err as Response).status).toBe(401);
     });
 });
