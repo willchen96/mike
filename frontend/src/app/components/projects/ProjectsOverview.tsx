@@ -11,6 +11,7 @@ import type { MikeProject } from "@/app/components/shared/types";
 import { NewProjectModal } from "./NewProjectModal";
 import { ToolbarTabs } from "@/app/components/shared/ToolbarTabs";
 import { RowActions } from "@/app/components/shared/RowActions";
+import { useTranslations } from "next-intl";
 
 function formatDate(iso: string) {
     return new Date(iso).toLocaleDateString(undefined, {
@@ -41,6 +42,7 @@ export function ProjectsOverview() {
     const actionsRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
     const { user } = useAuth();
+    const t = useTranslations("projects.visaoGeral");
 
     useEffect(() => {
         listProjects()
@@ -100,9 +102,9 @@ export function ProjectsOverview() {
     }
 
     const tabs: { id: Tab; label: string }[] = [
-        { id: "all", label: "All" },
-        { id: "mine", label: "Mine" },
-        { id: "shared-with-me", label: "Shared with me" },
+        { id: "all", label: t("tabTodos") },
+        { id: "mine", label: t("tabMeus") },
+        { id: "shared-with-me", label: t("tabCompartilhados") },
     ];
 
     async function handleRenameSubmit(projectId: string) {
@@ -141,9 +143,7 @@ export function ProjectsOverview() {
         await Promise.all(owned.map((id) => deleteProject(id).catch(() => {})));
         setProjects((prev) => prev.filter((p) => !owned.includes(p.id)));
         if (blocked > 0) {
-            setOwnerOnlyAction(
-                `delete ${blocked} of the selected projects — only the project owner can delete a project`,
-            );
+            setOwnerOnlyAction(t("ownerExcluirProjetos", { count: blocked }));
         }
     }
 
@@ -155,7 +155,7 @@ export function ProjectsOverview() {
                         onClick={() => setActionsOpen((v) => !v)}
                         className="flex items-center gap-1 text-xs font-medium text-gray-700 hover:text-gray-900 transition-colors"
                     >
-                        Actions
+                        {t("acoes")}
                         <ChevronDown className="h-3.5 w-3.5" />
                     </button>
                     {actionsOpen && (
@@ -164,7 +164,7 @@ export function ProjectsOverview() {
                                 onClick={handleDeleteSelected}
                                 className="w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 transition-colors"
                             >
-                                Delete
+                                {t("excluir")}
                             </button>
                         </div>
                     )}
@@ -178,13 +178,13 @@ export function ProjectsOverview() {
             {/* Page header */}
             <div className="flex items-center justify-between px-8 py-4">
                 <h1 className="text-2xl font-medium font-serif text-gray-900">
-                    Projects
+                    {t("titulo")}
                 </h1>
                 <div className="flex items-center gap-2">
                     <HeaderSearchBtn
                         value={search}
                         onChange={setSearch}
-                        placeholder="Search projects…"
+                        placeholder={t("buscar")}
                     />
                     <button
                         onClick={() => setModalOpen(true)}
@@ -221,15 +221,15 @@ export function ProjectsOverview() {
                         )}
                     </div>
                     <div className={`sticky left-8 z-[60] ${NAME_COL_W} bg-white pl-2 text-left`}>
-                        Name
+                        {t("colunaNome")}
                     </div>
-                    <div className="ml-auto w-32 shrink-0 text-left">CM</div>
-                    <div className="w-24 shrink-0 text-left">Files</div>
-                    <div className="w-24 shrink-0 text-left">Chats</div>
+                    <div className="ml-auto w-32 shrink-0 text-left">{t("colunaReferencia")}</div>
+                    <div className="w-24 shrink-0 text-left">{t("colunaArquivos")}</div>
+                    <div className="w-24 shrink-0 text-left">{t("colunaConversas")}</div>
                     <div className="w-36 shrink-0 text-left">
-                        Tabular Reviews
+                        {t("colunaRevisoes")}
                     </div>
-                    <div className="w-32 shrink-0 text-left">Created</div>
+                    <div className="w-32 shrink-0 text-left">{t("colunaCriado")}</div>
                     <div className="w-8 shrink-0" />
                 </div>
 
@@ -269,23 +269,21 @@ export function ProjectsOverview() {
                             <>
                                 <FolderOpen className="h-8 w-8 text-gray-300 mb-4" />
                                 <p className="text-2xl font-medium font-serif text-gray-900">
-                                    Projects
+                                    {t("estadoVazioTitulo")}
                                 </p>
                                 <p className="mt-1 text-xs text-gray-400 max-w-xs">
-                                    Upload documents into projects and to
-                                    commence chats and tabular reviews with
-                                    them.
+                                    {t("estadoVazioDescricao")}
                                 </p>
                                 <button
                                     onClick={() => setModalOpen(true)}
                                     className="mt-4 inline-flex items-center gap-1 rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white hover:bg-gray-700 transition-colors shadow-md"
                                 >
-                                    + Create New
+                                    {t("criarNovo")}
                                 </button>
                             </>
                         ) : (
                             <p className="text-sm text-gray-400">
-                                No {activeTab} projects
+                                {t("nenhumCompartilhado")}
                             </p>
                         )}
                     </div>
@@ -368,7 +366,7 @@ export function ProjectsOverview() {
                                             onBlur={() =>
                                                 handleCmSubmit(project.id)
                                             }
-                                            placeholder="CM #"
+                                            placeholder={t("placeholderReferencia")}
                                             className="w-full text-sm text-gray-800 bg-transparent outline-none"
                                         />
                                     ) : (

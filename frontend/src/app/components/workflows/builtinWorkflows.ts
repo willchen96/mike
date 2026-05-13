@@ -8,7 +8,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "Generate CP Checklist",
         type: "assistant",
-        practice: "General Transactions",
+        practice: "Contratos e Transações",
         prompt_md:
             "## Generate Conditions Precedent Checklist\n\n" +
             "Review the uploaded credit agreement or financing document and generate a comprehensive " +
@@ -33,7 +33,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "Change of Control Review",
         type: "tabular",
-        practice: "Corporate",
+        practice: "Direito Societário",
         prompt_md:
             "## Change of Control Due Diligence Review\n\n" +
             "This workflow performs a change of control due diligence review across the selected documents.",
@@ -90,7 +90,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "Credit Agreement Summary",
         type: "assistant",
-        practice: "Finance",
+        practice: "Direito Financeiro",
         prompt_md:
             "## Credit Agreement Summary\n\n" +
             "Review the uploaded credit agreement and produce a comprehensive legal summary covering the following topics. " +
@@ -128,7 +128,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "Commercial Agreement Review",
         type: "tabular",
-        practice: "General Transactions",
+        practice: "Contratos e Transações",
         prompt_md: null,
         columns_config: [
             {
@@ -250,7 +250,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "Credit Agreement Review",
         type: "tabular",
-        practice: "Finance",
+        practice: "Direito Financeiro",
         prompt_md: null,
         columns_config: [
             {
@@ -390,7 +390,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "E-Discovery Review",
         type: "tabular",
-        practice: "Litigation",
+        practice: "Contencioso",
         prompt_md: null,
         columns_config: [
             {
@@ -446,7 +446,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "Supply Agreement Review",
         type: "tabular",
-        practice: "General Transactions",
+        practice: "Contratos e Transações",
         prompt_md: null,
         columns_config: [
             {
@@ -544,7 +544,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "SPA Review",
         type: "tabular",
-        practice: "Corporate",
+        practice: "Direito Societário",
         prompt_md: null,
         columns_config: [
             {
@@ -636,7 +636,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "NDA Review",
         type: "tabular",
-        practice: "General Transactions",
+        practice: "Contratos e Transações",
         prompt_md: null,
         columns_config: [
             {
@@ -705,7 +705,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "Commercial Lease Review",
         type: "tabular",
-        practice: "Real Estate",
+        practice: "Direito Imobiliário",
         prompt_md: null,
         columns_config: [
             {
@@ -973,7 +973,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "Shareholder Agreement Summary",
         type: "assistant",
-        practice: "Corporate",
+        practice: "Direito Societário",
         prompt_md:
             "## Shareholder Agreement Summary\n\n" +
             "Review the uploaded shareholder agreement and produce a comprehensive legal summary covering the following topics. " +
@@ -1005,7 +1005,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "Shareholder Agreement Review",
         type: "tabular",
-        practice: "Corporate",
+        practice: "Direito Societário",
         prompt_md: null,
         columns_config: [
             {
@@ -1139,7 +1139,7 @@ export const BUILT_IN_WORKFLOWS: MikeWorkflow[] = [
         created_at: "",
         title: "Employment Agreement Review",
         type: "tabular",
-        practice: "Employment",
+        practice: "Direito do Trabalho",
         prompt_md: null,
         columns_config: [
             {

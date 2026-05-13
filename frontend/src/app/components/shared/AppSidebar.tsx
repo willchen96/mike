@@ -16,16 +16,10 @@ import { useUserProfile } from "@/contexts/UserProfileContext";
 import { useChatHistoryContext } from "@/app/contexts/ChatHistoryContext";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { MikeIcon } from "@/components/chat/mike-icon";
+import { AppLogo } from "@/components/chat/app-logo";
 import { SidebarChatItem } from "@/app/components/shared/SidebarChatItem";
 import { listProjects } from "@/app/lib/mikeApi";
-
-const NAV_ITEMS = [
-    { href: "/assistant", label: "Assistant", icon: MessageSquare },
-    { href: "/projects", label: "Projects", icon: FolderOpen },
-    { href: "/tabular-reviews", label: "Tabular Review", icon: Table2 },
-    { href: "/workflows", label: "Workflows", icon: Library },
-];
+import { useTranslations } from "next-intl";
 
 interface AppSidebarProps {
     isOpen: boolean;
@@ -33,6 +27,13 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
+    const t = useTranslations("shared.appSidebar");
+    const NAV_ITEMS = [
+        { href: "/assistant", label: t("navAssistente"), icon: MessageSquare },
+        { href: "/projects", label: t("navProjetos"), icon: FolderOpen },
+        { href: "/tabular-reviews", label: t("navRevisoesTabulares"), icon: Table2 },
+        { href: "/workflows", label: t("navWorkflows"), icon: Library },
+    ];
     const { user } = useAuth();
     const { profile } = useUserProfile();
     const { chats, currentChatId, setCurrentChatId } = useChatHistoryContext();
@@ -127,13 +128,13 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                             href="/assistant"
                             className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
                         >
-                            <MikeIcon size={22} />
+                            <AppLogo size={22} />
                             <span
                                 className={`text-2xl font-light font-serif ${
                                     shouldAnimate ? "sidebar-fade-in" : ""
                                 }`}
                             >
-                                Mike
+                                {t("nomeApp")}
                             </span>
                         </Link>
                     </div>
@@ -141,7 +142,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                 <button
                     onClick={onToggle}
                     className="h-9 w-9 p-2.5 items-center flex hover:bg-gray-100 rounded-md transition-colors"
-                    title={isOpen ? "Close sidebar" : "Open sidebar"}
+                    title={isOpen ? t("fecharMenu") : t("abrirMenu")}
                 >
                     <PanelLeft className="h-4 w-4" />
                 </button>
@@ -190,7 +191,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                             shouldAnimate ? "sidebar-fade-in" : ""
                         }`}
                     >
-                        <span>Assistant History</span>
+                        <span>{t("historicoAssistente")}</span>
                         <ChevronDown
                             className={`h-3.5 w-3.5 transition-transform ${historyCollapsed ? "-rotate-90" : ""}`}
                         />
@@ -218,7 +219,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                                     shouldAnimate ? "sidebar-fade-in-2" : ""
                                 }`}
                             >
-                                No chats yet
+                                {t("nenhumaConversa")}
                             </div>
                         ) : (
                             <div
@@ -299,7 +300,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                                     className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 rounded-md"
                                 >
                                     <User className="h-4 w-4" />
-                                    Account Settings
+                                    {t("configConta")}
                                 </button>
                             </div>
                         )}

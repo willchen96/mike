@@ -14,6 +14,7 @@ import { FileDirectory } from "./FileDirectory";
 import { useDirectoryData, invalidateDirectoryCache } from "./useDirectoryData";
 import { OwnerOnlyModal } from "./OwnerOnlyModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTranslations } from "next-intl";
 
 export { invalidateDirectoryCache };
 
@@ -36,6 +37,7 @@ export function AddDocumentsModal({
 }: Props) {
     const { loading, standaloneDocuments, projects } = useDirectoryData(open);
     const { user } = useAuth();
+    const t = useTranslations("modals.addDocuments");
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [uploading, setUploading] = useState(false);
     const [search, setSearch] = useState("");
@@ -146,9 +148,7 @@ export function AddDocumentsModal({
         });
         const blocked = ids.length - owned.length;
         if (owned.length === 0 && blocked > 0) {
-            setOwnerOnlyAction(
-                "delete these documents — only the document creator can delete a document",
-            );
+            setOwnerOnlyAction(t("avisoOwnerSingular"));
             return;
         }
         const idSet = new Set(owned);
@@ -166,9 +166,7 @@ export function AddDocumentsModal({
             return next;
         });
         if (blocked > 0) {
-            setOwnerOnlyAction(
-                `delete ${blocked} of the selected documents — only the document creator can delete a document`,
-            );
+            setOwnerOnlyAction(t("avisoOwnerParcial", { count: blocked }));
         }
     }
 
@@ -224,7 +222,7 @@ export function AddDocumentsModal({
                         <Search className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                         <input
                             type="text"
-                            placeholder="Search…"
+                            placeholder={t("buscar")}
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="flex-1 bg-transparent text-sm text-gray-700 placeholder:text-gray-400 outline-none"
@@ -252,7 +250,7 @@ export function AddDocumentsModal({
                         allowMultiple={allowMultiple}
                         forceExpanded={!!q}
                         emptyMessage={
-                            q ? "No matches found" : "No documents yet"
+                            q ? t("nenhumResultado") : t("nenhumDocumento")
                         }
                         onDelete={handleDelete}
                     />
@@ -279,27 +277,27 @@ export function AddDocumentsModal({
                             ) : (
                                 <Upload className="h-3.5 w-3.5" />
                             )}
-                            {uploading ? "Uploading…" : "Upload"}
+                            {uploading ? t("enviando") : t("enviarArquivo")}
                         </button>
                     </div>
                     <div className="flex items-center gap-2">
                         {selectedIds.size > 0 && (
                             <span className="text-xs text-gray-400">
-                                {selectedIds.size} selected
+                                {t("selecionados", { count: selectedIds.size })}
                             </span>
                         )}
                         <button
                             onClick={onClose}
                             className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100"
                         >
-                            Cancel
+                            {t("cancelar")}
                         </button>
                         <button
                             onClick={handleConfirm}
                             disabled={selectedIds.size === 0 || uploading}
                             className="rounded-lg bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-40"
                         >
-                            {uploading ? "Saving…" : "Confirm"}
+                            {uploading ? t("salvando") : t("confirmar")}
                         </button>
                     </div>
                 </div>

@@ -5,6 +5,7 @@ import { X, MessageSquare, Table2 } from "lucide-react";
 import { createWorkflow, updateWorkflow } from "@/app/lib/mikeApi";
 import type { MikeWorkflow } from "../shared/types";
 import { PRACTICE_OPTIONS } from "./practices";
+import { useTranslations } from "next-intl";
 
 interface Props {
     open: boolean;
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpdated }: Props) {
+    const t = useTranslations("workflows.novoModal");
     const [title, setTitle] = useState("");
     const [type, setType] = useState<"assistant" | "tabular">("assistant");
     const [practice, setPractice] = useState<string>("");
@@ -75,7 +77,7 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
             resetForm();
             onClose();
         } catch (err: unknown) {
-            setError((err as Error).message || `Failed to ${isEditing ? "update" : "create"} workflow`);
+            setError((err as Error).message || (isEditing ? t("erroAtualizar") : t("erroCriar")));
         } finally {
             setLoading(false);
         }
@@ -100,9 +102,9 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 pt-5 pb-2 shrink-0">
                     <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                        <span>Workflows</span>
+                        <span>{t("breadcrumb")}</span>
                         <span>›</span>
-                        <span>{isEditing ? "Edit workflow" : "New workflow"}</span>
+                        <span>{isEditing ? t("editarWorkflow") : t("novoWorkflow")}</span>
                     </div>
                     <button
                         onClick={handleClose}
@@ -120,7 +122,7 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
-                            placeholder="Workflow name"
+                            placeholder={t("placeholderNome")}
                             className="w-full text-2xl font-serif text-gray-800 placeholder-gray-300 focus:outline-none bg-transparent"
                             autoFocus
                         />
@@ -128,7 +130,7 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
                         {/* Type pills — only shown when creating */}
                         {!isEditing && (
                             <div className="mt-5">
-                                <p className="mb-2 text-sm font-medium text-gray-500">Type</p>
+                                <p className="mb-2 text-sm font-medium text-gray-500">{t("tipo")}</p>
                                 <div className="flex items-center gap-2">
                                     <button
                                         type="button"
@@ -140,7 +142,7 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
                                         }`}
                                     >
                                         <MessageSquare className="h-3 w-3" />
-                                        Assistant
+                                        {t("assistente")}
                                     </button>
                                     <button
                                         type="button"
@@ -152,7 +154,7 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
                                         }`}
                                     >
                                         <Table2 className="h-3 w-3" />
-                                        Tabular
+                                        {t("tabular")}
                                     </button>
                                 </div>
                             </div>
@@ -160,7 +162,7 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
 
                         {/* Practice */}
                         <div className="mt-5">
-                            <p className="mb-2 text-sm font-medium text-gray-500">Practice Area</p>
+                            <p className="mb-2 text-sm font-medium text-gray-500">{t("areaDePratica")}</p>
                             <div className="flex flex-wrap gap-2">
                                 {PRACTICE_OPTIONS.map((p) => (
                                     <button
@@ -183,7 +185,7 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
                                     type="text"
                                     value={customPractice}
                                     onChange={(e) => setCustomPractice(e.target.value)}
-                                    placeholder="Enter practice area…"
+                                    placeholder={t("placeholderAreaDePratica")}
                                     className="mt-3 w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 placeholder-gray-400 focus:border-gray-400 focus:outline-none"
                                 />
                             )}
@@ -201,14 +203,14 @@ export function NewWorkflowModal({ open, onClose, onCreated, editWorkflow, onUpd
                             onClick={handleClose}
                             className="rounded-lg px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 transition-colors"
                         >
-                            Cancel
+                            {t("cancelar")}
                         </button>
                         <button
                             type="submit"
                             disabled={!title.trim() || loading}
                             className="rounded-lg bg-gray-900 px-5 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-40 transition-colors"
                         >
-                            {loading ? (isEditing ? "Saving…" : "Creating…") : (isEditing ? "Save changes" : "Create workflow")}
+                            {loading ? (isEditing ? t("salvando") : t("criando")) : (isEditing ? t("salvarAlteracoes") : t("criarWorkflow"))}
                         </button>
                     </div>
                 </form>

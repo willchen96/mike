@@ -3,10 +3,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfile } from "@/contexts/UserProfileContext";
-import { MikeIcon } from "@/components/chat/mike-icon";
+import { AppLogo } from "@/components/chat/app-logo";
 import { ChatInput } from "./ChatInput";
 import { SelectAssistantProjectModal } from "./SelectAssistantProjectModal";
 import type { MikeMessage } from "../shared/types";
+import { useTranslations } from "next-intl";
 
 interface InitialViewProps {
     onSubmit: (message: MikeMessage) => void;
@@ -16,6 +17,7 @@ const ICON_SIZE = 35;
 const GAP = 16; // gap-4 = 1rem = 16px
 
 export function InitialView({ onSubmit }: InitialViewProps) {
+    const t = useTranslations("assistant");
     const { user } = useAuth();
     const { profile } = useUserProfile();
     const [loaded, setLoaded] = useState(false);
@@ -56,7 +58,7 @@ export function InitialView({ onSubmit }: InitialViewProps) {
                                     "transform 900ms cubic-bezier(0.25, 0.46, 0.45, 0.94)",
                             }}
                         >
-                            <MikeIcon size={ICON_SIZE} />
+                            <AppLogo size={ICON_SIZE} />
                         </div>
                         <h1
                             ref={textRef}
@@ -71,7 +73,7 @@ export function InitialView({ onSubmit }: InitialViewProps) {
                                     "transform 900ms cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 800ms ease-in-out 300ms",
                             }}
                         >
-                            Hi, {username}
+                            {t("initialView.saudacao", { username })}
                         </h1>
                     </div>
 
@@ -84,7 +86,7 @@ export function InitialView({ onSubmit }: InitialViewProps) {
 
                     <div className="text-center">
                         <p className="text-xs py-3 mb-3 text-gray-500">
-                            AI can make mistakes. Answers are not legal advice.
+                            {t("avisoIA")}
                         </p>
                     </div>
                 </div>

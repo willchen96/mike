@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { streamChat, streamProjectChat } from "@/app/lib/mikeApi";
 import { useChatHistoryContext } from "@/app/contexts/ChatHistoryContext";
 import { useGenerateChatTitle } from "./useGenerateChatTitle";
@@ -29,6 +30,7 @@ export function useAssistantChat({
     chatId: initialChatId,
     projectId,
 }: UseAssistantChatOptions = {}) {
+    const t = useTranslations("shared.assistantChat");
     const router = useRouter();
     const {
         replaceChatId,
@@ -816,7 +818,7 @@ export function useAssistantChat({
                     replaceChatId(
                         chatId,
                         finalChatId,
-                        message.content.trim().slice(0, 120) || "New Chat",
+                        message.content.trim().slice(0, 120) || t("novaConversa"),
                     );
                 }
                 setCurrentChatId(finalChatId);
@@ -850,7 +852,7 @@ export function useAssistantChat({
                         const updated = [...prev];
                         const events = last.events ?? [];
                         const idx = findLastContentIndex(events);
-                        const cancelText = "Cancelled by user";
+                        const cancelText = t("cancelado");
                         if (idx >= 0) {
                             const newEvents = [...events];
                             const existing = newEvents[idx] as {
@@ -860,7 +862,7 @@ export function useAssistantChat({
                             newEvents[idx] = {
                                 type: "content",
                                 text: existing.text
-                                    ? `${existing.text}\n\nCancelled by user`
+                                    ? `${existing.text}\n\n${t("cancelado")}`
                                     : cancelText,
                             };
                             updated[updated.length - 1] = {
@@ -884,7 +886,7 @@ export function useAssistantChat({
                             role: "assistant",
                             content: "",
                             events: [
-                                { type: "content", text: "Cancelled by user" },
+                                { type: "content", text: t("cancelado") },
                             ],
                         },
                     ];
@@ -894,7 +896,7 @@ export function useAssistantChat({
                 const errorMessage =
                     error instanceof Error && error.message
                         ? error.message
-                        : "Sorry, something went wrong.";
+                        : t("erroGenerico");
                 setMessages((prev) => {
                     const last = prev[prev.length - 1];
                     if (last?.role === "assistant") {

@@ -16,6 +16,7 @@ import {
 } from "@/app/components/workflows/builtinWorkflows";
 import { formatIcon, formatLabel } from "@/app/components/tabular/columnFormat";
 import { RenameableTitle } from "@/app/components/shared/RenameableTitle";
+import { useTranslations } from "next-intl";
 // dynamic import keeps Tiptap (browser-only) out of the SSR bundle
 const WorkflowPromptEditor = dynamic(
     () =>
@@ -38,6 +39,7 @@ const NAME_COL_W = "w-[300px] shrink-0";
 // Page
 // ---------------------------------------------------------------------------
 export default function WorkflowDetailPage({ params }: Props) {
+    const t = useTranslations("pages.workflowDetalhe");
     const { id } = use(params);
     const router = useRouter();
 
@@ -244,7 +246,7 @@ export default function WorkflowDetailPage({ params }: Props) {
     if (notFound || !workflow) {
         return (
             <div className="flex-1 flex items-center justify-center">
-                <p className="text-gray-400 font-serif">Workflow not found.</p>
+                <p className="text-gray-400 font-serif">{t("naoEncontrado")}</p>
             </div>
         );
     }
@@ -272,9 +274,9 @@ export default function WorkflowDetailPage({ params }: Props) {
                     {/* Save status */}
                     <span className="text-xs text-gray-400">
                         {saveStatus === "saving"
-                            ? "Saving…"
+                            ? t("salvando")
                             : saveStatus === "saved"
-                              ? "Saved"
+                              ? t("salvo")
                               : ""}
                     </span>
 
@@ -282,8 +284,8 @@ export default function WorkflowDetailPage({ params }: Props) {
                     {canShare && (
                         <button
                             onClick={() => setShareOpen(true)}
-                            aria-label="Open workflow people"
-                            title="People"
+                            aria-label={t("ariaLabelPessoas")}
+                            title={t("tituloPessoas")}
                             className="flex items-center text-gray-500 hover:text-gray-900 transition-colors"
                         >
                             <Users className="h-4 w-4" />
@@ -302,7 +304,7 @@ export default function WorkflowDetailPage({ params }: Props) {
             {/* Read-only badge for built-in workflows */}
             {readOnly && (
                 <div className="flex items-center h-10 px-8 border-b border-gray-200">
-                    <span className="text-xs text-gray-400">Read-only</span>
+                    <span className="text-xs text-gray-400">{t("somenteLetura")}</span>
                 </div>
             )}
 
@@ -328,7 +330,7 @@ export default function WorkflowDetailPage({ params }: Props) {
                                     className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
                                 >
                                     <Plus className="h-3.5 w-3.5" />
-                                    Add Column
+                                    {t("adicionarColuna")}
                                 </button>
                                 {selectedColIndices.length > 0 && (
                                     <div ref={colActionsRef} className="relative">
@@ -336,7 +338,7 @@ export default function WorkflowDetailPage({ params }: Props) {
                                             onClick={() => setColActionsOpen((v) => !v)}
                                             className="flex items-center gap-1 text-xs font-medium text-gray-700 hover:text-gray-900 transition-colors"
                                         >
-                                            Actions
+                                            {t("acoes")}
                                             <ChevronDown className="h-3.5 w-3.5" />
                                         </button>
                                         {colActionsOpen && (
@@ -353,7 +355,7 @@ export default function WorkflowDetailPage({ params }: Props) {
                                                     }}
                                                     className="w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 transition-colors"
                                                 >
-                                                    Delete
+                                                    {t("excluir")}
                                                 </button>
                                             </div>
                                         )}
@@ -378,10 +380,10 @@ export default function WorkflowDetailPage({ params }: Props) {
                                 )}
                             </div>
                             <div className={`sticky left-8 z-[60] ${NAME_COL_W} bg-white pl-2 text-left`}>
-                                Column Title
+                                {t("colNome")}
                             </div>
-                            <div className="ml-auto w-36 shrink-0">Format</div>
-                            <div className="flex-1 min-w-0">Prompt</div>
+                            <div className="ml-auto w-36 shrink-0">{t("colFormato")}</div>
+                            <div className="flex-1 min-w-0">{t("colPrompt")}</div>
                             {!readOnly && <div className="w-8 shrink-0" />}
                         </div>
 
@@ -391,17 +393,17 @@ export default function WorkflowDetailPage({ params }: Props) {
                                 <div className="flex flex-col items-start py-24 w-full max-w-xs mx-auto">
                                     <Plus className="h-8 w-8 text-gray-300 mb-4" />
                                     <p className="text-2xl font-medium font-serif text-gray-900">
-                                        Columns
+                                        {t("tituloColunas")}
                                     </p>
                                     <p className="mt-1 text-xs text-gray-400 text-left">
-                                        Add columns to define what this tabular review workflow extracts from each document.
+                                        {t("descricaoColunas")}
                                     </p>
                                     {!readOnly && (
                                         <button
                                             onClick={() => setAddColumnOpen(true)}
                                             className="mt-4 inline-flex items-center gap-1 rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white hover:bg-gray-700 transition-colors shadow-md"
                                         >
-                                            + Add Column
+                                            {t("adicionarColunaBtn")}
                                         </button>
                                     )}
                                 </div>

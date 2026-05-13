@@ -17,18 +17,21 @@ import type {
 import { EditCard, applyOptimisticResolution } from "./EditCard";
 import { PreResponseWrapper } from "../shared/PreResponseWrapper";
 import { supabase } from "@/lib/supabase";
+import { useTranslations } from "next-intl";
 
-function toolCallLabel(name: string): string {
-    if (name === "generate_docx") return "Creating document...";
-    if (name === "edit_document") return "Editing document...";
-    if (name === "read_document") return "Reading document...";
-    if (name === "fetch_documents") return "Reading documents...";
-    if (name === "find_in_document") return "Searching document...";
-    if (name === "replicate_document") return "Copying document...";
-    if (name === "read_workflow") return "Loading workflow...";
-    if (name === "list_workflows") return "Loading workflows...";
-    if (name === "list_documents") return "Loading documents...";
-    return name ? `Running ${name}...` : "Working...";
+type TFunc = ReturnType<typeof useTranslations>;
+
+function toolCallLabel(name: string, t: TFunc): string {
+    if (name === "generate_docx") return t("criarDocumento");
+    if (name === "edit_document") return t("editarDocumento");
+    if (name === "read_document") return t("lerDocumento");
+    if (name === "fetch_documents") return t("lerDocumentos");
+    if (name === "find_in_document") return t("buscarDocumento");
+    if (name === "replicate_document") return t("copiarDocumento");
+    if (name === "read_workflow") return t("carregarWorkflow");
+    if (name === "list_workflows") return t("carregarWorkflows");
+    if (name === "list_documents") return t("carregarDocumentos");
+    return name ? t("executando", { name }) : t("trabalhando");
 }
 
 /**
@@ -75,6 +78,7 @@ function BulkEditActions({
         message: string;
     }) => void;
 }) {
+    const t = useTranslations("shared.trackedChanges");
     const [busy, setBusy] = useState<"accept" | "reject" | null>(null);
     const [progress, setProgress] = useState<{
         done: number;
@@ -185,7 +189,7 @@ function BulkEditActions({
                 {busy === "accept" && (
                     <Loader2 className="h-3 w-3 animate-spin" />
                 )}
-                Accept all
+                {t("aceitarTudo")}
             </button>
             <button
                 onClick={() => handleAll("reject")}
@@ -195,7 +199,7 @@ function BulkEditActions({
                 {busy === "reject" && (
                     <Loader2 className="h-3 w-3 animate-spin" />
                 )}
-                Reject all
+                {t("rejeitarTudo")}
             </button>
             {progress && (
                 <span className="text-xs font-serif text-gray-500">
@@ -210,7 +214,7 @@ function BulkEditActions({
                     disabled={!!busy}
                     className="ml-auto px-2 py-1 text-xs rounded border border-gray-200 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-50"
                 >
-                    View
+                    {t("ver")}
                 </button>
             )}
         </div>
@@ -259,6 +263,7 @@ function EditCardsSection({
         message: string;
     }) => void;
 }) {
+    const t = useTranslations("shared.trackedChanges");
     const [isOpen, setIsOpen] = useState(true);
     if (cards.length === 0) return null;
 
@@ -266,11 +271,15 @@ function EditCardsSection({
     const summary =
         pending.length > 0
             ? docCount > 1
-                ? `${pending.length} tracked changes across ${docCount} documents`
-                : `${pending.length} tracked ${pending.length === 1 ? "change" : "changes"}`
+                ? t("alteracoesEmDocumentos", { n: pending.length, d: docCount })
+                : pending.length === 1
+                  ? t("alteracaoRastreada", { n: pending.length })
+                  : t("alteracoesRastreadas", { n: pending.length })
             : docCount > 1
-              ? `${resolvedCount} resolved tracked changes across ${docCount} documents`
-              : `${resolvedCount} resolved tracked ${resolvedCount === 1 ? "change" : "changes"}`;
+              ? t("alteracoesResolvidasEmDocumentos", { n: resolvedCount, d: docCount })
+              : resolvedCount === 1
+                ? t("alteracaoResolvida", { n: resolvedCount })
+                : t("alteracoesResolvidas", { n: resolvedCount });
 
     return (
         <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
@@ -281,7 +290,7 @@ function EditCardsSection({
                 </p>
                 <button
                     onClick={() => setIsOpen((v) => !v)}
-                    aria-label={isOpen ? "Collapse edits" : "Expand edits"}
+                    aria-label={isOpen ? t("recolherAlteracoes") : t("expandirAlteracoes")}
                     className="shrink-0 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
                 >
                     <ChevronDown
@@ -833,11 +842,13 @@ function MarkdownContent({
     citationsList,
     onCitationClick,
     divRef,
+    isStreaming,
 }: {
     text: string;
     citationsList: MikeCitationAnnotation[];
     onCitationClick?: (c: MikeCitationAnnotation) => void;
     divRef?: React.RefObject<HTMLDivElement | null>;
+    isStreaming?: boolean;
 }) {
     return (
         <div
@@ -845,11 +856,16 @@ function MarkdownContent({
             className="text-gray-900 mb-4 text-base prose prose-sm max-w-none font-serif"
         >
             <ReactMarkdown
-                remarkPlugins={[
-                    [remarkMath, { singleDollarTextMath: false }],
-                    remarkGfm,
-                ]}
-                rehypePlugins={[rehypeKatex]}
+                key={isStreaming ? "streaming" : "done"}
+                remarkPlugins={
+                    isStreaming
+                        ? []
+                        : [
+                              [remarkMath, { singleDollarTextMath: false }],
+                              remarkGfm,
+                          ]
+                }
+                rehypePlugins={isStreaming ? [] : [rehypeKatex]}
                 components={{
                     table: ({ node, ...props }) => (
                         <div className="overflow-x-auto my-4">
@@ -1086,6 +1102,7 @@ export function AssistantMessage({
     isEditReloading,
     resolvedEditStatuses,
 }: Props) {
+    const t = useTranslations("shared.trackedChanges");
     const messageKey = useId();
     const contentDivRef = useRef<HTMLDivElement | null>(null);
     const [isCopied, setIsCopied] = useState(false);
@@ -1226,6 +1243,7 @@ export function AssistantMessage({
                         citationsList={citationsList}
                         onCitationClick={onCitationClick}
                         divRef={isLastContent ? contentDivRef : undefined}
+                        isStreaming={isLastContent ? isStreaming : false}
                     />
                 </div>
             );
@@ -1251,7 +1269,7 @@ export function AssistantMessage({
                     )}
                     <div className="w-1.5 h-1.5 rounded-full border border-gray-400 border-t-transparent animate-spin shrink-0" />
                     <span className="font-medium ml-2">
-                        {toolCallLabel(event.name)}
+                        {toolCallLabel(event.name, t)}
                     </span>
                 </div>
             );
@@ -1372,6 +1390,7 @@ export function AssistantMessage({
                                                     ? contentDivRef
                                                     : undefined
                                             }
+                                            isStreaming={isLastContent ? isStreaming : false}
                                         />
                                     </div>
                                 );

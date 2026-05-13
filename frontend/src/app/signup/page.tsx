@@ -10,6 +10,7 @@ import { SiteLogo } from "@/components/site-logo";
 import { CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { updateUserProfile } from "@/app/lib/mikeApi";
+import { useTranslations } from "next-intl";
 
 export default function SignupPage() {
     const router = useRouter();
@@ -22,6 +23,7 @@ export default function SignupPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const t = useTranslations("auth.signup");
 
     useEffect(() => {
         if (!authLoading && isAuthenticated && !success) {
@@ -36,14 +38,14 @@ export default function SignupPage() {
 
         // Validate passwords match
         if (password !== confirmPassword) {
-            setError("Passwords do not match");
+            setError(t("erroSenhaNaoCoincidem"));
             setLoading(false);
             return;
         }
 
         // Validate password length
         if (password.length < 6) {
-            setError("Password must be at least 6 characters");
+            setError(t("erroSenhaCurta"));
             setLoading(false);
             return;
         }
@@ -81,7 +83,7 @@ export default function SignupPage() {
             setError(
                 error instanceof Error
                     ? error.message
-                    : "An error occurred during signup",
+                    : t("erroPadrao"),
             );
         } finally {
             setLoading(false);
@@ -101,10 +103,10 @@ export default function SignupPage() {
                             <CheckCircle2 className="h-6 w-6 text-green-600" />
                         </div>
                         <h2 className="text-2xl font-semibold text-gray-900 mb-3">
-                            Account created!
+                            {t("contaCriada")}
                         </h2>
                         <p className="text-gray-600 leading-relaxed">
-                            Redirecting you to the home page...
+                            {t("redirecionando")}
                         </p>
                     </div>
                 </div>
@@ -122,17 +124,17 @@ export default function SignupPage() {
                 <div className="bg-white border border-gray-200 rounded-2xl p-8 mb-4">
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-left text-2xl font-serif">
-                            Create Account
+                            {t("titulo")}
                         </h2>
                         <div className="bg-gray-100 p-1 rounded-md flex text-xs font-medium">
                             <Link
                                 href="/login"
                                 className="px-3 py-1 text-gray-500 hover:text-gray-900"
                             >
-                                Log in
+                                {t("tabEntrar")}
                             </Link>
                             <span className="px-3 py-1 bg-white rounded-sm shadow-sm text-gray-900">
-                                Sign up
+                                {t("tabCadastrar")}
                             </span>
                         </div>
                     </div>
@@ -143,9 +145,9 @@ export default function SignupPage() {
                                 htmlFor="name"
                                 className="block text-sm font-medium text-gray-700 mb-2"
                             >
-                                Name{" "}
+                                {t("labelNome")}{" "}
                                 <span className="text-gray-400 font-normal">
-                                    (optional)
+                                    {t("opcional")}
                                 </span>
                             </label>
                             <Input
@@ -153,7 +155,7 @@ export default function SignupPage() {
                                 type="text"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
-                                placeholder="Your name"
+                                placeholder={t("placeholderNome")}
                                 className="w-full"
                             />
                         </div>
@@ -163,9 +165,9 @@ export default function SignupPage() {
                                 htmlFor="organisation"
                                 className="block text-sm font-medium text-gray-700 mb-2"
                             >
-                                Organisation{" "}
+                                {t("labelOrganizacao")}{" "}
                                 <span className="text-gray-400 font-normal">
-                                    (optional)
+                                    {t("opcional")}
                                 </span>
                             </label>
                             <Input
@@ -175,7 +177,7 @@ export default function SignupPage() {
                                 onChange={(e) =>
                                     setOrganisation(e.target.value)
                                 }
-                                placeholder="Your organisation"
+                                placeholder={t("placeholderOrganizacao")}
                                 className="w-full"
                             />
                         </div>
@@ -185,14 +187,14 @@ export default function SignupPage() {
                                 htmlFor="email"
                                 className="block text-sm font-medium text-gray-700 mb-2"
                             >
-                                Email
+                                {t("labelEmail")}
                             </label>
                             <Input
                                 id="email"
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                placeholder="Enter your email"
+                                placeholder={t("placeholderEmail")}
                                 required
                                 className="w-full"
                             />
@@ -203,14 +205,14 @@ export default function SignupPage() {
                                 htmlFor="password"
                                 className="block text-sm font-medium text-gray-700 mb-2"
                             >
-                                Password
+                                {t("labelSenha")}
                             </label>
                             <Input
                                 id="password"
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Create a password (min. 6 characters)"
+                                placeholder={t("placeholderSenha")}
                                 required
                                 className="w-full"
                             />
@@ -221,7 +223,7 @@ export default function SignupPage() {
                                 htmlFor="confirmPassword"
                                 className="block text-sm font-medium text-gray-700 mb-2"
                             >
-                                Confirm Password
+                                {t("labelConfirmarSenha")}
                             </label>
                             <Input
                                 id="confirmPassword"
@@ -230,7 +232,7 @@ export default function SignupPage() {
                                 onChange={(e) =>
                                     setConfirmPassword(e.target.value)
                                 }
-                                placeholder="Confirm your password"
+                                placeholder={t("placeholderConfirmarSenha")}
                                 required
                                 className="w-full"
                             />
@@ -247,37 +249,34 @@ export default function SignupPage() {
                             disabled={loading}
                             className="w-full bg-black hover:bg-gray-900 text-white"
                         >
-                            {loading ? "Creating account..." : "Sign up"}
+                            {loading ? t("botaoCriando") : t("botaoCadastrar")}
                         </Button>
                     </form>
 
                     {/* Terms and Privacy */}
                     <div className="mt-4 text-center text-xs text-gray-500">
-                        By signing up, you agree to our{" "}
+                        {t("termos")}{" "}
                         <Link
                             href="https://mikeoss.com/terms"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:underline"
                         >
-                            Terms of Use
+                            {t("termosDeUso")}
                         </Link>{" "}
-                        and{" "}
+                        {t("e")}{" "}
                         <Link
                             href="https://mikeoss.com/privacy"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:underline"
                         >
-                            Privacy Policy
+                            {t("politicaPrivacidade")}
                         </Link>
                     </div>
                 </div>
                 <p className="text-center text-xs text-gray-500 leading-relaxed px-2">
-                    Mike hosted on MikeOSS.com is currently a demo service.
-                    Please do not upload, submit, or store sensitive,
-                    confidential, privileged, client, or personally identifiable
-                    documents.
+                    {t("avisoDemo")}
                 </p>
             </div>
         </div>

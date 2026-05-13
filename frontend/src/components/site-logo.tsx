@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { MikeIcon } from "@/components/chat/mike-icon";
+import { AppLogo } from "@/components/chat/app-logo";
+import { BRAND } from "@/config/brand";
 
 interface SiteLogoProps {
     size?: "sm" | "md" | "lg" | "xl";
@@ -38,8 +39,8 @@ export function SiteLogo({
                 animate ? "sidebar-fade-in" : ""
             } ${className}`}
         >
-            <MikeIcon size={iconSizes[size]} />
-            <span>Mike</span>
+            <AppLogo size={iconSizes[size]} />
+            <span>{BRAND.name}</span>
         </h1>
     );
 

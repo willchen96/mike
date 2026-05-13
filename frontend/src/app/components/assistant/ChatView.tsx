@@ -17,6 +17,7 @@ import type {
 } from "../shared/types";
 import { useSidebar } from "@/app/contexts/SidebarContext";
 import { invalidateDocxBytes } from "@/app/hooks/useFetchDocxBytes";
+import { useTranslations } from "next-intl";
 
 interface Props {
     messages: MikeMessage[];
@@ -48,6 +49,7 @@ export function ChatView({
     const [reloadingEditIds, setReloadingEditIds] = useState<Set<string>>(
         () => new Set(),
     );
+    const t = useTranslations("assistant");
     const { setSidebarOpen } = useSidebar();
 
 
@@ -582,8 +584,7 @@ export function ChatView({
                             />
                             <div className="py-3 text-center">
                                 <p className="text-xs text-gray-500">
-                                    AI can make mistakes. Answers are not legal
-                                    advice.
+                                    {t("avisoIA")}
                                 </p>
                             </div>
                         </div>

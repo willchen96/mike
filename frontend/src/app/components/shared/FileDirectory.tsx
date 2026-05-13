@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { MikeDocument, MikeProject } from "./types";
 import { VersionChip } from "./VersionChip";
+import { useTranslations } from "next-intl";
 
 function formatDate(iso: string | null) {
     if (!iso) return null;
@@ -49,10 +50,13 @@ export function FileDirectory({
     onChange,
     allowMultiple = true,
     forceExpanded = false,
-    emptyMessage = "No documents yet",
-    heading = "Documents",
+    emptyMessage,
+    heading,
     onDelete,
 }: FileDirectoryProps) {
+    const t = useTranslations("documents");
+    const resolvedEmptyMessage = emptyMessage ?? t("nenhumDocumentoPadrao");
+    const resolvedHeading = heading ?? t("headingPadrao");
     const [expandedProjects, setExpandedProjects] = useState<Set<string>>(
         new Set(),
     );
@@ -145,7 +149,7 @@ export function FileDirectory({
     if (allDocs.length === 0 && directoryProjects.length === 0) {
         return (
             <p className="text-center text-sm text-gray-400 py-8">
-                {emptyMessage}
+                {resolvedEmptyMessage}
             </p>
         );
     }
@@ -157,7 +161,7 @@ export function FileDirectory({
                     (onDelete && selectedCount > 0)) && (
                     <div className="flex items-center justify-between px-2 py-2">
                         <p className="text-xs font-medium text-gray-400">
-                            {heading}
+                            {resolvedHeading}
                         </p>
                         <div className="flex items-center gap-3">
                             {onDelete && selectedCount > 0 && (
@@ -168,7 +172,7 @@ export function FileDirectory({
                                     className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
                                 >
                                     <Trash2 className="h-3 w-3" />
-                                    Delete
+                                    {t("excluir")}
                                 </button>
                             )}
                             {standaloneDocs.length > 0 && (
@@ -178,8 +182,8 @@ export function FileDirectory({
                                     className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
                                 >
                                     {allStandaloneSelected
-                                        ? "Deselect all"
-                                        : "Select all"}
+                                        ? t("desmarcarTodos")
+                                        : t("selecionarTodos")}
                                 </button>
                             )}
                         </div>
@@ -228,7 +232,7 @@ export function FileDirectory({
                 {standaloneDocs.length > 0 && directoryProjects.length > 0 && (
                     <div className="border-t border-gray-100 py-2 px-2">
                         <p className="text-xs font-medium text-gray-400">
-                            Projects
+                            {t("projetos")}
                         </p>
                     </div>
                 )}
@@ -266,7 +270,7 @@ export function FileDirectory({
                                 <div>
                                     {docs.length === 0 ? (
                                         <p className="pl-7 py-1 text-xs text-gray-400">
-                                            Empty
+                                            {t("pastaVazia")}
                                         </p>
                                     ) : (
                                         docs.map((doc) => {
