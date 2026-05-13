@@ -555,12 +555,13 @@ chatRouter.post("/", requireAuth, async (req, res) => {
     try {
         write(`data: ${JSON.stringify({ type: "chat_id", chatId })}\n\n`);
 
-        const streamTimeout = new Promise<never>((_, reject) =>
-            setTimeout(
+        let timerId: ReturnType<typeof setTimeout>;
+        const streamTimeout = new Promise<never>((_, reject) => {
+            timerId = setTimeout(
                 () => reject(new Error("Stream timed out")),
                 STREAM_TIMEOUT_MS,
-            ),
-        );
+            );
+        });
         const { fullText, events } = await Promise.race([
             runLLMStream({
                 apiMessages,
@@ -576,6 +577,7 @@ chatRouter.post("/", requireAuth, async (req, res) => {
             }),
             streamTimeout,
         ]);
+        clearTimeout(timerId!);
 
         devLog("[chat/stream] LLM stream finished", {
             fullTextLen: fullText?.length ?? 0,
