@@ -58,6 +58,12 @@ export type StreamChatParams = {
      * one-shot completions should leave this off to save tokens and latency.
      */
     enableThinking?: boolean;
+    /**
+     * Filenames of any documents whose content will be embedded in this LLM
+     * call. Used by the free-tier guard (lib/llm/freeTierGuard.ts) to refuse
+     * sending non-fixture documents to free-tier providers.
+     */
+    documentFilenames?: string[];
 };
 
 export type StreamChatResult = {

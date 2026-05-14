@@ -16,3 +16,9 @@ next-env.d.ts
 .DS_Store
 .vercel
 coverage
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/
