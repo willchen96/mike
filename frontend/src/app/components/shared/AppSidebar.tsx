@@ -11,12 +11,12 @@ import {
     ChevronsUpDown,
     ChevronDown,
 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useUserProfile } from "@/contexts/UserProfileContext";
+import { useAuth } from "@/app/contexts/AuthContext";
+import { useUserProfile } from "@/app/contexts/UserProfileContext";
 import { useChatHistoryContext } from "@/app/contexts/ChatHistoryContext";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { MikeIcon } from "@/components/chat/mike-icon";
+import { MikeIcon } from "@/app/components/chat/mike-icon";
 import { SidebarChatItem } from "@/app/components/shared/SidebarChatItem";
 import { listProjects } from "@/app/lib/mikeApi";
 
@@ -98,11 +98,6 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
     const getDisplayName = () => {
         if (!profile) return "";
         return profile.displayName || user?.email?.split("@")[0] || "";
-    };
-
-    const getUserTier = () => {
-        if (!profile) return "";
-        return profile.tier || "Free";
     };
 
     if (!user) return null;
@@ -276,14 +271,11 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                                         shouldAnimate ? "sidebar-fade-in-2" : ""
                                     }`}
                                 >
-                                    <div className="flex flex-col gap-0.5 min-w-0">
-                                        <div className="text-sm font-medium text-gray-900 leading-none">
-                                            {getDisplayName()}
-                                        </div>
-                                        <div className="text-[12px] text-gray-500 leading-none">
-                                            {getUserTier()}
-                                        </div>
+                                <div className="flex flex-col gap-0.5 min-w-0">
+                                    <div className="text-sm font-medium text-gray-900 leading-none">
+                                        {getDisplayName()}
                                     </div>
+                                </div>
                                     <ChevronsUpDown className="h-4 w-4 flex-shrink-0 text-gray-400" />
                                 </div>
                             )}

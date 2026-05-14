@@ -1,0 +1,34 @@
+name: test:docx
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test-docx:
+    name: docxTrackedChanges round-trip suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Run docx round-trip suite
+        run: npm run test:docx --prefix backend
+
+      - name: Verify fixture regeneration is a no-op (drift guard)
+        run: |
+          cd backend && HUGO_FIXTURES_REGEN=1 npx tsx tests/docx-round-trip/fixtures/generate-fixtures.ts
+          cd "$GITHUB_WORKSPACE" && git diff --exit-code backend/tests/docx-round-trip/fixtures

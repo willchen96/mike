@@ -1,8 +1,46 @@
 import { Router } from "express";
+import { z } from "zod";
+import { createClient } from "@supabase/supabase-js";
 import { requireAuth } from "../middleware/auth";
 import { createServerSupabase } from "../lib/supabase";
+import { parseBody } from "../lib/validate";
+import { BUILTIN_WORKFLOWS } from "../lib/builtinWorkflows";
+
+function getAdminClient() {
+  return createClient(
+    process.env.SUPABASE_URL ?? "",
+    process.env.SUPABASE_SECRET_KEY ?? "",
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+}
+
+const CreateWorkflowSchema = z.object({
+  title: z.string().min(1),
+  type: z.enum(["assistant", "tabular"]),
+  prompt_md: z.string().optional(),
+  columns_config: z.unknown().optional(),
+  practice: z.string().optional().nullable(),
+});
+
+const PatchWorkflowSchema = z.object({
+  title: z.string().min(1).optional(),
+  prompt_md: z.string().optional(),
+  columns_config: z.unknown().optional(),
+  practice: z.string().optional().nullable(),
+});
+
+const ShareWorkflowSchema = z.object({
+  emails: z.array(z.string().email()).min(1),
+  allow_edit: z.boolean(),
+});
 
 export const workflowsRouter = Router();
+
+// CLEAN-49: single source of truth — return canonical backend BUILTIN_WORKFLOWS
+// (mounted before /:id to avoid route shadowing)
+workflowsRouter.get("/builtin", requireAuth, (_req, res) => {
+    res.json({ workflows: BUILTIN_WORKFLOWS });
+});
 
 type Db = ReturnType<typeof createServerSupabase>;
 
@@ -104,7 +142,7 @@ workflowsRouter.get("/", requireAuth, async (req, res) => {
         : { data: [] };
 
       // Fetch sharer emails via admin client
-      const admin = createServerSupabase();
+      const admin = getAdminClient();
       const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 });
       const authUsers = authData?.users ?? [];
 
@@ -132,19 +170,9 @@ workflowsRouter.get("/", requireAuth, async (req, res) => {
 // POST /workflows
 workflowsRouter.post("/", requireAuth, async (req, res) => {
   const userId = res.locals.userId as string;
-  const { title, type, prompt_md, columns_config, practice } = req.body as {
-    title: string;
-    type: string;
-    prompt_md?: string;
-    columns_config?: unknown;
-    practice?: string | null;
-  };
-  if (!title?.trim())
-    return void res.status(400).json({ detail: "title is required" });
-  if (!["assistant", "tabular"].includes(type))
-    return void res
-      .status(400)
-      .json({ detail: "type must be 'assistant' or 'tabular'" });
+  const wfBody = parseBody(CreateWorkflowSchema, req, res);
+  if (!wfBody) return;
+  const { title, type, prompt_md, columns_config, practice } = wfBody;
 
   const db = createServerSupabase();
   const { data, error } = await db
@@ -168,12 +196,14 @@ async function handleWorkflowUpdate(req: import("express").Request, res: import(
   const userId = res.locals.userId as string;
   const userEmail = res.locals.userEmail as string | undefined;
   const { workflowId } = req.params;
+  const patchBody = parseBody(PatchWorkflowSchema, req, res);
+  if (!patchBody) return;
   const updates: Record<string, unknown> = {};
-  if (req.body.title != null) updates.title = req.body.title;
-  if (req.body.prompt_md != null) updates.prompt_md = req.body.prompt_md;
-  if (req.body.columns_config != null)
-    updates.columns_config = req.body.columns_config;
-  if ("practice" in req.body) updates.practice = req.body.practice ?? null;
+  if (patchBody.title != null) updates.title = patchBody.title;
+  if (patchBody.prompt_md != null) updates.prompt_md = patchBody.prompt_md;
+  if (patchBody.columns_config != null)
+    updates.columns_config = patchBody.columns_config;
+  if ("practice" in patchBody) updates.practice = patchBody.practice ?? null;
 
   const db = createServerSupabase();
   const access = await resolveWorkflowAccess(workflowId, userId, userEmail, db);
@@ -212,13 +242,16 @@ workflowsRouter.delete("/:workflowId", requireAuth, async (req, res) => {
   const userId = res.locals.userId as string;
   const { workflowId } = req.params;
   const db = createServerSupabase();
-  const { error } = await db
+  const { data, error } = await db
     .from("workflows")
     .delete()
     .eq("id", workflowId)
     .eq("user_id", userId)
-    .eq("is_system", false);
+    .eq("is_system", false)
+    .select("id");
   if (error) return void res.status(500).json({ detail: error.message });
+  if (!data || data.length === 0)
+    return void res.status(404).json({ detail: "Workflow not found" });
   res.status(204).send();
 });
 
@@ -234,12 +267,16 @@ workflowsRouter.get("/hidden", requireAuth, async (req, res) => {
   res.json((data ?? []).map((r) => r.workflow_id));
 });
 
+const HideWorkflowSchema = z.object({
+  workflow_id: z.string().min(1),
+});
+
 // POST /workflows/hidden
 workflowsRouter.post("/hidden", requireAuth, async (req, res) => {
   const userId = res.locals.userId as string;
-  const { workflow_id } = req.body as { workflow_id: string };
-  if (!workflow_id?.trim())
-    return void res.status(400).json({ detail: "workflow_id is required" });
+  const hideBody = parseBody(HideWorkflowSchema, req, res);
+  if (!hideBody) return;
+  const { workflow_id } = hideBody;
   const db = createServerSupabase();
   const { error } = await db
     .from("hidden_workflows")
@@ -326,9 +363,9 @@ workflowsRouter.delete("/:workflowId/shares/:shareId", requireAuth, async (req, 
 workflowsRouter.post("/:workflowId/share", requireAuth, async (req, res) => {
   const userId = res.locals.userId as string;
   const { workflowId } = req.params;
-  const { emails, allow_edit } = req.body as { emails: string[]; allow_edit: boolean };
-
-  if (!emails?.length) return void res.status(400).json({ detail: "emails is required" });
+  const shareBody = parseBody(ShareWorkflowSchema, req, res);
+  if (!shareBody) return;
+  const { emails, allow_edit } = shareBody;
 
   const db = createServerSupabase();
   // Verify ownership

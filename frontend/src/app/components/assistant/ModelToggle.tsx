@@ -11,42 +11,30 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { isModelAvailable } from "@/app/lib/modelAvailability";
-import type { ApiKeyState } from "@/app/lib/mikeApi";
-
-export interface ModelOption {
-    id: string;
-    label: string;
-    group: "Anthropic" | "Google" | "OpenAI";
-}
-
-export const MODELS: ModelOption[] = [
-    { id: "claude-opus-4-7", label: "Claude Opus 4.7", group: "Anthropic" },
-    { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", group: "Anthropic" },
-    { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", group: "Google" },
-    { id: "gemini-3-flash-preview", label: "Gemini 3 Flash", group: "Google" },
-    { id: "gpt-5.5", label: "GPT-5.5", group: "OpenAI" },
-    { id: "gpt-5.4-mini", label: "GPT-5.4 Mini", group: "OpenAI" },
-];
-
-export const DEFAULT_MODEL_ID = "gemini-3-flash-preview";
-
-export const ALLOWED_MODEL_IDS = new Set(MODELS.map((m) => m.id));
-
-const GROUP_ORDER: ModelOption["group"][] = ["Anthropic", "Google", "OpenAI"];
+import { useManifests } from "@/app/contexts/ManifestsContext";
 
 interface Props {
     value: string;
     onChange: (id: string) => void;
-    apiKeys?: ApiKeyState;
+    apiKeys?: {
+        hasClaudeKey: boolean;
+        hasGeminiKey: boolean;
+    };
 }
 
 export function ModelToggle({ value, onChange, apiKeys }: Props) {
     const [isOpen, setIsOpen] = useState(false);
-    const selected = MODELS.find((m) => m.id === value);
+    const { models } = useManifests();
+    const allModels = models?.main ?? [];
+
+    const selected = allModels.find((m) => m.id === value);
     const selectedLabel = selected?.label ?? "Model";
     const selectedAvailable = apiKeys
         ? isModelAvailable(value, apiKeys)
         : true;
+
+    // Derive ordered groups from the models list (preserving first-seen order)
+    const groups = Array.from(new Set(allModels.map((m) => m.group)));
 
     return (
         <DropdownMenu onOpenChange={setIsOpen}>
@@ -70,8 +58,8 @@ export function ModelToggle({ value, onChange, apiKeys }: Props) {
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56 z-50" side="top" align="start">
-                {GROUP_ORDER.map((group, gi) => {
-                    const items = MODELS.filter((m) => m.group === group);
+                {groups.map((group, gi) => {
+                    const items = allModels.filter((m) => m.group === group);
                     if (items.length === 0) return null;
                     return (
                         <div key={group}>

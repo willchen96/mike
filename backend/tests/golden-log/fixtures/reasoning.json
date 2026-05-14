@@ -1,0 +1,17 @@
+{
+  "scenario": "reasoning",
+  "providerChunks": [
+    {
+      "type": "reasoning_delta",
+      "text": "Let me think about this."
+    },
+    {
+      "type": "reasoning_block_end"
+    },
+    {
+      "type": "content_delta",
+      "text": "The answer is 42."
+    }
+  ],
+  "expectedSseSequence": "data: {\"type\":\"reasoning_delta\",\"text\":\"Let me think about this.\"}\n\ndata: {\"type\":\"reasoning_block_end\"}\n\ndata: {\"type\":\"content_delta\",\"text\":\"The ans\"}\n\ndata: {\"type\":\"content_delta\",\"text\":\"wer is 42.\"}\n\ndata: {\"type\":\"citations\",\"citations\":[]}\n\ndata: [DONE]\n\n"
+}

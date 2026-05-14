@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, useRef, useEffect } from "react";
+import type { ReactNode } from "react";
 import { ArrowDown } from "lucide-react";
 import { UserMessage } from "./UserMessage";
 import { AssistantMessage } from "./AssistantMessage";
@@ -18,11 +19,27 @@ import type {
 import { useSidebar } from "@/app/contexts/SidebarContext";
 import { invalidateDocxBytes } from "@/app/hooks/useFetchDocxBytes";
 
+interface ChatInputOverrides {
+    hideAddDocButton?: boolean;
+    projectName?: string;
+    projectCmNumber?: string | null;
+}
+
 interface Props {
     messages: MikeMessage[];
     isResponseLoading: boolean;
     handleChat: (message: MikeMessage) => Promise<string | null>;
     cancel: () => void;
+    /** Project-only UI rendered to the left of the chat column. When absent, layout is unchanged. */
+    leftPane?: ReactNode;
+    /** Project context identifier — passed through for features that need it. */
+    projectId?: string;
+    /** Optional overrides forwarded to ChatInput (project pages use hideAddDocButton + project name). */
+    chatInputProps?: ChatInputOverrides;
+    getDocumentPreview?: (documentId: string) => {
+        pdfConversionStatus?: "pending" | "ok" | "failed" | null;
+        onRetryPdf?: () => void | Promise<void>;
+    } | null;
 }
 
 export function ChatView({
@@ -30,6 +47,10 @@ export function ChatView({
     isResponseLoading,
     handleChat,
     cancel,
+    leftPane,
+    projectId: _projectId,
+    chatInputProps,
+    getDocumentPreview,
 }: Props) {
     const [tabs, setTabs] = useState<AssistantSidePanelTab[]>([]);
     const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -110,20 +131,43 @@ export function ChatView({
                 if (idx >= 0) {
                     const existing = prev[idx];
                     const copy = prev.slice();
+                    const preview =
+                        tab.documentId && getDocumentPreview
+                            ? getDocumentPreview(tab.documentId)
+                            : null;
                     copy[idx] = {
                         ...tab,
                         id: existing.id,
+                        pdfConversionStatus:
+                            preview?.pdfConversionStatus ??
+                            tab.pdfConversionStatus,
+                        onRetryPdf:
+                            preview?.onRetryPdf ?? tab.onRetryPdf,
                         warning: existing.warning,
                         initialScrollTop: existing.initialScrollTop,
                     };
                     return copy;
+                }
+                const preview =
+                    tab.documentId && getDocumentPreview
+                        ? getDocumentPreview(tab.documentId)
+                        : null;
+                if (preview) {
+                    return [
+                        ...prev,
+                        {
+                            ...tab,
+                            pdfConversionStatus: preview.pdfConversionStatus,
+                            onRetryPdf: preview.onRetryPdf,
+                        },
+                    ];
                 }
                 return [...prev, tab];
             });
             setActiveTabId(tab.id);
             showPanel();
         },
-        [showPanel],
+        [showPanel, getDocumentPreview],
     );
 
     /**
@@ -139,6 +183,7 @@ export function ChatView({
                 filename: citation.filename,
                 versionId: citation.version_id ?? null,
                 versionNumber: citation.version_number ?? null,
+                pdfConversionStatus: undefined,
                 citation,
             });
         },
@@ -158,6 +203,7 @@ export function ChatView({
                 filename,
                 versionId: ann.version_id ?? null,
                 versionNumber: ann.version_number ?? null,
+                pdfConversionStatus: undefined,
                 edit: ann,
             });
         },
@@ -443,8 +489,8 @@ export function ChatView({
         };
     }, [panelMounted]);
 
-    return (
-        <div className="h-full w-full flex relative">
+    const chatContents = (
+        <>
             {/* Chat column */}
             <div className="flex flex-col h-full flex-1 relative">
                 {/* Scrollable messages */}
@@ -579,6 +625,9 @@ export function ChatView({
                                 onSubmit={handleChat}
                                 onCancel={cancel}
                                 isLoading={isResponseLoading}
+                                hideAddDocButton={chatInputProps?.hideAddDocButton}
+                                projectName={chatInputProps?.projectName}
+                                projectCmNumber={chatInputProps?.projectCmNumber}
                             />
                             <div className="py-3 text-center">
                                 <p className="text-xs text-gray-500">
@@ -622,6 +671,25 @@ export function ChatView({
                     />
                 </div>
             )}
+        </>
+    );
+
+    if (leftPane) {
+        return (
+            <div className="h-full w-full flex relative">
+                <aside className="flex-shrink-0 h-full overflow-hidden flex">
+                    {leftPane}
+                </aside>
+                <div className="flex-1 min-w-0 h-full flex relative">
+                    {chatContents}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="h-full w-full flex relative">
+            {chatContents}
         </div>
     );
 }

@@ -3,10 +3,12 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Menu } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/app/contexts/AuthContext";
 import { ChatHistoryProvider } from "@/app/contexts/ChatHistoryContext";
 import { SidebarContext } from "@/app/contexts/SidebarContext";
 import { AppSidebar } from "@/app/components/shared/AppSidebar";
+import { AccountDeletionBanner } from "@/app/components/account/AccountDeletionBanner";
+import type { AccountDeletedResponse } from "@/app/lib/mikeApi";
 
 export default function MikeLayout({
     children,
@@ -15,6 +17,17 @@ export default function MikeLayout({
 }) {
     const { isAuthenticated, authLoading } = useAuth();
     const router = useRouter();
+    const [deletedState, setDeletedState] = useState<AccountDeletedResponse | null>(null);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail as AccountDeletedResponse;
+            setDeletedState(detail);
+        };
+        window.addEventListener("hugo:account-deleted", handler);
+        return () => window.removeEventListener("hugo:account-deleted", handler);
+    }, []);
 
     const [isSidebarOpenDesktop, setIsSidebarOpenDesktop] = useState(() => {
         if (typeof window !== "undefined") {
@@ -35,7 +48,7 @@ export default function MikeLayout({
         if (typeof window !== "undefined" && window.innerWidth >= 768) {
             localStorage.setItem("sidebarOpen", isSidebarOpen.toString());
         }
-    }, [isSidebarOpenDesktop]);
+    }, [isSidebarOpen]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -80,6 +93,7 @@ export default function MikeLayout({
                 value={{ setSidebarOpen: (open) => { setIsSidebarOpen(open); setIsSidebarOpenDesktop(open); } }}
             >
                 <div className="h-dvh bg-white flex flex-col">
+                    <AccountDeletionBanner deletedState={deletedState} />
                     <div className="flex-1 flex overflow-hidden">
                         <AppSidebar
                             isOpen={isSidebarOpen}

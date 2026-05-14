@@ -13,7 +13,7 @@ import {
     ChevronDown,
     Trash2,
 } from "lucide-react";
-import { MikeIcon } from "@/components/chat/mike-icon";
+import { MikeIcon } from "@/app/components/chat/mike-icon";
 import {
     streamTabularChat,
     getTabularChats,
@@ -31,13 +31,12 @@ import type {
 import { ModelToggle } from "../assistant/ModelToggle";
 import { ApiKeyMissingModal } from "../shared/ApiKeyMissingModal";
 import { PreResponseWrapper } from "../shared/PreResponseWrapper";
-import { useUserProfile } from "@/contexts/UserProfileContext";
+import { useUserProfile } from "@/app/contexts/UserProfileContext";
 import {
     getModelProvider,
     isModelAvailable,
     type ModelProvider,
 } from "@/app/lib/modelAvailability";
-import type { ApiKeyState } from "@/app/lib/mikeApi";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -448,49 +447,16 @@ function TRChatInput({
     model,
     onModelChange,
     apiKeys,
-    onHeightChange,
 }: {
     isLoading: boolean;
     onSubmit: (value: string) => void;
     onCancel: () => void;
     model: string;
     onModelChange: (id: string) => void;
-    apiKeys?: ApiKeyState;
-    onHeightChange: (height: number) => void;
+    apiKeys: { hasClaudeKey: boolean; hasGeminiKey: boolean };
 }) {
     const [value, setValue] = useState("");
-    const rootRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-    useEffect(() => {
-        const root = rootRef.current;
-        if (!root) return;
-
-        const notify = () => {
-            onHeightChange(root.getBoundingClientRect().height);
-        };
-        notify();
-
-        const observer = new ResizeObserver(notify);
-        observer.observe(root);
-        window.addEventListener("resize", notify);
-        return () => {
-            observer.disconnect();
-            window.removeEventListener("resize", notify);
-        };
-    }, [onHeightChange]);
-
-    function resizeTextarea(el: HTMLTextAreaElement) {
-        el.style.height = "auto";
-        el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
-        el.style.overflowY = el.scrollHeight > 192 ? "auto" : "hidden";
-    }
-
-    function resetTextarea() {
-        if (!textareaRef.current) return;
-        textareaRef.current.style.height = "auto";
-        textareaRef.current.style.overflowY = "hidden";
-    }
 
     function handleAction() {
         if (isLoading) {
@@ -500,16 +466,13 @@ function TRChatInput({
         const trimmed = value.trim();
         if (!trimmed) return;
         setValue("");
-        resetTextarea();
+        if (textareaRef.current) textareaRef.current.style.height = "auto";
         onSubmit(trimmed);
     }
 
     return (
-        <div
-            ref={rootRef}
-            className="absolute bottom-0 left-0 right-0 px-4 pb-4 bg-white"
-        >
-            <div className="border border-gray-300 rounded-xl bg-white pt-2 pb-1.5 flex flex-col gap-1">
+        <div className="absolute bottom-0 left-0 right-0 mx-4 pb-4 bg-white">
+            <div className="border border-gray-300 rounded-xl bg-white  pt-1.5 pb-1.5 flex flex-col gap-1">
                 <textarea
                     ref={textareaRef}
                     rows={1}
@@ -517,7 +480,8 @@ function TRChatInput({
                     value={value}
                     onChange={(e) => {
                         setValue(e.target.value);
-                        resizeTextarea(e.target);
+                        e.target.style.height = "auto";
+                        e.target.style.height = `${e.target.scrollHeight}px`;
                     }}
                     onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
@@ -525,7 +489,7 @@ function TRChatInput({
                             handleAction();
                         }
                     }}
-                    className="w-full resize-none text-sm bg-transparent outline-none placeholder:text-gray-400 leading-6 max-h-48 overflow-hidden border-0 p-0 pl-3 pr-2 pt-0.5"
+                    className="flex-1 resize-none text-sm bg-transparent outline-none placeholder:text-gray-400 leading-6 max-h-48 overflow-y-auto border-0 p-0 pl-3 pr-2 pt-1"
                 />
                 <div className="flex items-center justify-between pl-1 pr-2">
                     <ModelToggle
@@ -643,7 +607,10 @@ export function TRChatPanel({
     onChatIdChange,
 }: Props) {
     const { profile, updateModelPreference } = useUserProfile();
-    const apiKeys = profile?.apiKeys;
+    const apiKeys = {
+        hasClaudeKey: profile?.hasClaudeKey ?? false,
+        hasGeminiKey: profile?.hasGeminiKey ?? false,
+    };
     const currentModel = profile?.tabularModel ?? "gemini-3-flash-preview";
     const [apiKeyModalProvider, setApiKeyModalProvider] =
         useState<ModelProvider | null>(null);
@@ -662,7 +629,6 @@ export function TRChatPanel({
     const [messagesVisible, setMessagesVisible] = useState(false);
     const [panelWidth, setPanelWidth] = useState(380);
     const [isResizing, setIsResizing] = useState(false);
-    const [inputHeight, setInputHeight] = useState(96);
 
     useEffect(() => {
         if (!isResizing) return;
@@ -991,7 +957,7 @@ export function TRChatPanel({
 
     async function handleSubmit(trimmed: string) {
         if (!trimmed || isLoading) return;
-        if (apiKeys && !isModelAvailable(currentModel, apiKeys)) {
+        if (!isModelAvailable(currentModel, apiKeys)) {
             setApiKeyModalProvider(getModelProvider(currentModel));
             return;
         }
@@ -1426,8 +1392,7 @@ export function TRChatPanel({
             {/* Messages */}
             <div
                 ref={messagesContainerRef}
-                className="flex-1 overflow-y-auto px-4 pt-4 flex flex-col"
-                style={{ paddingBottom: Math.ceil(inputHeight + 16) }}
+                className="flex-1 overflow-y-auto px-4 pt-4 pb-[96px] flex flex-col"
             >
                 {messages.length === 0 && !isLoadingMessages && (
                     <div className="flex flex-1 flex-col items-center justify-center gap-2">
@@ -1493,7 +1458,6 @@ export function TRChatPanel({
                     updateModelPreference("tabularModel", id)
                 }
                 apiKeys={apiKeys}
-                onHeightChange={setInputHeight}
             />
 
             <ApiKeyMissingModal

@@ -1,27 +1,54 @@
+import { readFile } from "fs/promises";
 import { Router } from "express";
+import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
-import { createServerSupabase } from "../lib/supabase";
+import { parseBody } from "../lib/validate";
+import { createServerSupabase, getUsersByEmails, getUserById } from "../lib/supabase";
+import { logger } from "../lib/logger";
 import { createClient } from "@supabase/supabase-js";
 import {
   attachActiveVersionPaths,
   attachLatestVersionNumbers,
 } from "../lib/documentVersions";
 import { downloadFile, uploadFile, storageKey } from "../lib/storage";
-import { docxToPdf, convertedPdfKey } from "../lib/convert";
+import { convertedPdfKey } from "../lib/convert";
 import { checkProjectAccess } from "../lib/access";
-import { singleFileUpload } from "../lib/upload";
+import {
+  cleanupTempFile,
+  sanitizeFilename,
+  singleFileUpload,
+} from "../lib/upload";
+import { enqueueConversionFromBuffer } from "../lib/pdfQueue";
+import { extractStructureTree } from "../lib/structureTree";
+
+const CreateProjectSchema = z.object({
+  name: z.string().trim().min(1, "name is required"),
+  cm_number: z.string().trim().optional(),
+  shared_with: z.array(z.string().email()).optional(),
+});
+
+const UpdateProjectSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  cm_number: z.string().trim().nullable().optional(),
+  shared_with: z.array(z.string().email()).optional(),
+}).strict();
+
+const CreateFolderSchema = z.object({
+  name: z.string().trim().min(1, "name is required"),
+  parent_folder_id: z.string().uuid().nullable().optional(),
+});
+
+const UpdateFolderSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  parent_folder_id: z.string().uuid().nullable().optional(),
+}).strict();
+
+const MoveDocumentToFolderSchema = z.object({
+  folder_id: z.string().uuid().nullable(),
+});
 
 export const projectsRouter = Router();
 const ALLOWED_TYPES = new Set(["pdf", "docx", "doc"]);
-
-function normalizeDocumentFilename(nextName: unknown, currentName: string) {
-  if (typeof nextName !== "string") return null;
-  const trimmed = nextName.trim().slice(0, 200);
-  if (!trimmed) return null;
-  if (/\.[a-z0-9]{1,6}$/i.test(trimmed)) return trimmed;
-  const ext = currentName.match(/\.[a-z0-9]{1,6}$/i)?.[0] ?? "";
-  return `${trimmed}${ext}`;
-}
 
 // GET /projects
 projectsRouter.get("/", requireAuth, async (req, res) => {
@@ -40,7 +67,7 @@ projectsRouter.get("/", requireAuth, async (req, res) => {
     ? await db
         .from("projects")
         .select("*")
-        .filter("shared_with", "cs", JSON.stringify([userEmail]))
+        .contains("shared_with", JSON.stringify([userEmail]))
         .neq("user_id", userId)
         .order("created_at", { ascending: false })
     : { data: [], error: null };
@@ -83,13 +110,9 @@ projectsRouter.get("/", requireAuth, async (req, res) => {
 // POST /projects
 projectsRouter.post("/", requireAuth, async (req, res) => {
   const userId = res.locals.userId as string;
-  const { name, cm_number, shared_with } = req.body as {
-    name: string;
-    cm_number?: string;
-    shared_with?: string[];
-  };
-  if (!name?.trim())
-    return void res.status(400).json({ detail: "name is required" });
+  const body = parseBody(CreateProjectSchema, req, res);
+  if (!body) return;
+  const { name, cm_number, shared_with } = body;
 
   const db = createServerSupabase();
   const { data, error } = await db
@@ -125,7 +148,9 @@ projectsRouter.get("/:projectId", requireAuth, async (req, res) => {
     project.user_id === userId ||
     (userEmail &&
       Array.isArray(project.shared_with) &&
-      project.shared_with.includes(userEmail));
+      project.shared_with.some(
+        (e: string) => (e ?? "").toLowerCase() === (userEmail ?? "").toLowerCase(),
+      ));
   if (!canAccess)
     return void res.status(404).json({ detail: "Project not found" });
 
@@ -175,19 +200,13 @@ projectsRouter.get("/:projectId/people", requireAuth, async (req, res) => {
   if (!isOwner && !isShared)
     return void res.status(404).json({ detail: "Project not found" });
 
-  // Pull every auth user (matching the lookup endpoint's pattern). For
-  // larger deployments this should page or be replaced with a bulk-by-id
-  // RPC, but it keeps things simple while user counts are modest.
-  const { data: usersData } = await db.auth.admin.listUsers({ perPage: 1000 });
-  const allUsers = usersData?.users ?? [];
-  const userByEmail = new Map<string, { id: string; email: string }>();
-  const userById = new Map<string, { id: string; email: string }>();
-  for (const u of allUsers) {
-    if (!u.email) continue;
-    const lower = u.email.toLowerCase();
-    userByEmail.set(lower, { id: u.id, email: u.email });
-    userById.set(u.id, { id: u.id, email: u.email });
-  }
+  // Resolve shared-with emails to user records via RPC (CLEAN-15).
+  // get_auth_user_by_email is SECURITY DEFINER and O(log N) — replaces the
+  // listUsers({ perPage: 1000 }) walk that silently truncates above 1000.
+  const [userByEmail, ownerRecord] = await Promise.all([
+    getUsersByEmails(sharedWith),
+    getUserById(project.user_id as string),
+  ]);
 
   const memberUserIds: string[] = [];
   for (const email of sharedWith) {
@@ -217,20 +236,19 @@ projectsRouter.get("/:projectId/people", requireAuth, async (req, res) => {
     }
   }
 
-  const ownerInfo = userById.get(project.user_id as string);
   const owner = {
     user_id: project.user_id,
-    email: ownerInfo?.email ?? null,
+    email: ownerRecord?.email ?? null,
     display_name:
       profileByUserId.get(project.user_id as string)?.display_name ?? null,
   };
-  const members = sharedWith.map((email) => {
-    const u = userByEmail.get(email);
-    const display_name = u
-      ? profileByUserId.get(u.id)?.display_name ?? null
-      : null;
-    return { email, display_name };
-  });
+  const members = sharedWith
+    .filter((email) => userByEmail.has(email))
+    .map((email) => {
+      const u = userByEmail.get(email)!;
+      const display_name = profileByUserId.get(u.id)?.display_name ?? null;
+      return { email, display_name };
+    });
 
   res.json({ owner, members });
 });
@@ -239,19 +257,20 @@ projectsRouter.get("/:projectId/people", requireAuth, async (req, res) => {
 projectsRouter.patch("/:projectId", requireAuth, async (req, res) => {
   const userId = res.locals.userId as string;
   const { projectId } = req.params;
+  const body = parseBody(UpdateProjectSchema, req, res);
+  if (!body) return;
   const updates: Record<string, unknown> = {};
-  if (req.body.name != null) updates.name = req.body.name;
-  if (req.body.cm_number != null) updates.cm_number = req.body.cm_number;
-  if (Array.isArray(req.body.shared_with)) {
+  if (body.name != null) updates.name = body.name;
+  if (body.cm_number != null) updates.cm_number = body.cm_number;
+  if (Array.isArray(body.shared_with)) {
     // Normalise: lowercase + dedupe + drop empties.
     const seen = new Set<string>();
     const cleaned: string[] = [];
-    for (const raw of req.body.shared_with) {
-      if (typeof raw !== "string") continue;
-      const e = raw.trim().toLowerCase();
-      if (!e || seen.has(e)) continue;
-      seen.add(e);
-      cleaned.push(e);
+    for (const e of body.shared_with) {
+      const norm = e.trim().toLowerCase();
+      if (!norm || seen.has(norm)) continue;
+      seen.add(norm);
+      cleaned.push(norm);
     }
     updates.shared_with = cleaned;
   }
@@ -284,12 +303,15 @@ projectsRouter.delete("/:projectId", requireAuth, async (req, res) => {
   const userId = res.locals.userId as string;
   const { projectId } = req.params;
   const db = createServerSupabase();
-  const { error } = await db
+  const { data, error } = await db
     .from("projects")
     .delete()
     .eq("id", projectId)
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .select("id");
   if (error) return void res.status(500).json({ detail: error.message });
+  if (!data || data.length === 0)
+    return void res.status(404).json({ detail: "Project not found" });
   res.status(204).send();
 });
 
@@ -446,51 +468,6 @@ projectsRouter.post(
   },
 );
 
-// PATCH /projects/:projectId/documents/:documentId — rename a project document
-projectsRouter.patch("/:projectId/documents/:documentId", requireAuth, async (req, res) => {
-  const userId = res.locals.userId as string;
-  const userEmail = res.locals.userEmail as string | undefined;
-  const { projectId, documentId } = req.params;
-  const db = createServerSupabase();
-
-  const access = await checkProjectAccess(projectId, userId, userEmail, db);
-  if (!access.ok)
-    return void res.status(404).json({ detail: "Project not found" });
-
-  const { data: doc } = await db
-    .from("documents")
-    .select("id, filename, current_version_id")
-    .eq("id", documentId)
-    .eq("project_id", projectId)
-    .single();
-  if (!doc)
-    return void res.status(404).json({ detail: "Document not found" });
-
-  const filename = normalizeDocumentFilename(req.body?.filename, doc.filename as string);
-  if (!filename)
-    return void res.status(400).json({ detail: "filename is required" });
-
-  const { data: updated, error } = await db
-    .from("documents")
-    .update({ filename, updated_at: new Date().toISOString() })
-    .eq("id", documentId)
-    .eq("project_id", projectId)
-    .select("*")
-    .single();
-  if (error || !updated)
-    return void res.status(404).json({ detail: "Document not found" });
-
-  if (doc.current_version_id) {
-    await db
-      .from("document_versions")
-      .update({ display_name: filename })
-      .eq("id", doc.current_version_id)
-      .eq("document_id", documentId);
-  }
-
-  res.json(updated);
-});
-
 // POST /projects/:projectId/documents
 projectsRouter.post(
   "/:projectId/documents",
@@ -541,8 +518,9 @@ projectsRouter.post("/:projectId/folders", requireAuth, async (req, res) => {
   const userId = res.locals.userId as string;
   const userEmail = res.locals.userEmail as string | undefined;
   const { projectId } = req.params;
-  const { name, parent_folder_id } = req.body as { name: string; parent_folder_id?: string | null };
-  if (!name?.trim()) return void res.status(400).json({ detail: "name is required" });
+  const folderBody = parseBody(CreateFolderSchema, req, res);
+  if (!folderBody) return;
+  const { name, parent_folder_id } = folderBody;
 
   const db = createServerSupabase();
   const access = await checkProjectAccess(projectId, userId, userEmail, db);
@@ -569,7 +547,8 @@ projectsRouter.patch("/:projectId/folders/:folderId", requireAuth, async (req, r
   const userId = res.locals.userId as string;
   const userEmail = res.locals.userEmail as string | undefined;
   const { projectId, folderId } = req.params;
-  const body = req.body as { name?: string; parent_folder_id?: string | null };
+  const body = parseBody(UpdateFolderSchema, req, res);
+  if (!body) return;
 
   const db = createServerSupabase();
   const access = await checkProjectAccess(projectId, userId, userEmail, db);
@@ -580,14 +559,11 @@ projectsRouter.patch("/:projectId/folders/:folderId", requireAuth, async (req, r
   if ("parent_folder_id" in body) {
     // Cycle check: walk up the tree from the proposed parent to ensure folderId is not an ancestor
     if (body.parent_folder_id) {
-      const parent = await loadProjectFolder(db, projectId, body.parent_folder_id);
-      if (!parent) return void res.status(404).json({ detail: "Parent folder not found" });
-
       let cur: string | null = body.parent_folder_id;
       while (cur) {
         if (cur === folderId) return void res.status(400).json({ detail: "Cannot move a folder into itself or a descendant" });
-        const p = await loadProjectFolder(db, projectId, cur);
-        if (!p) return void res.status(404).json({ detail: "Parent folder not found" });
+        const { data: p }: { data: { parent_folder_id: string | null } | null } =
+          await db.from("project_subfolders").select("parent_folder_id").eq("id", cur).single();
         cur = p?.parent_folder_id ?? null;
       }
     }
@@ -612,11 +588,8 @@ projectsRouter.delete("/:projectId/folders/:folderId", requireAuth, async (req, 
   const access = await checkProjectAccess(projectId, userId, userEmail, db);
   if (!access.ok) return void res.status(404).json({ detail: "Project not found" });
 
-  const folder = await loadProjectFolder(db, projectId, folderId);
-  if (!folder) return void res.status(404).json({ detail: "Folder not found" });
-
   // Move direct documents to root before cascade-deleting subfolders
-  await db.from("documents").update({ folder_id: null }).eq("folder_id", folderId).eq("project_id", projectId);
+  await db.from("documents").update({ folder_id: null }).eq("folder_id", folderId);
 
   const { error } = await db.from("project_subfolders")
     .delete().eq("id", folderId).eq("project_id", projectId);
@@ -629,16 +602,13 @@ projectsRouter.patch("/:projectId/documents/:documentId/folder", requireAuth, as
   const userId = res.locals.userId as string;
   const userEmail = res.locals.userEmail as string | undefined;
   const { projectId, documentId } = req.params;
-  const { folder_id } = req.body as { folder_id: string | null };
+  const moveBody = parseBody(MoveDocumentToFolderSchema, req, res);
+  if (!moveBody) return;
+  const { folder_id } = moveBody;
 
   const db = createServerSupabase();
   const access = await checkProjectAccess(projectId, userId, userEmail, db);
   if (!access.ok) return void res.status(404).json({ detail: "Project not found" });
-
-  if (folder_id) {
-    const folder = await loadProjectFolder(db, projectId, folder_id);
-    if (!folder) return void res.status(404).json({ detail: "Folder not found" });
-  }
 
   const { data, error } = await db.from("documents")
     .update({ folder_id: folder_id ?? null, updated_at: new Date().toISOString() })
@@ -647,20 +617,6 @@ projectsRouter.patch("/:projectId/documents/:documentId/folder", requireAuth, as
   if (error || !data) return void res.status(404).json({ detail: "Document not found" });
   res.json(data);
 });
-
-async function loadProjectFolder(
-  db: ReturnType<typeof createServerSupabase>,
-  projectId: string,
-  folderId: string,
-): Promise<{ id: string; parent_folder_id: string | null } | null> {
-  const { data } = await db
-    .from("project_subfolders")
-    .select("id, parent_folder_id")
-    .eq("id", folderId)
-    .eq("project_id", projectId)
-    .maybeSingle();
-  return (data as { id: string; parent_folder_id: string | null } | null) ?? null;
-}
 
 export async function handleDocumentUpload(
   req: import("express").Request,
@@ -672,18 +628,29 @@ export async function handleDocumentUpload(
   const file = req.file;
   if (!file) return void res.status(400).json({ detail: "file is required" });
 
-  const filename = file.originalname;
+  // sanitizeFilename must run before the storage key is constructed (CLEAN-26).
+  const filename = sanitizeFilename(file.originalname);
   const suffix = filename.includes(".")
     ? filename.split(".").pop()!.toLowerCase()
     : "";
-  if (!ALLOWED_TYPES.has(suffix))
-    return void res
-      .status(400)
-      .json({
-        detail: `Unsupported file type: ${suffix}. Allowed: pdf, docx, doc`,
-      });
+  if (!ALLOWED_TYPES.has(suffix)) {
+    await cleanupTempFile(file.path);
+    return void res.status(400).json({
+      detail: `Unsupported file type: ${suffix}. Allowed: pdf, docx, doc`,
+    });
+  }
 
-  const content = file.buffer;
+  // Read bytes from the temp file (diskStorage writes to path, not buffer).
+  // This must happen before the temp file is cleaned up in the finally block.
+  let content: Buffer;
+  try {
+    content = await readFile(file.path);
+  } catch (readErr) {
+    logger.error({ err: readErr }, "[upload] could not read temp file");
+    await cleanupTempFile(file.path);
+    return void res.status(500).json({ detail: "Failed to read uploaded file" });
+  }
+
   const { data: doc, error: insertErr } = await db
     .from("documents")
     .insert({
@@ -693,14 +660,16 @@ export async function handleDocumentUpload(
       file_type: suffix,
       size_bytes: content.byteLength,
       status: "processing",
+      pdf_conversion_status: "pending",
     })
     .select("*")
     .single();
-
-  if (insertErr || !doc)
+  if (insertErr || !doc) {
+    await cleanupTempFile(file.path);
     return void res
       .status(500)
       .json({ detail: "Failed to create document record" });
+  }
 
   try {
     const docId = doc.id as string;
@@ -722,31 +691,13 @@ export async function handleDocumentUpload(
       content.byteOffset,
       content.byteOffset + content.byteLength,
     ) as ArrayBuffer;
-    const tree = await extractStructureTree(rawBuf, suffix, filename);
+    const tree = await extractStructureTree(rawBuf, suffix);
     const pageCount = suffix === "pdf" ? await countPdfPages(rawBuf) : null;
 
-    // Convert DOCX/DOC → PDF for display. PDFs are their own rendition.
+    // For PDF uploads the file is its own rendition; DOCX/DOC conversion is
+    // enqueued in the background so the request can return immediately.
     let pdfStoragePath: string | null = null;
-    if (suffix === "docx" || suffix === "doc") {
-      try {
-        const pdfBuf = await docxToPdf(content);
-        const pdfKey = convertedPdfKey(userId, docId);
-        await uploadFile(
-          pdfKey,
-          pdfBuf.buffer.slice(
-            pdfBuf.byteOffset,
-            pdfBuf.byteOffset + pdfBuf.byteLength,
-          ) as ArrayBuffer,
-          "application/pdf",
-        );
-        pdfStoragePath = pdfKey;
-      } catch (err) {
-        console.error(
-          `[upload] DOCX→PDF conversion failed for ${filename}:`,
-          err,
-        );
-      }
-    } else if (suffix === "pdf") {
+    if (suffix === "pdf") {
       pdfStoragePath = key;
     }
 
@@ -770,6 +721,17 @@ export async function handleDocumentUpload(
       );
     }
 
+    // Enqueue background PDF conversion for DOCX/DOC uploads (CLEAN-20).
+    // Pass the in-memory buffer so it survives temp-file cleanup below.
+    if (suffix === "docx" || suffix === "doc") {
+      void enqueueConversionFromBuffer({
+        documentId: docId,
+        versionId: versionRow.id,
+        userId,
+        docxBuffer: content,
+      });
+    }
+
     await db
       .from("documents")
       .update({
@@ -787,12 +749,9 @@ export async function handleDocumentUpload(
       .select("*")
       .eq("id", docId)
       .single();
+    // Surface storage paths to the caller for backward compatibility.
     const responseDoc = updated
-      ? {
-            ...updated,
-            storage_path: key,
-            pdf_storage_path: pdfStoragePath,
-        }
+      ? { ...updated, storage_path: key, pdf_storage_path: pdfStoragePath }
       : updated;
     return void res.status(201).json(responseDoc);
   } catch (e) {
@@ -800,6 +759,8 @@ export async function handleDocumentUpload(
     return void res
       .status(500)
       .json({ detail: `Document processing failed: ${String(e)}` });
+  } finally {
+    await cleanupTempFile(file.path);
   }
 }
 
@@ -814,66 +775,6 @@ async function countPdfPages(buf: ArrayBuffer): Promise<number | null> {
       }
     ).getDocument({ data: new Uint8Array(buf) }).promise;
     return pdf.numPages;
-  } catch {
-    return null;
-  }
-}
-
-async function extractStructureTree(
-  content: ArrayBuffer,
-  fileType: string,
-  filename: string,
-): Promise<unknown[] | null> {
-  try {
-    if (fileType === "pdf") {
-      const pdfjsLib = await import(
-        "pdfjs-dist/legacy/build/pdf.mjs" as string
-      );
-      const pdf = await (
-        pdfjsLib as unknown as {
-          getDocument: (opts: unknown) => {
-            promise: Promise<{
-              numPages: number;
-              getOutline: () => Promise<{ title?: string }[]>;
-            }>;
-          };
-        }
-      ).getDocument({ data: new Uint8Array(content) }).promise;
-      if (pdf.numPages <= 5) return null;
-      const outline = await pdf.getOutline();
-      if (outline?.length) {
-        return outline.map((item, i) => ({
-          id: `h1-${i}`,
-          title: item.title ?? `Item ${i + 1}`,
-          level: 1,
-          page_number: null,
-          children: [],
-        }));
-      }
-      return Array.from({ length: pdf.numPages }, (_, i) => ({
-        id: `page-${i + 1}`,
-        title: `Page ${i + 1}`,
-        level: 1,
-        page_number: i + 1,
-        children: [],
-      }));
-    } else {
-      const mammoth = await import("mammoth");
-      const result = await mammoth.extractRawText({
-        buffer: Buffer.from(content),
-      });
-      const lines = result.value.split("\n").filter((l) => l.trim());
-      const nodes = lines
-        .slice(0, 30)
-        .map((line, i) => ({
-          id: `h1-${i}`,
-          title: line.slice(0, 100),
-          level: 1,
-          page_number: null,
-          children: [],
-        }));
-      return nodes.length ? nodes : null;
-    }
   } catch {
     return null;
   }

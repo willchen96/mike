@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/app/lib/supabase";
 import { applyOptimisticResolution } from "../assistant/EditCard";
 import { DocView } from "./DocView";
 import { DocxView } from "./DocxView";
@@ -66,6 +66,8 @@ interface Props {
     versionId: string | null;
     versionNumber: number | null;
     mode: DocPanelMode;
+    pdfStatus?: "pending" | "ok" | "failed" | null;
+    onRetryPdf?: () => void | Promise<void>;
     /** Spinner on the Download button while an accept/reject is in flight. */
     isReloading?: boolean;
     warning?: string | null;
@@ -86,6 +88,8 @@ export function DocPanel({
     versionId,
     versionNumber,
     mode,
+    pdfStatus = null,
+    onRetryPdf,
     isReloading = false,
     warning,
     onWarningDismiss,
@@ -155,16 +159,16 @@ export function DocPanel({
             )}
 
             {useDocxView ? (
-                <DocxView
-                    documentId={documentId}
-                    versionId={versionId ?? undefined}
-                    quotes={quotes}
-                    highlightEdit={highlightEdit}
-                    warning={warning ?? null}
-                    onWarningDismiss={onWarningDismiss}
-                    initialScrollTop={initialScrollTop ?? null}
-                    onScrollChange={onScrollChange}
-                />
+            <DocxView
+                documentId={documentId}
+                versionId={versionId ?? undefined}
+                quotes={quotes}
+                highlightEdit={highlightEdit}
+                warning={warning ?? null}
+                onWarningDismiss={onWarningDismiss}
+                initialScrollTop={initialScrollTop ?? null}
+                onScrollChange={onScrollChange}
+            />
             ) : (
                 <DocView
                     doc={{
@@ -172,6 +176,8 @@ export function DocPanel({
                         version_id: versionId,
                     }}
                     quotes={quotes}
+                    pdfStatus={pdfStatus}
+                    onRetryPdf={onRetryPdf}
                 />
             )}
         </div>

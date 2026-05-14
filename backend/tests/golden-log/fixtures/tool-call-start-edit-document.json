@@ -1,0 +1,19 @@
+{
+  "scenario": "doc-edited",
+  "providerChunks": [
+    {
+      "type": "content_delta",
+      "text": "I will edit clause 4.2."
+    },
+    {
+      "type": "tool_call_start",
+      "id": "call-2",
+      "name": "edit_document",
+      "input": {
+        "doc_id": "doc-0",
+        "changes": []
+      }
+    }
+  ],
+  "expectedSseSequence": "data: {\"type\":\"content_delta\",\"text\":\"I will edit c\"}\n\ndata: {\"type\":\"content_delta\",\"text\":\"lause 4.2.\"}\n\ndata: {\"type\":\"tool_call_start\",\"name\":\"edit_document\"}\n\ndata: {\"type\":\"citations\",\"citations\":[]}\n\ndata: [DONE]\n\n"
+}

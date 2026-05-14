@@ -6,7 +6,7 @@ import { Plus, FolderOpen, ChevronDown } from "lucide-react";
 import { HeaderSearchBtn } from "@/app/components/shared/HeaderSearchBtn";
 import { listProjects, updateProject, deleteProject } from "@/app/lib/mikeApi";
 import { OwnerOnlyModal } from "@/app/components/shared/OwnerOnlyModal";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/app/contexts/AuthContext";
 import type { MikeProject } from "@/app/components/shared/types";
 import { NewProjectModal } from "./NewProjectModal";
 import { ToolbarTabs } from "@/app/components/shared/ToolbarTabs";
@@ -28,7 +28,6 @@ const NAME_COL_W = "w-[300px] shrink-0";
 export function ProjectsOverview() {
     const [projects, setProjects] = useState<MikeProject[]>([]);
     const [loading, setLoading] = useState(true);
-    const [loadError, setLoadError] = useState<string | null>(null);
     const [modalOpen, setModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<Tab>("all");
     const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -41,42 +40,14 @@ export function ProjectsOverview() {
     const [ownerOnlyAction, setOwnerOnlyAction] = useState<string | null>(null);
     const actionsRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
-    const { user, isAuthenticated, authLoading } = useAuth();
+    const { user } = useAuth();
 
     useEffect(() => {
-        if (authLoading) {
-            setLoading(true);
-            return;
-        }
-        if (!isAuthenticated) {
-            setProjects([]);
-            setLoadError(null);
-            setLoading(false);
-            return;
-        }
-
-        let cancelled = false;
-        setLoading(true);
-        setLoadError(null);
         listProjects()
-            .then((loaded) => {
-                if (!cancelled) setProjects(loaded);
-            })
-            .catch((err) => {
-                console.error("[projects] failed to load projects", err);
-                if (!cancelled) {
-                    setProjects([]);
-                    setLoadError("Could not load projects.");
-                }
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [authLoading, isAuthenticated, user?.id]);
+            .then(setProjects)
+            .catch(() => setProjects([]))
+            .finally(() => setLoading(false));
+    }, []);
 
     useEffect(() => {
         setSelectedIds([]);
@@ -291,16 +262,6 @@ export function ProjectsOverview() {
                                 <div className="w-8 shrink-0" />
                             </div>
                         ))}
-                    </div>
-                ) : loadError ? (
-                    <div className="flex flex-col items-start py-24 w-full max-w-xs mx-auto">
-                        <FolderOpen className="h-8 w-8 text-gray-300 mb-4" />
-                        <p className="text-2xl font-medium font-serif text-gray-900">
-                            Projects
-                        </p>
-                        <p className="mt-1 text-xs text-red-500 max-w-xs">
-                            {loadError}
-                        </p>
                     </div>
                 ) : filtered.length === 0 ? (
                     <div className="flex flex-col items-start py-24 w-full max-w-xs mx-auto">

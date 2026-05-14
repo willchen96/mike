@@ -3,5 +3,4 @@ dist
 .env*
 !.env.example
 *.log
-logs/
 .DS_Store

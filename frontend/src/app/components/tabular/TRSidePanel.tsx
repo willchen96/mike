@@ -180,6 +180,7 @@ export function TRSidePanel({
                     ) : (
                         <DocView
                             doc={{ document_id: doc.id }}
+                            pdfStatus={doc.pdf_conversion_status}
                             quote={docCitation.quote}
                             fallbackPage={docCitation.page}
                         />
