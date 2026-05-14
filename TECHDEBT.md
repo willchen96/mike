@@ -11,6 +11,35 @@ permissive rule / workaround it references.
 
 ## High priority
 
+### Re-enable skipped Playwright specs once selectors are fixed
+**Files:** `e2e/chat.spec.ts`, `e2e/documents.spec.ts`, `e2e/projects.spec.ts`, `e2e/tabular.spec.ts`
+
+All four product-flow specs are wrapped in `test.describe.skip()`.  The
+auth setup (`createAndLoginTestUser`) works — proven by all four auth
+tests in `e2e/auth.spec.ts` passing.  Each spec then fails inside the
+test body on selectors / flows that don't match the current frontend
+(e.g. `createProject` helper in `documents.spec.ts`, the "new project"
+button locator in `projects.spec.ts`, the chat input flow, etc.).
+
+To re-enable:
+
+1. Pull the most recent `playwright-report` artefact from a CI run
+   (Actions → run → bottom of page → "Artifacts" → `playwright-report`).
+2. Unzip and open `index.html`.
+3. Pick one test, look at the screenshot / trace / video at the
+   failure point.  Update the spec's selectors / flow to match the
+   current UI.
+4. Change `test.describe.skip(...)` → `test.describe(...)` for that
+   file (or only un-skip individual tests with `test.only` while
+   iterating).
+5. Push; verify in CI.  Repeat for the next file.
+
+Until these are re-enabled the e2e job is effectively a smoke test of
+the auth stack only.  That is still a strict improvement over no e2e
+in CI — the four passing auth tests catch the kinds of regressions
+that broke us during initial bring-up (rate-limit blow-ups, race
+conditions in login/logout, missing env vars).
+
 ### Login & logout race conditions — patched, not properly fixed
 **File:** `frontend/src/app/(pages)/layout.tsx`
 

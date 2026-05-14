@@ -234,14 +234,15 @@ jobs:
       - name: Run Playwright suite
         run: npm run test:e2e
 
-      # Upload artefacts whenever the report exists — on failure, on
-      # job timeout, on partial completion.  Skipped only on explicit
-      # cancellation (Ctrl-C from the Actions UI) since there's nothing
-      # useful to save in that case.  `if-no-files-found: ignore` keeps
-      # green runs quiet (Playwright doesn't write a report when every
-      # test passes unless we configure it to).
+      # Upload artefacts on every outcome — success, failure, timeout,
+      # cancellation.  We specifically want artefacts on cancellation
+      # too: a job killed by the concurrency-cancel-in-progress hook (a
+      # new push canceled an older run) or by job timeout still has a
+      # partial playwright-report that's useful to inspect.
+      # `if-no-files-found: ignore` keeps green runs quiet — Playwright
+      # only writes a report when there's something to report.
       - name: Upload Playwright report
-        if: ${{ !cancelled() }}
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
