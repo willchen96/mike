@@ -5,6 +5,7 @@ import type {
     NormalizedToolCall,
 } from "./types";
 import { toGeminiTools } from "./tools";
+import { logger } from "../logger";
 
 type GeminiPart = {
     text?: string;
@@ -28,64 +29,9 @@ type GeminiContent = {
     parts: GeminiPart[];
 };
 
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
-const MAX_GEMINI_ATTEMPTS = 3;
-
-function apiKey(override?: string | null): string {
-    const key = override?.trim() || process.env.GEMINI_API_KEY?.trim() || "";
-    if (!key) {
-        throw new Error(
-            "Gemini API key is not configured. Set GEMINI_API_KEY or add a user Gemini key.",
-        );
-    }
-    return key;
-}
-
 function client(override?: string | null): GoogleGenAI {
-    return new GoogleGenAI({ apiKey: apiKey(override) });
-}
-
-function geminiStatus(err: unknown): number | null {
-    const status = (err as { status?: unknown })?.status;
-    return typeof status === "number" ? status : null;
-}
-
-function isRetryableGeminiError(err: unknown): boolean {
-    const status = geminiStatus(err);
-    if (status != null && RETRYABLE_STATUSES.has(status)) return true;
-
-    const message =
-        err instanceof Error ? err.message : typeof err === "string" ? err : "";
-    return /UNAVAILABLE|Service Unavailable|high demand|try again later/i.test(
-        message,
-    );
-}
-
-function retryDelayMs(attempt: number): number {
-    return 400 * 2 ** attempt;
-}
-
-async function sleep(ms: number): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function withGeminiRetries<T>(operation: () => Promise<T>): Promise<T> {
-    let lastError: unknown;
-    for (let attempt = 0; attempt < MAX_GEMINI_ATTEMPTS; attempt++) {
-        try {
-            return await operation();
-        } catch (err) {
-            lastError = err;
-            const isLastAttempt = attempt === MAX_GEMINI_ATTEMPTS - 1;
-            if (isLastAttempt || !isRetryableGeminiError(err)) throw err;
-            console.warn("[gemini] transient error; retrying", {
-                attempt: attempt + 1,
-                status: geminiStatus(err),
-            });
-            await sleep(retryDelayMs(attempt));
-        }
-    }
-    throw lastError;
+    const apiKey = override?.trim() || process.env.GEMINI_API_KEY || "";
+    return new GoogleGenAI({ apiKey });
 }
 
 function toNativeContents(messages: StreamChatParams["messages"]): GeminiContent[] {
@@ -107,25 +53,23 @@ export async function streamGemini(
     let fullText = "";
 
     for (let iter = 0; iter < maxIter; iter++) {
-        const stream = await withGeminiRetries(() =>
-            ai.models.generateContentStream({
-                model,
-                contents: contents as never,
-                config: {
-                    systemInstruction: systemPrompt,
-                    tools: functionDeclarations.length
-                        ? [{ functionDeclarations } as never]
-                        : undefined,
-                    // When enabled, ask Gemini to surface thought summaries.
-                    // When disabled, explicitly zero the thinking budget so the
-                    // model skips thinking entirely (saves tokens and latency
-                    // for bulk extraction jobs).
-                    thinkingConfig: enableThinking
-                        ? { includeThoughts: true }
-                        : { thinkingBudget: 0 },
-                },
-            }),
-        );
+        const stream = await ai.models.generateContentStream({
+            model,
+            contents: contents as never,
+            config: {
+                systemInstruction: systemPrompt,
+                tools: functionDeclarations.length
+                    ? [{ functionDeclarations } as never]
+                    : undefined,
+                // When enabled, ask Gemini to surface thought summaries.
+                // When disabled, explicitly zero the thinking budget so the
+                // model skips thinking entirely (saves tokens and latency
+                // for bulk extraction jobs).
+                thinkingConfig: enableThinking
+                    ? { includeThoughts: true }
+                    : { thinkingBudget: 0 },
+            },
+        });
 
         // Per-iteration accumulators.
         const textParts: string[] = [];
@@ -134,6 +78,9 @@ export async function streamGemini(
         let sawThinking = false;
 
         for await (const chunk of stream) {
+            if (process.env.LLM_STREAM_DEBUG) {
+                logger.debug({ chunk }, "[gemini stream chunk]");
+            }
             const parts =
                 (chunk as { candidates?: { content?: { parts?: GeminiPart[] } }[] })
                     .candidates?.[0]?.content?.parts ?? [];
@@ -207,14 +154,12 @@ export async function completeGeminiText(params: {
     apiKeys?: { gemini?: string | null };
 }): Promise<string> {
     const ai = client(params.apiKeys?.gemini);
-    const resp = await withGeminiRetries(() =>
-        ai.models.generateContent({
-            model: params.model,
-            contents: [{ role: "user", parts: [{ text: params.user }] }],
-            config: params.systemPrompt
-                ? { systemInstruction: params.systemPrompt }
-                : undefined,
-        }),
-    );
+    const resp = await ai.models.generateContent({
+        model: params.model,
+        contents: [{ role: "user", parts: [{ text: params.user }] }],
+        config: params.systemPrompt
+            ? { systemInstruction: params.systemPrompt }
+            : undefined,
+    });
     return resp.text ?? "";
 }

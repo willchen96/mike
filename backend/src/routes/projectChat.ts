@@ -1,6 +1,9 @@
 import { Router } from "express";
+import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
+import { llmRateLimiter } from "../lib/rateLimiter";
 import { createServerSupabase } from "../lib/supabase";
+import { logger } from "../lib/logger";
 import {
     buildProjectDocContext,
     buildMessages,
@@ -13,6 +16,7 @@ import {
 } from "../lib/chatTools";
 import { getUserApiKeys } from "../lib/userSettings";
 import { checkProjectAccess } from "../lib/access";
+import { parseBody } from "../lib/validate";
 
 const PROJECT_SYSTEM_PROMPT_EXTRA = `PROJECT CONTEXT:
 You are operating within a project folder that contains a collection of legal documents the user has organised for a single matter. The user's questions will usually refer to one or more documents in this project — your job is to find the relevant files to work on. Use list_documents to see what is available and fetch_documents / read_document to pull in any documents you need before answering.
@@ -22,15 +26,46 @@ A document may currently be displayed in the user's side panel; when provided, t
 REPLICATING A DOCUMENT:
 When the user wants to use an existing project document as a starting point for a new file (e.g. "use this NDA as a template", "make me a copy of the SOW so I can edit it", "duplicate this and adapt it for company X"), call the replicate_document tool with the source doc_id. This creates a byte-for-byte copy as a new project document, returns a fresh doc_id slug, and shows a download/open card in the UI. Then call edit_document on the returned slug to make the user's requested changes — do NOT call generate_docx for cases where the user clearly wants the existing document's structure and formatting preserved.`;
 
+const ProjectChatStreamSchema = z.object({
+    messages: z.array(
+        z.object({
+            role: z.enum(["user", "assistant"]),
+            content: z.string(),
+            files: z.array(z.unknown()).optional().nullable(),
+            workflow: z.unknown().optional().nullable(),
+        }),
+    ).min(1),
+    chat_id: z.string().uuid().optional(),
+    model: z.string().optional(),
+    displayed_doc: z
+        .object({
+            filename: z.string(),
+            document_id: z.string(),
+        })
+        .optional()
+        .nullable(),
+    attached_documents: z
+        .array(
+            z.object({
+                filename: z.string(),
+                document_id: z.string(),
+            }),
+        )
+        .optional()
+        .nullable(),
+});
+
 export const projectChatRouter = Router({ mergeParams: true });
 
 // POST /projects/:projectId/chat — streaming
-projectChatRouter.post("/", requireAuth, async (req, res) => {
+projectChatRouter.post("/", requireAuth, llmRateLimiter, async (req, res) => {
     const userId = res.locals.userId as string;
     const userEmail = res.locals.userEmail as string | undefined;
     const { projectId } = req.params;
+    const body = parseBody(ProjectChatStreamSchema, req, res);
+    if (!body) return;
     const { messages, chat_id, model, displayed_doc, attached_documents } =
-        req.body as {
+        body as unknown as {
             messages: ChatMessage[];
             chat_id?: string;
             model?: string;
@@ -91,7 +126,6 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
 
     const { docIndex, docStore, folderPaths } = await buildProjectDocContext(
         projectId,
-        userId,
         db,
     );
     const docAvailability = Object.entries(docIndex).map(([doc_id, info]) => ({
@@ -152,7 +186,7 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
 
     const write = (line: string) => res.write(line);
 
-    const apiKeys = await getUserApiKeys(userId, db);
+    const apiKeys = await getUserApiKeys(userId, db, { route: req.path, requestId: req.id });
 
     try {
         write(`data: ${JSON.stringify({ type: "chat_id", chatId })}\n\n`);
@@ -186,7 +220,7 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
                 .eq("id", chatId);
         }
     } catch (err) {
-        console.error("[project-chat/stream] error:", err);
+        logger.error({ err }, "[project-chat/stream] error");
         try {
             write(
                 `data: ${JSON.stringify({ type: "error", message: "Stream error" })}\n\n`,

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/app/contexts/AuthContext";
 
 interface TabDef {
     id: string;
@@ -44,58 +44,38 @@ export default function AccountLayout({
     }
 
     return (
-        <div className="flex h-full flex-col overflow-y-auto">
-            <header className="mx-auto flex h-16 w-full max-w-5xl shrink-0 items-end px-6 pb-2 md:h-24 md:pb-4">
-                <h1 className="text-4xl font-medium font-eb-garamond">
+        <div className="flex flex-col h-full md:overflow-y-auto px-6 py-6 md:py-10">
+            <div className="max-w-5xl w-full mx-auto">
+                <h1 className="text-4xl font-medium mb-8 font-eb-garamond">
                     Settings
                 </h1>
-            </header>
 
-            <main className="mx-auto w-full max-w-5xl flex-1 px-6 pb-10 pt-4 md:pt-6">
-                <div className="grid grid-cols-1 gap-y-6 md:grid-cols-[224px_minmax(0,1fr)] md:gap-x-10">
+                <div className="flex flex-col md:flex-row gap-6 md:gap-10">
                     <nav
                         aria-label="Settings"
-                        className="z-10 -ml-3 min-w-0 self-start md:sticky md:top-4"
+                        className="md:w-56 shrink-0 flex md:flex-col gap-1 overflow-x-auto"
                     >
-                        <div className="-m-1 min-w-0 p-1">
-                            <div className="-m-1 min-w-0 overflow-x-auto overflow-y-hidden p-1">
-                                <ul className="mb-0 flex gap-1 md:flex-col">
-                                    {TABS.map((tab) => {
-                                        const active =
-                                            pathname === tab.href ||
-                                            (tab.href !== "/account" &&
-                                                pathname.startsWith(tab.href));
-                                        return (
-                                            <li key={tab.id}>
-                                                <button
-                                                    type="button"
-                                                    aria-current={
-                                                        active
-                                                            ? "page"
-                                                            : undefined
-                                                    }
-                                                    onClick={() =>
-                                                        router.push(tab.href)
-                                                    }
-                                                    className={`flex h-9 w-full items-center rounded-lg px-3 text-left text-sm font-medium whitespace-nowrap transition-colors ${
-                                                        active
-                                                            ? "bg-gray-100 text-gray-900"
-                                                            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                                                    }`}
-                                                >
-                                                    {tab.label}
-                                                </button>
-                                            </li>
-                                        );
-                                    })}
-                                </ul>
-                            </div>
-                        </div>
+                        {TABS.map((tab) => {
+                            const active = pathname === tab.href;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => router.push(tab.href)}
+                                    className={`text-left whitespace-nowrap px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                        active
+                                            ? "bg-gray-100 text-gray-900"
+                                            : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
+                                    }`}
+                                >
+                                    {tab.label}
+                                </button>
+                            );
+                        })}
                     </nav>
 
-                    <div className="min-w-0 outline-none">{children}</div>
+                    <div className="flex-1 min-w-0">{children}</div>
                 </div>
-            </main>
+            </div>
         </div>
     );
 }

@@ -10,10 +10,7 @@ import { WFEditColumnModal } from "@/app/components/workflows/WFEditColumnModal"
 import { WFColumnViewModal } from "@/app/components/workflows/WFColumnViewModal";
 import { AddColumnModal } from "@/app/components/tabular/AddColumnModal";
 import type { ColumnConfig, MikeWorkflow } from "@/app/components/shared/types";
-import {
-    BUILT_IN_IDS,
-    BUILT_IN_WORKFLOWS,
-} from "@/app/components/workflows/builtinWorkflows";
+import { useManifests } from "@/app/contexts/ManifestsContext";
 import { formatIcon, formatLabel } from "@/app/components/tabular/columnFormat";
 import { RenameableTitle } from "@/app/components/shared/RenameableTitle";
 // dynamic import keeps Tiptap (browser-only) out of the SSR bundle
@@ -40,6 +37,8 @@ const NAME_COL_W = "w-[300px] shrink-0";
 export default function WorkflowDetailPage({ params }: Props) {
     const { id } = use(params);
     const router = useRouter();
+    const { workflows: BUILT_IN_WORKFLOWS } = useManifests();
+    const BUILT_IN_IDS = new Set(BUILT_IN_WORKFLOWS.map((w) => w.id));
 
     const [workflow, setWorkflow] = useState<MikeWorkflow | null>(null);
     const [loading, setLoading] = useState(true);

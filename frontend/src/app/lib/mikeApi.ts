@@ -3,7 +3,7 @@
  * Attaches the Supabase auth token for user authentication.
  */
 
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/app/lib/supabase";
 import type {
     AssistantEvent,
     MikeChat,
@@ -14,6 +14,7 @@ import type {
     MikeMessage,
     MikeProject,
     MikeWorkflow,
+    ModelsCatalog,
     TabularReview,
     TabularReviewDetailOut,
 } from "@/app/components/shared/types";
@@ -60,6 +61,21 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
     if (!response.ok) {
         const detail = await response.text();
+        // CLEAN-44: surface the soft-delete auth gate to the layout-level banner.
+        if (response.status === 403 && typeof window !== "undefined") {
+            try {
+                const parsed = parseDeletedResponse(JSON.parse(detail));
+                if (parsed) {
+                    window.dispatchEvent(
+                        new CustomEvent("hugo:account-deleted", {
+                            detail: parsed,
+                        }),
+                    );
+                }
+            } catch {
+                // not JSON — ignore
+            }
+        }
         throw new Error(detail || `API error: ${response.status}`);
     }
 
@@ -71,6 +87,69 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     }
 
     return (await response.json()) as T;
+}
+
+// ---------------------------------------------------------------------------
+// Account + api-keys (CLEAN-05 / CLEAN-44 — Plans 05/06/07/12)
+// ---------------------------------------------------------------------------
+
+export async function getApiKeyStatus(): Promise<{
+    has_claude: boolean;
+    has_gemini: boolean;
+}> {
+    return apiRequest<{ has_claude: boolean; has_gemini: boolean }>(
+        "/user/api-keys/status",
+    );
+}
+
+export async function setApiKey(
+    provider: "claude" | "gemini",
+    key: string | null,
+): Promise<void> {
+    await apiRequest<void>("/user/api-keys", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, key }),
+    });
+}
+
+export type AccountDeletionScheduled = {
+    deleted_at: string;
+    scheduled_hard_delete_at: string;
+    restore_token: string;
+    restore_url: string;
+};
+
+export async function restoreAccount(token: string): Promise<void> {
+    await apiRequest<void>(
+        `/user/account/restore?token=${encodeURIComponent(token)}`,
+        { method: "POST" },
+    );
+}
+
+export type AccountDeletedResponse = {
+    detail: string;
+    deleted: true;
+    deleted_at: string;
+    scheduled_hard_delete_at: string;
+    restore_path: string;
+};
+
+export function parseDeletedResponse(
+    body: unknown,
+): AccountDeletedResponse | null {
+    if (!body || typeof body !== "object") return null;
+    const b = body as Record<string, unknown>;
+    if (
+        b.deleted === true &&
+        typeof b.detail === "string" &&
+        typeof b.deleted_at === "string" &&
+        typeof b.scheduled_hard_delete_at === "string" &&
+        typeof b.restore_path === "string"
+    ) {
+        return b as unknown as AccountDeletedResponse;
+    }
+    return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,63 +172,9 @@ export async function createProject(
     });
 }
 
-export async function deleteAccount(): Promise<void> {
-    return apiRequest<void>("/user/account", { method: "DELETE" });
-}
-
-export interface UserProfile {
-    displayName: string | null;
-    organisation: string | null;
-    messageCreditsUsed: number;
-    creditsResetDate: string;
-    creditsRemaining: number;
-    tier: string;
-    tabularModel: string;
-    apiKeyStatus: ApiKeyStatus;
-}
-
-export async function getUserProfile(): Promise<UserProfile> {
-    return apiRequest<UserProfile>("/user/profile");
-}
-
-export async function updateUserProfile(payload: {
-    displayName?: string | null;
-    organisation?: string | null;
-    tabularModel?: string;
-}): Promise<UserProfile> {
-    return apiRequest<UserProfile>("/user/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-    });
-}
-
-export type ApiKeyProvider = "claude" | "gemini" | "openai";
-export type ApiKeySource = "user" | "env" | null;
-export type ApiKeyState = Record<
-    ApiKeyProvider,
-    {
-        configured: boolean;
-        source: ApiKeySource;
-    }
->;
-
-export type ApiKeyStatus = Record<ApiKeyProvider, boolean> & {
-    sources?: Partial<Record<ApiKeyProvider, ApiKeySource>>;
-};
-
-export async function getApiKeyStatus(): Promise<ApiKeyStatus> {
-    return apiRequest<ApiKeyStatus>("/user/api-keys");
-}
-
-export async function saveApiKey(
-    provider: ApiKeyProvider,
-    apiKey: string | null,
-): Promise<ApiKeyStatus> {
-    return apiRequest<ApiKeyStatus>(`/user/api-keys/${provider}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: apiKey }),
+export async function deleteAccount(): Promise<AccountDeletionScheduled> {
+    return apiRequest<AccountDeletionScheduled>("/user/account", {
+        method: "DELETE",
     });
 }
 
@@ -268,21 +293,6 @@ export async function moveDocumentToFolder(
     );
 }
 
-export async function renameProjectDocument(
-    projectId: string,
-    documentId: string,
-    filename: string,
-): Promise<MikeDocument> {
-    return apiRequest<MikeDocument>(
-        `/projects/${projectId}/documents/${documentId}`,
-        {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ filename }),
-        },
-    );
-}
-
 export async function addDocumentToProject(
     projectId: string,
     documentId: string,
@@ -301,7 +311,9 @@ export interface MikeDocumentVersion {
     display_name: string | null;
 }
 
-export async function listDocumentVersions(documentId: string): Promise<{
+export async function listDocumentVersions(
+    documentId: string,
+): Promise<{
     current_version_id: string | null;
     versions: MikeDocumentVersion[];
 }> {
@@ -386,11 +398,22 @@ export async function deleteDocument(documentId: string): Promise<void> {
     await apiRequest(`/single-documents/${documentId}`, { method: "DELETE" });
 }
 
+export async function regenerateDocumentPdf(
+    documentId: string,
+): Promise<{ pdf_conversion_status: "pending" }> {
+    return apiRequest<{ pdf_conversion_status: "pending" }>(
+        `/single-documents/${documentId}/regenerate-pdf`,
+        { method: "POST" },
+    );
+}
+
 export async function getDocumentUrl(
     documentId: string,
     versionId?: string | null,
 ): Promise<{ url: string; filename: string; version_id: string | null }> {
-    const qs = versionId ? `?version_id=${encodeURIComponent(versionId)}` : "";
+    const qs = versionId
+        ? `?version_id=${encodeURIComponent(versionId)}`
+        : "";
     return apiRequest(`/single-documents/${documentId}/url${qs}`);
 }
 
@@ -550,7 +573,9 @@ export async function streamProjectChat(payload: {
 export async function listTabularReviews(
     projectId?: string,
 ): Promise<TabularReview[]> {
-    const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+    const qs = projectId
+        ? `?project_id=${encodeURIComponent(projectId)}`
+        : "";
     return apiRequest<TabularReview[]>(`/tabular-review${qs}`);
 }
 
@@ -859,7 +884,9 @@ export async function shareWorkflow(
     });
 }
 
-export async function listWorkflowShares(workflowId: string): Promise<
+export async function listWorkflowShares(
+    workflowId: string,
+): Promise<
     {
         id: string;
         shared_with_email: string;
@@ -877,4 +904,16 @@ export async function deleteWorkflowShare(
     await apiRequest(`/workflows/${workflowId}/shares/${shareId}`, {
         method: "DELETE",
     });
+}
+
+// ---------------------------------------------------------------------------
+// Manifests (builtin workflows + models catalog)
+// ---------------------------------------------------------------------------
+
+export async function fetchBuiltinWorkflows(): Promise<{ workflows: MikeWorkflow[] }> {
+    return apiRequest<{ workflows: MikeWorkflow[] }>("/workflows/builtin");
+}
+
+export async function fetchModels(): Promise<ModelsCatalog> {
+    return apiRequest<ModelsCatalog>("/models");
 }

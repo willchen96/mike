@@ -26,6 +26,8 @@ type CommonTab = {
     filename: string;
     versionId: string | null;
     versionNumber: number | null;
+    pdfConversionStatus?: "pending" | "ok" | "failed" | null;
+    onRetryPdf?: () => void | Promise<void>;
     warning?: string | null;
     initialScrollTop?: number | null;
 };
@@ -252,6 +254,8 @@ export function AssistantSidePanel({
                                 filename={tab.filename}
                                 versionId={tab.versionId}
                                 versionNumber={tab.versionNumber}
+                                pdfStatus={tab.pdfConversionStatus ?? null}
+                                onRetryPdf={tab.onRetryPdf}
                                 mode={mode}
                                 isReloading={
                                     isEditorReloading?.(tab.documentId) ?? false

@@ -39,6 +39,7 @@ export interface MikeDocument {
   page_count: number | null;
   structure_tree: StructureNode[] | null;
   status: "pending" | "processing" | "ready" | "error";
+  pdf_conversion_status: "pending" | "ok" | "failed" | null;
   created_at: string | null;
   updated_at?: string | null;
   /** Max version_number across assistant_edit rows, null if doc is unedited. */
@@ -285,6 +286,22 @@ export interface MikeWorkflow {
   shared_by_name?: string | null;
   allow_edit?: boolean;
   is_owner?: boolean;
+}
+
+// Models catalog (mirrors GET /models response)
+
+export interface ModelEntry {
+  id: string;
+  provider: "claude" | "gemini";
+  label: string;
+  group: string;
+}
+
+export interface ModelsCatalog {
+  main: ModelEntry[];
+  mid: ModelEntry[];
+  low: ModelEntry[];
+  defaults: { main: string; title: string; tabular: string };
 }
 
 // API helpers

@@ -1,0 +1,10 @@
+{
+  "scenario": "citations-strip",
+  "providerChunks": [
+    {
+      "type": "content_delta",
+      "text": "Some prose [1].\n<CITATIONS>\n[{\"ref\":1,\"doc_id\":\"doc-0\",\"page\":1,\"quote\":\"hi\"}]\n</CITATIONS>"
+    }
+  ],
+  "expectedSseSequence": "data: {\"type\":\"content_delta\",\"text\":\"Some prose [1].\\n\"}\n\ndata: {\"type\":\"citations\",\"citations\":[{\"ref\":1,\"doc_id\":\"doc-0\",\"version_id\":null,\"version_number\":null,\"filename\":\"doc-0\",\"page\":1,\"quote\":\"hi\"}]}\n\ndata: [DONE]\n\n"
+}

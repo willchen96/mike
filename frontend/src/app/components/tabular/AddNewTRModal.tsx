@@ -13,7 +13,7 @@ import {
     uploadStandaloneDocument,
 } from "@/app/lib/mikeApi";
 import { FileDirectory } from "../shared/FileDirectory";
-import { BUILT_IN_WORKFLOWS } from "../workflows/builtinWorkflows";
+import { useManifests } from "@/app/contexts/ManifestsContext";
 
 interface Props {
     open: boolean;
@@ -41,6 +41,7 @@ export function AddNewTRModal({
     projectCmNumber,
 }: Props) {
     const isProjectMode = fixedProjectDocs !== undefined;
+    const { workflows: BUILT_IN_WORKFLOWS } = useManifests();
     const [title, setTitle] = useState("");
     const [underProject, setUnderProject] = useState(false);
     const [selectedProjectId, setSelectedProjectId] = useState("");

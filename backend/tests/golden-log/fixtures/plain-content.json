@@ -1,0 +1,10 @@
+{
+  "scenario": "plain-content",
+  "providerChunks": [
+    {
+      "type": "content_delta",
+      "text": "Hello world."
+    }
+  ],
+  "expectedSseSequence": "data: {\"type\":\"content_delta\",\"text\":\"He\"}\n\ndata: {\"type\":\"content_delta\",\"text\":\"llo world.\"}\n\ndata: {\"type\":\"citations\",\"citations\":[]}\n\ndata: [DONE]\n\n"
+}

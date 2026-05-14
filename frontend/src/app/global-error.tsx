@@ -17,9 +17,9 @@ export default function GlobalError({
                 <title>Something went wrong – Mike</title>
                 <style>{`
                     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=EB+Garamond:wght@400;500&display=swap');
-                    
+
                     * { margin: 0; padding: 0; box-sizing: border-box; }
-                    
+
                     body {
                         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
                         background-color: #ffffff;

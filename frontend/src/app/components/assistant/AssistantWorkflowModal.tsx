@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { MikeWorkflow } from "../shared/types";
 import { listWorkflows } from "@/app/lib/mikeApi";
-import { BUILT_IN_WORKFLOWS } from "../workflows/builtinWorkflows";
+import { useManifests } from "@/app/contexts/ManifestsContext";
 
 interface Props {
     open: boolean;
@@ -26,6 +26,7 @@ export function AssistantWorkflowModal({
     projectCmNumber,
     initialWorkflowId,
 }: Props) {
+    const { workflows: BUILT_IN_WORKFLOWS } = useManifests();
     const [workflows, setWorkflows] = useState<MikeWorkflow[]>([]);
     const [loading, setLoading] = useState(false);
     const [selected, setSelected] = useState<MikeWorkflow | null>(null);
@@ -73,7 +74,7 @@ export function AssistantWorkflowModal({
             const match = builtins.find((w) => w.id === initialWorkflowId);
             if (match) setSelected(match);
         }
-    }, [open, initialWorkflowId]);
+    }, [open, initialWorkflowId, BUILT_IN_WORKFLOWS]);
 
     if (!open) return null;
 

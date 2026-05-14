@@ -1,40 +1,44 @@
-import { MODELS, type ModelOption } from "../components/assistant/ModelToggle";
-import type { ApiKeyState } from "@/app/lib/mikeApi";
-
-export type ModelProvider = "claude" | "gemini" | "openai";
+export type ModelProvider = "claude" | "gemini";
 
 export function getModelProvider(modelId: string): ModelProvider | null {
-    const model = MODELS.find((m) => m.id === modelId);
-    if (!model) return null;
-    return modelGroupToProvider(model.group);
+    if (modelId.startsWith("claude")) return "claude";
+    if (modelId.startsWith("gemini")) return "gemini";
+    return null;
 }
+
+export type ApiKeyPresence = {
+    hasClaudeKey: boolean;
+    hasGeminiKey: boolean;
+};
 
 export function isModelAvailable(
     modelId: string,
-    apiKeys: ApiKeyState,
+    apiKeys: ApiKeyPresence,
 ): boolean {
     const provider = getModelProvider(modelId);
     if (!provider) return false;
-    return isProviderAvailable(provider, apiKeys);
+    return provider === "claude" ? apiKeys.hasClaudeKey : apiKeys.hasGeminiKey;
 }
 
 export function isProviderAvailable(
     provider: ModelProvider,
-    apiKeys: ApiKeyState,
+    apiKeys: ApiKeyPresence,
 ): boolean {
-    return !!apiKeys[provider]?.configured;
+    return provider === "claude" ? apiKeys.hasClaudeKey : apiKeys.hasGeminiKey;
 }
 
 export function providerLabel(provider: ModelProvider): string {
-    if (provider === "claude") return "Anthropic (Claude)";
-    if (provider === "openai") return "OpenAI";
-    return "Google (Gemini)";
+    return provider === "claude" ? "Anthropic (Claude)" : "Google (Gemini)";
 }
 
-export function modelGroupToProvider(
-    group: ModelOption["group"],
-): ModelProvider {
+/**
+ * Map a model's group string to its provider.
+ * Groups from the /models catalog use provider names ("Anthropic", "Google");
+ * fall back to ID-prefix detection for unknown groups.
+ */
+export function modelGroupToProvider(group: string): ModelProvider {
     if (group === "Anthropic") return "claude";
-    if (group === "OpenAI") return "openai";
-    return "gemini";
+    if (group === "Google") return "gemini";
+    // fallback: shouldn't normally reach here
+    return "claude";
 }

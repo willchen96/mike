@@ -28,8 +28,8 @@ import { PeopleModal } from "../shared/PeopleModal";
 import { OwnerOnlyModal } from "../shared/OwnerOnlyModal";
 import { ApiKeyMissingModal } from "../shared/ApiKeyMissingModal";
 import { RenameableTitle } from "../shared/RenameableTitle";
-import { useAuth } from "@/contexts/AuthContext";
-import { useUserProfile } from "@/contexts/UserProfileContext";
+import { useAuth } from "@/app/contexts/AuthContext";
+import { useUserProfile } from "@/app/contexts/UserProfileContext";
 import {
     getModelProvider,
     isModelAvailable,
@@ -87,7 +87,10 @@ export function TRView({ reviewId, projectId }: Props) {
     const tableRef = useRef<TRTableHandle>(null);
     const router = useRouter();
     const { profile } = useUserProfile();
-    const apiKeys = profile?.apiKeys;
+    const apiKeys = {
+        hasClaudeKey: profile?.hasClaudeKey ?? false,
+        hasGeminiKey: profile?.hasGeminiKey ?? false,
+    };
     const tabularModel = profile?.tabularModel ?? "gemini-3-flash-preview";
 
     useEffect(() => {
@@ -189,11 +192,6 @@ export function TRView({ reviewId, projectId }: Props) {
     }
 
     async function handleRegenerateCell(docId: string, colIndex: number) {
-        if (apiKeys && !isModelAvailable(tabularModel, apiKeys)) {
-            setApiKeyModalProvider(getModelProvider(tabularModel));
-            return;
-        }
-
         setCells((prev) =>
             prev.map((c) =>
                 c.document_id === docId && c.column_index === colIndex
@@ -245,61 +243,47 @@ export function TRView({ reviewId, projectId }: Props) {
         // If columns changed since last save, update the review first
         if (columns.length === 0) return;
 
-        if (apiKeys && !isModelAvailable(tabularModel, apiKeys)) {
+        if (!isModelAvailable(tabularModel, apiKeys)) {
             setApiKeyModalProvider(getModelProvider(tabularModel));
             return;
         }
 
         setGenerating(true);
 
+        // Optimistically set empty/pending/error cells to generating (skip done cells)
+        setCells((prev) =>
+            documents.flatMap((doc) =>
+                columns.map((col) => {
+                    const existing = prev.find(
+                        (c) =>
+                            c.document_id === doc.id &&
+                            c.column_index === col.index,
+                    );
+                    if (existing?.status === "done" && existing?.content) {
+                        return existing;
+                    }
+                    return existing
+                        ? {
+                              ...existing,
+                              status: "generating" as const,
+                              content: null,
+                          }
+                        : {
+                              id: `${doc.id}-${col.index}`,
+                              review_id: reviewId,
+                              document_id: doc.id,
+                              column_index: col.index,
+                              content: null,
+                              status: "generating" as const,
+                              created_at: new Date().toISOString(),
+                          };
+                }),
+            ),
+        );
+
         try {
             const response = await streamTabularGeneration(reviewId);
-            if (!response.ok) {
-                const payload = await response.json().catch(() => null);
-                const provider =
-                    payload &&
-                    ["claude", "gemini", "openai"].includes(payload.provider)
-                        ? (payload.provider as ModelProvider)
-                        : getModelProvider(tabularModel);
-                if (payload?.code === "missing_api_key" && provider) {
-                    setApiKeyModalProvider(provider);
-                }
-                throw new Error(
-                    payload?.detail ?? `Generation failed: ${response.status}`,
-                );
-            }
             if (!response.body) throw new Error("No body");
-
-            // Optimistically set empty/pending/error cells to generating (skip done cells)
-            setCells((prev) =>
-                documents.flatMap((doc) =>
-                    columns.map((col) => {
-                        const existing = prev.find(
-                            (c) =>
-                                c.document_id === doc.id &&
-                                c.column_index === col.index,
-                        );
-                        if (existing?.status === "done" && existing?.content) {
-                            return existing;
-                        }
-                        return existing
-                            ? {
-                                  ...existing,
-                                  status: "generating" as const,
-                                  content: null,
-                              }
-                            : {
-                                  id: `${doc.id}-${col.index}`,
-                                  review_id: reviewId,
-                                  document_id: doc.id,
-                                  column_index: col.index,
-                                  content: null,
-                                  status: "generating" as const,
-                                  created_at: new Date().toISOString(),
-                              };
-                    }),
-                ),
-            );
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();

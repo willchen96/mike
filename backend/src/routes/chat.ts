@@ -1,6 +1,9 @@
 import { Router } from "express";
+import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
+import { llmRateLimiter } from "../lib/rateLimiter";
 import { createServerSupabase } from "../lib/supabase";
+import { logger } from "../lib/logger";
 import {
     buildDocContext,
     buildMessages,
@@ -13,124 +16,35 @@ import {
 import { completeText } from "../lib/llm";
 import { getUserApiKeys, getUserModelSettings } from "../lib/userSettings";
 import { checkProjectAccess } from "../lib/access";
+import { parseBody } from "../lib/validate";
+
+const CreateChatSchema = z.object({
+    project_id: z.string().uuid().optional().nullable(),
+});
+
+const PatchChatSchema = z.object({
+    title: z.string().min(1),
+});
+
+const GenerateTitleSchema = z.object({
+    message: z.string().min(1),
+});
+
+const ChatStreamSchema = z.object({
+    messages: z.array(
+        z.object({
+            role: z.enum(["user", "assistant"]),
+            content: z.string(),
+            files: z.array(z.unknown()).optional().nullable(),
+            workflow: z.unknown().optional().nullable(),
+        }),
+    ).min(1),
+    chat_id: z.string().uuid().optional(),
+    project_id: z.string().uuid().optional().nullable(),
+    model: z.string().optional(),
+});
 
 export const chatRouter = Router();
-
-type Db = ReturnType<typeof createServerSupabase>;
-const isDev = process.env.NODE_ENV !== "production";
-const devLog = (...args: Parameters<typeof console.log>) => {
-    if (isDev) console.log(...args);
-};
-
-type AccessibleChat = {
-    id: string;
-    title: string | null;
-    user_id: string;
-    project_id: string | null;
-} & Record<string, unknown>;
-
-function parseOptionalProjectId(value: unknown):
-    | { ok: true; provided: boolean; projectId: string | null }
-    | { ok: false; detail: string } {
-    if (value === undefined)
-        return { ok: true, provided: false, projectId: null };
-    if (value === null) return { ok: true, provided: true, projectId: null };
-    if (typeof value !== "string" || !value.trim()) {
-        return {
-            ok: false,
-            detail: "project_id must be a non-empty string or null",
-        };
-    }
-    return { ok: true, provided: true, projectId: value.trim() };
-}
-
-function parseOptionalChatId(value: unknown):
-    | { ok: true; chatId: string | null }
-    | { ok: false; detail: string } {
-    if (value === undefined || value === null) return { ok: true, chatId: null };
-    if (typeof value !== "string" || !value.trim()) {
-        return { ok: false, detail: "chat_id must be a non-empty string" };
-    }
-    return { ok: true, chatId: value.trim() };
-}
-
-function parseChatMessages(value: unknown):
-    | { ok: true; messages: ChatMessage[] }
-    | { ok: false; detail: string } {
-    if (!Array.isArray(value) || value.length === 0) {
-        return { ok: false, detail: "messages must be a non-empty array" };
-    }
-
-    for (const message of value) {
-        if (!message || typeof message !== "object" || Array.isArray(message)) {
-            return { ok: false, detail: "messages must contain objects" };
-        }
-        const row = message as Record<string, unknown>;
-        if (typeof row.role !== "string") {
-            return { ok: false, detail: "message.role must be a string" };
-        }
-        if (row.content !== null && typeof row.content !== "string") {
-            return {
-                ok: false,
-                detail: "message.content must be a string or null",
-            };
-        }
-    }
-
-    return { ok: true, messages: value as ChatMessage[] };
-}
-
-function parseOptionalModel(value: unknown):
-    | { ok: true; model: string | undefined }
-    | { ok: false; detail: string } {
-    if (value === undefined) return { ok: true, model: undefined };
-    if (typeof value !== "string" || !value.trim()) {
-        return { ok: false, detail: "model must be a non-empty string" };
-    }
-    return { ok: true, model: value.trim() };
-}
-
-async function validateAccessibleProjectId(
-    projectId: string | null,
-    userId: string,
-    userEmail: string | null | undefined,
-    db: Db,
-): Promise<{ ok: true } | { ok: false; status: number; detail: string }> {
-    if (!projectId) return { ok: true };
-    const access = await checkProjectAccess(projectId, userId, userEmail, db);
-    if (!access.ok)
-        return { ok: false, status: 404, detail: "Project not found" };
-    return { ok: true };
-}
-
-async function getAccessibleChat(
-    chatId: string,
-    userId: string,
-    userEmail: string | null | undefined,
-    db: Db,
-): Promise<AccessibleChat | null> {
-    const { data: chat, error } = await db
-        .from("chats")
-        .select("*")
-        .eq("id", chatId)
-        .maybeSingle();
-    if (error || !chat) return null;
-
-    const row = chat as AccessibleChat;
-    if (row.user_id === userId) return row;
-
-    if (row.project_id) {
-        const access = await checkProjectAccess(
-            row.project_id,
-            userId,
-            userEmail,
-            db,
-        );
-        if (access.ok) return row;
-    }
-
-    return null;
-}
 
 // GET /chat
 // Visible chats = the user's own chats + every chat under a project the
@@ -142,53 +56,62 @@ chatRouter.get("/", requireAuth, async (req, res) => {
     const userId = res.locals.userId as string;
     const db = createServerSupabase();
 
-    const { data: ownProjects, error: projErr } = await db
-        .from("projects")
-        .select("id")
-        .eq("user_id", userId);
-    if (projErr) return void res.status(500).json({ detail: projErr.message });
-    const ownProjectIds = ((ownProjects ?? []) as { id: string }[]).map(
-        (p) => p.id,
-    );
+    const [ownProjectsResult, ownChatsResult] = await Promise.all([
+        db.from("projects").select("id").eq("user_id", userId),
+        db.from("chats").select("*").eq("user_id", userId),
+    ]);
+    if (ownProjectsResult.error)
+        return void res
+            .status(500)
+            .json({ detail: ownProjectsResult.error.message });
+    if (ownChatsResult.error)
+        return void res
+            .status(500)
+            .json({ detail: ownChatsResult.error.message });
 
-    const filter =
-        ownProjectIds.length > 0
-            ? `user_id.eq.${userId},project_id.in.(${ownProjectIds.join(",")})`
-            : `user_id.eq.${userId}`;
+    const ownProjectIds = (
+        (ownProjectsResult.data ?? []) as { id: string }[]
+    ).map((p) => p.id);
 
-    const { data, error } = await db
-        .from("chats")
-        .select("*")
-        .or(filter)
-        .order("created_at", { ascending: false });
-    if (error) return void res.status(500).json({ detail: error.message });
-    res.json(data ?? []);
+    let projectChats: Record<string, unknown>[] = [];
+    if (ownProjectIds.length > 0) {
+        const { data, error } = await db
+            .from("chats")
+            .select("*")
+            .in("project_id", ownProjectIds);
+        if (error)
+            return void res.status(500).json({ detail: error.message });
+        projectChats = (data ?? []) as Record<string, unknown>[];
+    }
+
+    // Merge + dedupe on id, then sort by created_at desc to preserve
+    // prior server-side ordering semantics (RESEARCH.md Pitfall 4).
+    const byId = new Map<string, Record<string, unknown>>();
+    for (const c of (ownChatsResult.data ?? []) as Record<
+        string,
+        unknown
+    >[]) {
+        byId.set(c.id as string, c);
+    }
+    for (const c of projectChats) byId.set(c.id as string, c);
+    const merged = [...byId.values()].sort((a, b) => {
+        const ta = String(a.created_at ?? "");
+        const tb = String(b.created_at ?? "");
+        return tb.localeCompare(ta);
+    });
+    res.json(merged);
 });
 
 // POST /chat/create
 chatRouter.post("/create", requireAuth, async (req, res) => {
     const userId = res.locals.userId as string;
-    const userEmail = res.locals.userEmail as string | undefined;
-    const parsedProjectId = parseOptionalProjectId(req.body?.project_id);
-    if (!parsedProjectId.ok) {
-        return void res.status(400).json({ detail: parsedProjectId.detail });
-    }
-    const projectId = parsedProjectId.projectId;
+    const body = parseBody(CreateChatSchema, req, res);
+    if (!body) return;
+    const projectId: string | null = body.project_id ?? null;
     const db = createServerSupabase();
-    const projectAccess = await validateAccessibleProjectId(
-        projectId,
-        userId,
-        userEmail,
-        db,
-    );
-    if (!projectAccess.ok)
-        return void res
-            .status(projectAccess.status)
-            .json({ detail: projectAccess.detail });
-
     const { data, error } = await db
         .from("chats")
-        .insert({ user_id: userId, project_id: projectId ?? null })
+        .insert({ user_id: userId, project_id: projectId ?? undefined })
         .select("id")
         .single();
 
@@ -203,18 +126,67 @@ chatRouter.get("/:chatId", requireAuth, async (req, res) => {
     const { chatId } = req.params;
     const db = createServerSupabase();
 
-    const chat = await getAccessibleChat(chatId, userId, userEmail, db);
-    if (!chat)
+    const { data: chat, error } = await db
+        .from("chats")
+        .select("*")
+        .eq("id", chatId)
+        .single();
+    if (error || !chat)
+        return void res.status(404).json({ detail: "Chat not found" });
+    // Owner of the chat OR a member of the chat's project can view it.
+    let canView = chat.user_id === userId;
+    if (!canView && chat.project_id) {
+        const access = await checkProjectAccess(
+            chat.project_id,
+            userId,
+            userEmail,
+            db,
+        );
+        canView = access.ok;
+    }
+    if (!canView)
         return void res.status(404).json({ detail: "Chat not found" });
 
-    const { data: messages } = await db
+    // CLEAN-27: paginate to limit+before; default 50 most-recent. Cap 200.
+    // Cursor is exclusive (lt) to avoid duplicate at page boundary.
+    const limitRaw =
+        typeof req.query.limit === "string"
+            ? parseInt(req.query.limit, 10)
+            : NaN;
+    const limit = Number.isFinite(limitRaw)
+        ? Math.min(Math.max(limitRaw, 1), 200)
+        : 50;
+
+    // Validate `before` cursor BEFORE building the query.
+    // An unparseable cursor must 400 — silent fallback to no-cursor would
+    // mask client bugs and return a different page than the caller asked for.
+    const beforeRaw = req.query.before;
+    if (beforeRaw !== undefined) {
+        const ts =
+            typeof beforeRaw === "string" ? Date.parse(beforeRaw) : NaN;
+        if (Number.isNaN(ts)) {
+            return void res.status(400).json({
+                detail: "invalid 'before' cursor — expected ISO 8601",
+            });
+        }
+    }
+    const before =
+        typeof beforeRaw === "string" ? beforeRaw : null;
+
+    let mq = db
         .from("chat_messages")
         .select("*")
-        .eq("chat_id", chatId)
-        .order("created_at", { ascending: true });
+        .eq("chat_id", chatId);
+    if (before) mq = mq.lt("created_at", before);
+    const { data: messagesDesc } = await mq
+        .order("created_at", { ascending: false })
+        .limit(limit + 1); // fetch one extra to compute has_more
+    const hasMore = (messagesDesc ?? []).length > limit;
+    const pageDesc = (messagesDesc ?? []).slice(0, limit);
+    const messages = [...pageDesc].reverse(); // back to ASC for client rendering
 
-    const hydrated = await hydrateEditStatuses(messages ?? [], db);
-    res.json({ chat, messages: hydrated });
+    const hydrated = await hydrateEditStatuses(messages, db);
+    res.json({ chat, messages: hydrated, has_more: hasMore });
 });
 
 // Stored message annotations/events capture the `status` at the time the
@@ -222,7 +194,7 @@ chatRouter.get("/:chatId", requireAuth, async (req, res) => {
 // or rejects, `document_edits.status` is updated but the stored message
 // annotation is not. On chat load we merge the current DB status in so
 // EditCards render with the real state.
-async function hydrateEditStatuses(
+export async function hydrateEditStatuses(
     messages: Record<string, unknown>[],
     db: ReturnType<typeof createServerSupabase>,
 ): Promise<Record<string, unknown>[]> {
@@ -338,9 +310,9 @@ async function hydrateEditStatuses(
 chatRouter.patch("/:chatId", requireAuth, async (req, res) => {
     const userId = res.locals.userId as string;
     const { chatId } = req.params;
-    const title = (req.body.title ?? "").trim();
-    if (!title)
-        return void res.status(400).json({ detail: "title is required" });
+    const body = parseBody(PatchChatSchema, req, res);
+    if (!body) return;
+    const title = body.title.trim();
 
     const db = createServerSupabase();
     const { data, error } = await db
@@ -361,13 +333,15 @@ chatRouter.delete("/:chatId", requireAuth, async (req, res) => {
     const userId = res.locals.userId as string;
     const { chatId } = req.params;
     const db = createServerSupabase();
-    const { error } = await db
+    const { data, error } = await db
         .from("chats")
         .delete()
         .eq("id", chatId)
-        .eq("user_id", userId);
-
+        .eq("user_id", userId)
+        .select("id");
     if (error) return void res.status(500).json({ detail: error.message });
+    if (!data || data.length === 0)
+        return void res.status(404).json({ detail: "Chat not found" });
     res.status(204).send();
 });
 
@@ -376,20 +350,37 @@ chatRouter.post("/:chatId/generate-title", requireAuth, async (req, res) => {
     const userId = res.locals.userId as string;
     const userEmail = res.locals.userEmail as string | undefined;
     const { chatId } = req.params;
-    const message =
-        typeof req.body?.message === "string" ? req.body.message.trim() : "";
-    if (!message)
-        return void res.status(400).json({ detail: "message is required" });
+    const body = parseBody(GenerateTitleSchema, req, res);
+    if (!body) return;
+    const message = body.message.trim();
 
     const db = createServerSupabase();
-    const chat = await getAccessibleChat(chatId, userId, userEmail, db);
-    if (!chat)
+    const { data: chat, error } = await db
+        .from("chats")
+        .select("id, user_id, project_id")
+        .eq("id", chatId)
+        .single();
+
+    if (error || !chat)
+        return void res.status(404).json({ detail: "Chat not found" });
+    let canTitle = chat.user_id === userId;
+    if (!canTitle && chat.project_id) {
+        const access = await checkProjectAccess(
+            chat.project_id,
+            userId,
+            userEmail,
+            db,
+        );
+        canTitle = access.ok;
+    }
+    if (!canTitle)
         return void res.status(404).json({ detail: "Chat not found" });
 
     try {
         const { title_model, api_keys } = await getUserModelSettings(
             userId,
             db,
+            { route: req.path, requestId: req.id },
         );
         const titleText = await completeText({
             model: title_model,
@@ -399,6 +390,8 @@ chatRouter.post("/:chatId/generate-title", requireAuth, async (req, res) => {
         });
         const title = titleText.trim() || message.slice(0, 60);
 
+        // CLEAN-24: access already validated via checkProjectAccess above (~lines 301-311);
+        // no user_id predicate here so shared-project members can persist titles.
         await db
             .from("chats")
             .update({ title })
@@ -406,93 +399,79 @@ chatRouter.post("/:chatId/generate-title", requireAuth, async (req, res) => {
 
         res.json({ title });
     } catch (err) {
-        console.error("[generate-title]", err);
+        logger.error({ err }, "[generate-title] error");
         res.status(500).json({ detail: "Failed to generate title" });
     }
 });
 
 // POST /chat — streaming
-chatRouter.post("/", requireAuth, async (req, res) => {
+chatRouter.post("/", requireAuth, llmRateLimiter, async (req, res) => {
     const userId = res.locals.userId as string;
-    const body =
-        req.body && typeof req.body === "object" && !Array.isArray(req.body)
-            ? (req.body as Record<string, unknown>)
-            : {};
-    const parsedMessages = parseChatMessages(body.messages);
-    if (!parsedMessages.ok) {
-        return void res.status(400).json({ detail: parsedMessages.detail });
-    }
-    const parsedChatId = parseOptionalChatId(body.chat_id);
-    if (!parsedChatId.ok) {
-        return void res.status(400).json({ detail: parsedChatId.detail });
-    }
-    const parsedProjectId = parseOptionalProjectId(body.project_id);
-    if (!parsedProjectId.ok) {
-        return void res.status(400).json({ detail: parsedProjectId.detail });
-    }
-    const parsedModel = parseOptionalModel(body.model);
-    if (!parsedModel.ok) {
-        return void res.status(400).json({ detail: parsedModel.detail });
-    }
+    const body = parseBody(ChatStreamSchema, req, res);
+    if (!body) return;
+    const { messages, chat_id, project_id, model } = body as unknown as {
+        messages: ChatMessage[];
+        chat_id?: string;
+        project_id?: string | null;
+        model?: string;
+    };
 
-    const messages = parsedMessages.messages;
-    const chat_id = parsedChatId.chatId;
-    const project_id = parsedProjectId.projectId;
-    const model = parsedModel.model;
-
-    devLog("[chat/stream] incoming request", {
+    logger.info({
         userId,
-        chat_id,
-        project_id,
+        chatId: chat_id,
+        projectId: project_id,
         model,
         messageCount: messages?.length,
-    });
+    }, "[chat/stream] incoming request");
 
     const userEmail = res.locals.userEmail as string | undefined;
     const db = createServerSupabase();
     let chatId = chat_id ?? null;
     let chatTitle: string | null = null;
-    let resolvedProjectId: string | null = parsedProjectId.projectId;
 
     if (chatId) {
-        const existing = await getAccessibleChat(chatId, userId, userEmail, db);
-        if (!existing)
-            return void res.status(404).json({ detail: "Chat not found" });
-
-        const existingProjectId = existing.project_id ?? null;
-        if (
-            parsedProjectId.provided &&
-            parsedProjectId.projectId !== existingProjectId
-        ) {
-            return void res
-                .status(400)
-                .json({ detail: "project_id does not match chat" });
+        // Either chat owner OR a member of the chat's project can post.
+        const { data: existing } = await db
+            .from("chats")
+            .select("id, title, user_id, project_id")
+            .eq("id", chatId)
+            .single();
+        let canUse = !!existing && existing.user_id === userId;
+        if (!canUse && existing?.project_id) {
+            const access = await checkProjectAccess(
+                existing.project_id,
+                userId,
+                userEmail,
+                db,
+            );
+            canUse = access.ok;
         }
-        resolvedProjectId = existingProjectId;
-        chatTitle = existing.title;
+        if (!canUse || !existing) chatId = null;
+        else chatTitle = existing.title;
     }
 
     if (!chatId) {
         // If creating a chat tied to a project, the user must have access
         // to the project (own or shared).
-        const projectAccess = await validateAccessibleProjectId(
-            resolvedProjectId,
-            userId,
-            userEmail,
-            db,
-        );
-        if (!projectAccess.ok)
-            return void res
-                .status(projectAccess.status)
-                .json({ detail: projectAccess.detail });
-
+        if (project_id) {
+            const access = await checkProjectAccess(
+                project_id,
+                userId,
+                userEmail,
+                db,
+            );
+            if (!access.ok)
+                return void res
+                    .status(404)
+                    .json({ detail: "Project not found" });
+        }
         const { data: newChat, error } = await db
             .from("chats")
-            .insert({ user_id: userId, project_id: resolvedProjectId })
+            .insert({ user_id: userId, project_id: project_id ?? null })
             .select("id, title")
             .single();
         if (error || !newChat) {
-            console.error("[chat/stream] failed to create chat", error);
+            logger.error({ err: error }, "[chat/stream] failed to create chat");
             return void res
                 .status(500)
                 .json({ detail: "Failed to create chat" });
@@ -501,7 +480,7 @@ chatRouter.post("/", requireAuth, async (req, res) => {
         chatTitle = newChat.title;
     }
 
-    devLog("[chat/stream] resolved chatId", chatId);
+    logger.info({ chatId }, "[chat/stream] resolved chatId");
 
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (lastUser) {
@@ -534,11 +513,11 @@ chatRouter.post("/", requireAuth, async (req, res) => {
 
     const workflowStore = await buildWorkflowStore(userId, userEmail, db);
 
-    devLog("[chat/stream] starting LLM stream", {
+    logger.info({
         apiMessageCount: apiMessages.length,
         docCount: Object.keys(docIndex).length,
         workflowCount: Object.keys(workflowStore).length,
-    });
+    }, "[chat/stream] starting LLM stream");
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -548,7 +527,7 @@ chatRouter.post("/", requireAuth, async (req, res) => {
 
     const write = (line: string) => res.write(line);
 
-    const apiKeys = await getUserApiKeys(userId, db);
+    const apiKeys = await getUserApiKeys(userId, db, { route: req.path, requestId: req.id });
 
     try {
         write(`data: ${JSON.stringify({ type: "chat_id", chatId })}\n\n`);
@@ -563,13 +542,13 @@ chatRouter.post("/", requireAuth, async (req, res) => {
             workflowStore,
             model,
             apiKeys,
-            projectId: resolvedProjectId,
+            projectId: project_id ?? null,
         });
 
-        devLog("[chat/stream] LLM stream finished", {
+        logger.info({
             fullTextLen: fullText?.length ?? 0,
             eventCount: events?.length ?? 0,
-        });
+        }, "[chat/stream] LLM stream finished");
 
         const annotations = extractAnnotations(fullText, docIndex, events);
         await db.from("chat_messages").insert({
@@ -586,7 +565,7 @@ chatRouter.post("/", requireAuth, async (req, res) => {
                 .eq("id", chatId);
         }
     } catch (err) {
-        console.error("[chat/stream] error:", err);
+        logger.error({ err }, "[chat/stream] error");
         try {
             write(
                 `data: ${JSON.stringify({ type: "error", message: "Stream error" })}\n\n`,

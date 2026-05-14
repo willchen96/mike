@@ -14,6 +14,8 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl as awsGetSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -21,7 +23,6 @@ function getClient(): S3Client {
   return new S3Client({
     region: "auto",
     endpoint: process.env.R2_ENDPOINT_URL!,
-    forcePathStyle: true,
     credentials: {
       accessKeyId: process.env.R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
@@ -87,6 +88,75 @@ export async function deleteFile(key: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Enumerate (paginated listing, for deletion worker)
+// ---------------------------------------------------------------------------
+
+/**
+ * Enumerate every object key under `prefix`, in batches of up to 1000.
+ * Resumable via `startToken` (the worker persists the last token in DB).
+ * Yields `{ keys, nextToken }` where `nextToken` is undefined on the last batch.
+ */
+export async function* listObjectsByPrefix(
+  prefix: string,
+  startToken?: string,
+): AsyncGenerator<{ keys: string[]; nextToken: string | undefined }> {
+  if (!storageEnabled) return;
+  const client = getClient();
+  let token: string | undefined = startToken;
+  do {
+    const out = await client.send(
+      new ListObjectsV2Command({
+        Bucket: BUCKET,
+        Prefix: prefix,
+        MaxKeys: 1000,
+        ContinuationToken: token,
+      }),
+    );
+    const keys = (out.Contents ?? [])
+      .map((o) => o.Key)
+      .filter((k): k is string => Boolean(k));
+    token = out.IsTruncated ? out.NextContinuationToken : undefined;
+    yield { keys, nextToken: token };
+  } while (token);
+}
+
+// ---------------------------------------------------------------------------
+// Batch delete (for deletion worker)
+// ---------------------------------------------------------------------------
+
+/**
+ * Batch-delete up to 1000 R2 keys in a single DeleteObjects call.
+ * `Quiet: true` suppresses successful keys in the response; only errors come back.
+ * Returns the count of successfully-deleted keys + the list of error messages.
+ */
+export async function deleteObjectsBatch(
+  keys: string[],
+): Promise<{ deleted: number; errors: string[] }> {
+  if (keys.length === 0) return { deleted: 0, errors: [] };
+  if (keys.length > 1000) {
+    throw new Error("[storage] deleteObjectsBatch: max 1000 keys per call");
+  }
+  if (!storageEnabled) return { deleted: 0, errors: [] };
+  const client = getClient();
+  const out = await client.send(
+    new DeleteObjectsCommand({
+      Bucket: BUCKET,
+      Delete: {
+        Objects: keys.map((Key) => ({ Key })),
+        Quiet: true,
+      },
+    }),
+  );
+  const errors = (out.Errors ?? []).map(
+    (e) => `${e.Key}: ${e.Code ?? "unknown"} ${e.Message ?? ""}`.trim(),
+  );
+  return {
+    deleted: keys.length - errors.length,
+    errors,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Signed URL (pre-signed for temporary direct access)
 // ---------------------------------------------------------------------------
 
@@ -123,9 +193,7 @@ export function normalizeDownloadFilename(name: string): string {
 }
 
 export function sanitizeDispositionFilename(name: string): string {
-  return normalizeDownloadFilename(name)
-    .replace(/["\\]/g, "_")
-    .replace(/[^\x20-\x7E]/g, "_");
+  return normalizeDownloadFilename(name).replace(/["\\]/g, "_");
 }
 
 export function encodeRFC5987(str: string): string {

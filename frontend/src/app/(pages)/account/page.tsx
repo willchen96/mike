@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LogOut, Check } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useUserProfile } from "@/contexts/UserProfileContext";
-import { deleteAccount } from "@/app/lib/mikeApi";
+import { useAuth } from "@/app/contexts/AuthContext";
+import { useUserProfile } from "@/app/contexts/UserProfileContext";
+import { deleteAccount, type AccountDeletedResponse } from "@/app/lib/mikeApi";
 
 export default function AccountPage() {
     const router = useRouter();
@@ -39,9 +39,26 @@ export default function AccountPage() {
     const handleDeleteAccount = async () => {
         setIsDeleting(true);
         try {
-            await deleteAccount();
-            await signOut();
-            router.push("/");
+            const result = await deleteAccount();
+            // Persist the restore token BEFORE signing out so the soft-delete
+            // banner can read it after the session ends. Without this the
+            // user loses every path to restore (CLEAN-44 CR-01).
+            if (typeof window !== "undefined" && result?.restore_token) {
+                localStorage.setItem("hugo_restore_token", result.restore_token);
+                const deletedState: AccountDeletedResponse = {
+                    detail: "Account scheduled for deletion",
+                    deleted: true,
+                    deleted_at: result.deleted_at,
+                    scheduled_hard_delete_at: result.scheduled_hard_delete_at,
+                    restore_path: "/user/account/restore",
+                };
+                window.dispatchEvent(
+                    new CustomEvent("hugo:account-deleted", {
+                        detail: deletedState,
+                    }),
+                );
+            }
+            setDeleteConfirm(false);
         } catch {
             setIsDeleting(false);
             setDeleteConfirm(false);
@@ -172,7 +189,7 @@ export default function AccountPage() {
                 </div>
                 <div>
                     <p className="text-base font-medium text-gray-500 capitalize">
-                        {profile?.tier || "Free"}
+                        Self-hosted
                     </p>
                 </div>
             </div>

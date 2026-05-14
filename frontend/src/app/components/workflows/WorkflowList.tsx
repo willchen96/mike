@@ -20,13 +20,13 @@ import {
     unhideWorkflow,
 } from "@/app/lib/mikeApi";
 import type { MikeWorkflow } from "../shared/types";
-import { BUILT_IN_WORKFLOWS, BUILT_IN_IDS } from "./builtinWorkflows";
+import { useManifests } from "@/app/contexts/ManifestsContext";
 import { DisplayWorkflowModal } from "./DisplayWorkflowModal";
 import { NewWorkflowModal } from "./NewWorkflowModal";
 import { ToolbarTabs } from "../shared/ToolbarTabs";
 import { RowActions } from "../shared/RowActions";
-import { MikeIcon } from "@/components/chat/mike-icon";
-import { useAuth } from "@/contexts/AuthContext";
+import { MikeIcon } from "@/app/components/chat/mike-icon";
+import { useAuth } from "@/app/contexts/AuthContext";
 
 type Tab = "all" | "builtin" | "custom" | "hidden";
 
@@ -43,6 +43,8 @@ const TABS: { id: Tab; label: string }[] = [
 export function WorkflowList() {
     const router = useRouter();
     const { user } = useAuth();
+    const { workflows: BUILT_IN_WORKFLOWS } = useManifests();
+    const BUILT_IN_IDS = new Set(BUILT_IN_WORKFLOWS.map((w) => w.id));
     const [custom, setCustom] = useState<MikeWorkflow[]>([]);
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState<MikeWorkflow | null>(null);

@@ -1,263 +1,183 @@
 import { Router } from "express";
+import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
 import { createServerSupabase } from "../lib/supabase";
-import { DEFAULT_TABULAR_MODEL, resolveModel } from "../lib/llm";
+import { encryptApiKey } from "../lib/crypto";
+import { logger } from "../lib/logger";
+import { signRestoreToken, verifyRestoreToken } from "../lib/restoreTokens";
 import {
-  type ApiKeyStatus,
-  getUserApiKeyStatus,
-  hasEnvApiKey,
-  normalizeApiKeyProvider,
-  saveUserApiKey,
-} from "../lib/userApiKeys";
+  markSoftDelete,
+  clearSoftDelete,
+  banUser,
+  unbanUser,
+  enqueueDeletionJob,
+  consumeRestoreToken,
+  DELETE_GRACE_DAYS,
+} from "../lib/accountDeletion";
 
 export const userRouter = Router();
 
-const MONTHLY_CREDIT_LIMIT = 999999;
+const patchApiKeySchema = z.object({
+  provider: z.enum(["claude", "gemini"]),
+  key: z.string().min(1).nullable(),
+});
 
-type UserProfileRow = {
-  display_name: string | null;
-  organisation: string | null;
-  message_credits_used: number;
-  credits_reset_date: string;
-  tier: string;
-  tabular_model: string;
-};
-
-function serializeProfile(
-  row: UserProfileRow,
-  apiKeyStatus?: ApiKeyStatus,
-) {
-  const creditsUsed = row.message_credits_used ?? 0;
-  return {
-    displayName: row.display_name,
-    organisation: row.organisation,
-    messageCreditsUsed: creditsUsed,
-    creditsResetDate: row.credits_reset_date,
-    creditsRemaining: Math.max(MONTHLY_CREDIT_LIMIT - creditsUsed, 0),
-    tier: row.tier || "Free",
-    tabularModel: resolveModel(row.tabular_model, DEFAULT_TABULAR_MODEL),
-    ...(apiKeyStatus ? { apiKeyStatus } : {}),
-  };
-}
-
-function validateProfilePayload(body: unknown):
-  | {
-      ok: true;
-      update: {
-        display_name?: string | null;
-        organisation?: string | null;
-        tabular_model?: string;
-        updated_at: string;
-      };
-    }
-  | { ok: false; detail: string } {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return { ok: false, detail: "Expected a JSON object" };
-  }
-
-  const raw = body as Record<string, unknown>;
-  const allowedFields = new Set([
-    "displayName",
-    "organisation",
-    "tabularModel",
-  ]);
-  const invalidField = Object.keys(raw).find((key) => !allowedFields.has(key));
-  if (invalidField) {
-    return { ok: false, detail: `Unsupported profile field: ${invalidField}` };
-  }
-
-  const update: {
-    display_name?: string | null;
-    organisation?: string | null;
-    tabular_model?: string;
-    updated_at: string;
-  } = { updated_at: new Date().toISOString() };
-
-  if ("displayName" in raw) {
-    if (raw.displayName !== null && typeof raw.displayName !== "string") {
-      return { ok: false, detail: "displayName must be a string or null" };
-    }
-    update.display_name = raw.displayName?.trim() || null;
-  }
-
-  if ("organisation" in raw) {
-    if (raw.organisation !== null && typeof raw.organisation !== "string") {
-      return { ok: false, detail: "organisation must be a string or null" };
-    }
-    update.organisation = raw.organisation?.trim() || null;
-  }
-
-  if ("tabularModel" in raw) {
-    if (typeof raw.tabularModel !== "string") {
-      return { ok: false, detail: "tabularModel must be a string" };
-    }
-    const resolved = resolveModel(raw.tabularModel, "");
-    if (!resolved) {
-      return { ok: false, detail: "Unsupported tabularModel" };
-    }
-    update.tabular_model = resolved;
-  }
-
-  return { ok: true, update };
-}
-
-async function ensureProfileRow(
-  db: ReturnType<typeof createServerSupabase>,
-  userId: string,
-) {
+// POST /user/profile
+userRouter.post("/profile", requireAuth, async (req, res) => {
+  const userId = res.locals.userId as string;
+  const db = createServerSupabase();
   const { error } = await db
     .from("user_profiles")
     .upsert(
       { user_id: userId },
       { onConflict: "user_id", ignoreDuplicates: true },
     );
-  return error;
-}
-
-async function loadProfile(
-  db: ReturnType<typeof createServerSupabase>,
-  userId: string,
-  options: { repairMissing?: boolean } = {},
-) {
-  let { data, error } = await db
-    .from("user_profiles")
-    .select(
-      "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model",
-    )
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) return { data: null, error };
-  if (!data) {
-    if (!options.repairMissing) {
-      return { data: null, error: new Error("Profile not found") };
-    }
-
-    const ensureError = await ensureProfileRow(db, userId);
-    if (ensureError) return { data: null, error: ensureError };
-
-    const created = await db
-      .from("user_profiles")
-      .select(
-        "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model",
-      )
-      .eq("user_id", userId)
-      .single();
-    if (created.error) return { data: null, error: created.error };
-    data = created.data;
-  }
-
-  let row = data as UserProfileRow;
-  if (row.credits_reset_date && new Date() > new Date(row.credits_reset_date)) {
-    const creditsResetDate = new Date();
-    creditsResetDate.setDate(creditsResetDate.getDate() + 30);
-    const { data: resetData, error: resetError } = await db
-      .from("user_profiles")
-      .update({
-        message_credits_used: 0,
-        credits_reset_date: creditsResetDate.toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId)
-      .select(
-        "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model",
-      )
-      .single();
-
-    if (resetError) return { data: null, error: resetError };
-    row = resetData as UserProfileRow;
-  }
-
-  return { data: serializeProfile(row), error: null };
-}
-
-// POST /user/profile
-userRouter.post("/profile", requireAuth, async (_req, res) => {
-  const userId = res.locals.userId as string;
-  const db = createServerSupabase();
-  const error = await ensureProfileRow(db, userId);
   if (error) return void res.status(500).json({ detail: error.message });
   res.json({ ok: true });
 });
 
-// GET /user/profile
-userRouter.get("/profile", requireAuth, async (_req, res) => {
+// PATCH /user/api-keys
+userRouter.patch("/api-keys", requireAuth, async (req, res) => {
   const userId = res.locals.userId as string;
-  const db = createServerSupabase();
-  const { data, error } = await loadProfile(db, userId, {
-    repairMissing: true,
-  });
-  if (error) return void res.status(500).json({ detail: error.message });
-  const apiKeyStatus = await getUserApiKeyStatus(userId, db);
-  res.json({ ...data, apiKeyStatus });
-});
-
-// PATCH /user/profile
-userRouter.patch("/profile", requireAuth, async (req, res) => {
-  const userId = res.locals.userId as string;
-  const parsed = validateProfilePayload(req.body);
-  if (!parsed.ok) return void res.status(400).json({ detail: parsed.detail });
-
-  const db = createServerSupabase();
-  const ensureError = await ensureProfileRow(db, userId);
-  if (ensureError)
-    return void res.status(500).json({ detail: ensureError.message });
-
-  const { error: updateError } = await db
-    .from("user_profiles")
-    .update(parsed.update)
-    .eq("user_id", userId);
-  if (updateError)
-    return void res.status(500).json({ detail: updateError.message });
-
-  const { data, error } = await loadProfile(db, userId);
-  if (error) return void res.status(500).json({ detail: error.message });
-  const apiKeyStatus = await getUserApiKeyStatus(userId, db);
-  res.json({ ...data, apiKeyStatus });
-});
-
-// GET /user/api-keys
-userRouter.get("/api-keys", requireAuth, async (_req, res) => {
-  const userId = res.locals.userId as string;
-  const db = createServerSupabase();
-  const status = await getUserApiKeyStatus(userId, db);
-  res.json(status);
-});
-
-// PUT /user/api-keys/:provider
-userRouter.put("/api-keys/:provider", requireAuth, async (req, res) => {
-  const userId = res.locals.userId as string;
-  const provider = normalizeApiKeyProvider(req.params.provider);
-  if (!provider)
-    return void res.status(400).json({ detail: "Unsupported provider" });
-
-  const apiKey =
-    typeof req.body?.api_key === "string" ? req.body.api_key : null;
-  const db = createServerSupabase();
-  try {
-    if (hasEnvApiKey(provider)) {
-      return void res.status(409).json({
-        detail:
-          "This provider is configured by the server environment and cannot be changed from the browser.",
-      });
-    }
-    await saveUserApiKey(userId, provider, apiKey, db);
-    const status = await getUserApiKeyStatus(userId, db);
-    res.json(status);
-  } catch (err) {
-    console.error("[user/api-keys] save failed", {
-      provider,
-      error: err instanceof Error ? err.message : String(err),
+  const parsed = patchApiKeySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return void res.status(400).json({
+      detail: "Invalid request body",
+      issues: parsed.error.issues,
     });
-    res.status(500).json({ detail: "Failed to save API key" });
   }
+  const { provider, key } = parsed.data;
+  const db = createServerSupabase();
+
+  const colCT = `${provider}_api_key_ciphertext`;
+  const colIV = `${provider}_api_key_iv`;
+  const colTag = `${provider}_api_key_auth_tag`;
+
+  let payload: Record<string, unknown>;
+  if (key === null) {
+    payload = {
+      [colCT]: null,
+      [colIV]: null,
+      [colTag]: null,
+      updated_at: new Date().toISOString(),
+    };
+  } else {
+    // Supabase JS serialises payloads via JSON.stringify, which renders raw
+    // Buffer values as `{}` and silently drops every byte. Send PostgreSQL's
+    // hex bytea text format so PostgREST stores the encrypted bytes exactly.
+    const enc = encryptApiKey(key);
+    payload = {
+      [colCT]: `\\x${enc.ciphertext.toString("hex")}`,
+      [colIV]: `\\x${enc.iv.toString("hex")}`,
+      [colTag]: `\\x${enc.authTag.toString("hex")}`,
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  const { error } = await db
+    .from("user_profiles")
+    .update(payload)
+    .eq("user_id", userId);
+  if (error) return void res.status(500).json({ detail: error.message });
+  res.status(204).send();
 });
 
-// DELETE /user/account
-userRouter.delete("/account", requireAuth, async (_req, res) => {
+// GET /user/api-keys/status
+userRouter.get("/api-keys/status", requireAuth, async (_req, res) => {
   const userId = res.locals.userId as string;
   const db = createServerSupabase();
-  const { error } = await db.auth.admin.deleteUser(userId);
+  const { data, error } = await db
+    .from("user_profiles")
+    .select("claude_api_key_ciphertext, gemini_api_key_ciphertext")
+    .eq("user_id", userId)
+    .single();
   if (error) return void res.status(500).json({ detail: error.message });
+  res.json({
+    has_claude: Boolean(data?.claude_api_key_ciphertext),
+    has_gemini: Boolean(data?.gemini_api_key_ciphertext),
+  });
+});
+
+// DELETE /user/account — soft-delete + restore-token issuance (CLEAN-44)
+// Replaces immediate hard-delete; worker (Plan 09) performs hard-delete after 30-day grace.
+userRouter.delete("/account", requireAuth, async (req, res) => {
+  const userId = res.locals.userId as string;
+  const db = createServerSupabase();
+
+  // 1. Mark soft-delete (idempotent — returns existing deletedAt if already soft-deleted)
+  const softDelete = await markSoftDelete(userId, db);
+  if (!softDelete) {
+    return void res.status(500).json({ detail: "Failed to mark account for deletion" });
+  }
+
+  const scheduledHardDeleteAt = new Date(
+    softDelete.deletedAt.getTime() + DELETE_GRACE_DAYS * 86_400_000,
+  );
+
+  // 2. Ban the auth user (idempotent — banning an already-banned user is a no-op for our purposes)
+  const banned = await banUser(userId, db);
+  if (!banned) {
+    return void res.status(500).json({ detail: "Failed to disable auth session" });
+  }
+
+  // 3. Enqueue hard-delete job (ON CONFLICT DO NOTHING — re-DELETE doesn't change the schedule)
+  const enqueued = await enqueueDeletionJob(userId, scheduledHardDeleteAt, db);
+  if (!enqueued) {
+    return void res.status(500).json({ detail: "Failed to enqueue deletion job" });
+  }
+
+  // 4. Issue a fresh restore token per Open Question 3 — re-DELETE re-issues;
+  //    old tokens still verify until exp, but only one can consume the job (single-use enforcement).
+  const restoreToken = signRestoreToken(userId, scheduledHardDeleteAt);
+
+  logger.info({ userId, scheduledHardDeleteAt: scheduledHardDeleteAt.toISOString() }, "[user] account soft-deleted");
+
+  res.json({
+    deleted_at: softDelete.deletedAt.toISOString(),
+    scheduled_hard_delete_at: scheduledHardDeleteAt.toISOString(),
+    restore_token: restoreToken,
+    restore_url: `/user/account/restore?token=${restoreToken}`,
+  });
+});
+
+// POST /user/account/restore — token-authenticated (NOT requireAuth — user is banned)
+// The HMAC token IS the auth. Three-way status-code trichotomy (H6 / RESEARCH.md Open Q5 RESOLVED):
+//   401 — token-auth failure (verifyRestoreToken returns null: expired, tampered, malformed, missing)
+//   410 — single-use replay (DB row exists, restore_token_used_at already set)
+//   404 — no pending job (no account_deletion_jobs row for user)
+userRouter.post("/account/restore", async (req, res) => {
+  const token = String(req.query.token ?? "");
+  if (!token) {
+    return void res.status(401).json({ detail: "Missing token" });
+  }
+
+  const payload = verifyRestoreToken(token);
+  if (!payload) {
+    return void res.status(401).json({ detail: "Invalid or expired token" });
+  }
+
+  const userId = payload.user_id;
+  const db = createServerSupabase();
+
+  // 1. Atomically consume the restore token (single-use enforcement — H6 trichotomy)
+  const consumeResult = await consumeRestoreToken(userId, db);
+  if (consumeResult.ok === false) {
+    if (consumeResult.reason === "no_job") {
+      // 404 Not Found — no row for this user (never soft-deleted, or already cascade-cleared)
+      return void res.status(404).json({ detail: "No deletion job to restore" });
+    }
+    // 410 Gone — replay of a consumed token (restore_token_used_at already set)
+    return void res.status(410).json({ detail: "Restore token already used" });
+  }
+
+  // 2. Clear soft-delete + unban auth user
+  const cleared = await clearSoftDelete(userId, db);
+  const unbanned = await unbanUser(userId, db);
+  if (!cleared || !unbanned) {
+    logger.error({ userId, cleared, unbanned }, "[user] restore failed mid-flight");
+    return void res.status(500).json({ detail: "Restore failed" });
+  }
+
+  logger.info({ userId }, "[user] account restored");
   res.status(204).send();
 });
