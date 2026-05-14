@@ -1,11 +1,15 @@
 {
-  "name": "mike-backend",
+  "name": "GordonOSS-backend",
   "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
@@ -29,13 +33,21 @@
     "resend": "^4.5.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.18.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.14.1",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "eslint": "^9.18.0",
+    "globals": "^15.14.0",
     "prettier": "^3.8.1",
+    "supertest": "^7.2.2",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^3.2.4"
   },
   "license": "AGPL-3.0-only"
 }

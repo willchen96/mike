@@ -1,0 +1,20 @@
+{
+  "name": "gordon-oss-e2e-tooling",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Repo-root tooling ONLY — hosts the Playwright e2e suite and the sample-PDF generator. Intentionally NOT a workspace root: frontend/ and backend/ are independent npm projects with their own package.json and lockfile. Do not add `workspaces` here.",
+  "//": "COUPLING WARNING: this file's existence creates a package-lock.json at the repo root. Without `turbopack.root` set in frontend/next.config.ts, Next.js 16 Turbopack walks up from frontend/, picks this lockfile as the workspace root, fails to resolve tailwindcss (and everything else) against the empty root node_modules, panics, and enters an HMR-retry loop that OOMs the machine. If you ever delete or move this file, also remove the `turbopack.root` line from frontend/next.config.ts. If you keep this file, do NOT rename it back to something workspace-y like 'gordon-oss' — the explicit '-e2e-tooling' suffix is a signal to the next reader.",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:install": "playwright install chromium",
+    "fixtures:generate": "node scripts/generate-sample-pdf.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@supabase/supabase-js": "^2.101.1",
+    "@types/node": "^22.14.1",
+    "dotenv": "^17.4.2",
+    "pdf-lib": "^1.17.1"
+  }
+}

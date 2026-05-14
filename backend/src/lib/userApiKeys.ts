@@ -36,13 +36,13 @@ export function hasEnvApiKey(provider: ApiKeyProvider): boolean {
     return !!envApiKey(provider);
 }
 
-function encryptionKey(): Buffer {
-    const secret =
-        process.env.USER_API_KEYS_ENCRYPTION_SECRET ||
-        process.env.API_KEYS_ENCRYPTION_SECRET ||
-        process.env.SUPABASE_SECRET_KEY;
+export function encryptionKey(): Buffer {
+    const secret = process.env.USER_API_KEYS_ENCRYPTION_SECRET;
     if (!secret) {
-        throw new Error("API key encryption secret is not configured");
+        throw new Error(
+            "USER_API_KEYS_ENCRYPTION_SECRET environment variable is required for encryption-at-rest of user API keys. " +
+            "Set it to a long random string (at least 32 bytes) in backend/.env.",
+        );
     }
     return crypto.createHash("sha256").update(secret).digest();
 }

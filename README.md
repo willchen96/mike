@@ -61,7 +61,12 @@ GEMINI_API_KEY=your-gemini-key
 ANTHROPIC_API_KEY=your-anthropic-key
 OPENAI_API_KEY=your-openai-key
 RESEND_API_KEY=your-resend-key
-USER_API_KEYS_ENCRYPTION_SECRET=your-long-random-secret
+
+# Required. Encryption-at-rest key for stored user API keys.
+# Generate with: openssl rand -hex 32
+# Must be distinct from SUPABASE_SECRET_KEY — rotating the Supabase key
+# would brick all stored user API keys if they share the same secret.
+USER_API_KEYS_ENCRYPTION_SECRET=replace-with-a-long-random-hex-string
 ```
 
 Create `frontend/.env.local`:

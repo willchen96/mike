@@ -59,9 +59,32 @@ export default function MikeLayout({
     };
 
     useEffect(() => {
-        if (!authLoading && !isAuthenticated) {
+        if (authLoading || isAuthenticated) return;
+
+        // Defer the redirect so that an explicit `router.push` from a
+        // sign-out handler (account/page.tsx::handleLogout pushes "/")
+        // or a sign-in handler (login/page.tsx::handleLogin pushes
+        // "/assistant") has time to navigate away from this layout
+        // before we race it to /login.
+        //
+        // Without this, there's a tight window after signInWithPassword
+        // resolves where AuthContext's onAuthStateChange listener hasn't
+        // propagated yet — isAuthenticated is still false on the next
+        // render, this effect fires, and we get bounced back to /login
+        // even though the user is now authenticated.  Same story in
+        // reverse for sign-out: isAuthenticated flips to false before
+        // handleLogout's router.push("/") starts, and we land on /login
+        // instead of the marketing root.
+        //
+        // 100 ms is plenty for Next.js to commit a route transition.
+        // If the component unmounts (user navigated away) or auth state
+        // changes again (session refreshed) during the window, the
+        // cleanup clears the timer and the redirect never fires.
+        const timeoutId = setTimeout(() => {
             router.push("/login");
-        }
+        }, 100);
+
+        return () => clearTimeout(timeoutId);
     }, [authLoading, isAuthenticated, router]);
 
     if (authLoading) {

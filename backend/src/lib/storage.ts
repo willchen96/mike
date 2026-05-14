@@ -119,6 +119,7 @@ export async function getSignedUrl(
 export function normalizeDownloadFilename(name: string): string {
   const trimmed = name.trim();
   const base = trimmed || "download";
+  // eslint-disable-next-line no-control-regex
   return base.replace(/[\x00-\x1F\x7F]/g, "_").replace(/[\\/]/g, "_");
 }
 

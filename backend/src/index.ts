@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { encryptionKey } from "./lib/userApiKeys";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -11,6 +12,13 @@ import { tabularRouter } from "./routes/tabular";
 import { workflowsRouter } from "./routes/workflows";
 import { userRouter } from "./routes/user";
 import { downloadsRouter } from "./routes/downloads";
+
+try {
+  encryptionKey();
+} catch (err) {
+  console.error("[startup] fatal:", err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;

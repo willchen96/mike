@@ -119,6 +119,7 @@ async function loadProfile(
   userId: string,
   options: { repairMissing?: boolean } = {},
 ) {
+  // eslint-disable-next-line prefer-const
   let { data, error } = await db
     .from("user_profiles")
     .select(

@@ -1,0 +1,277 @@
+# CI for GordonOSS — runs on every push to main and on every PR.
+#
+# Four jobs run in parallel:
+#   - lint:      ESLint on backend/ and frontend/
+#   - test-unit: backend vitest unit tests
+#   - test-e2e:  Playwright suite against dev servers (uploads report on failure)
+#   - audit:     npm audit on backend/ and frontend/, fails on high or critical
+#
+# To make these required for merge, go to:
+#   Settings → Branches → Branch protection rules → main →
+#     ☑ Require status checks to pass before merging
+#     and tick: lint, test-unit, test-e2e, audit
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL                       # https://<ref>.supabase.co
+#   SUPABASE_SECRET_KEY                # service_role key
+#   NEXT_PUBLIC_SUPABASE_URL           # same as SUPABASE_URL
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY      # anon key
+#   TEST_SUPABASE_URL                  # same as SUPABASE_URL (test project)
+#   TEST_SUPABASE_SECRET_KEY           # same as SUPABASE_SECRET_KEY (test project)
+#   GEMINI_API_KEY                     # Google AI Studio free-tier key
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel in-flight runs when new commits land on the same PR/branch.
+# Keeps CI minutes from piling up on rapid pushes; main runs always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# CI only needs to read the repo. No write permissions handed out.
+permissions:
+  contents: read
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Lint — runs ESLint in both backend/ and frontend/.
+  # ────────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+
+      - name: Lint backend
+        working-directory: backend
+        run: npm run lint
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Unit tests — backend vitest suite. Fast (<1s today). All mocked, no real
+  # Supabase calls happen in this job, but TEST_SUPABASE_* are exposed in
+  # case a future test wires up the helper in backend/tests/helpers/testDb.ts.
+  # ────────────────────────────────────────────────────────────────────────────
+  test-unit:
+    name: Unit tests (backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+      TEST_SUPABASE_SECRET_KEY: ${{ secrets.TEST_SUPABASE_SECRET_KEY }}
+      # Deterministic test value, NOT a real secret — matches backend/.env.test.
+      USER_API_KEYS_ENCRYPTION_SECRET: "0000000000000000000000000000000000000000000000000000000000000000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+
+      - name: Run vitest
+        working-directory: backend
+        run: npm test
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # End-to-end tests — Playwright spins up frontend (next dev) + backend
+  # (tsx watch) and drives Chromium through the real flows.
+  #
+  # Linux runners (16 GB RAM, no AV) handle the dev-mode webServers fine —
+  # the OOM crashes seen on local Windows were a hardware/AV mismatch, not
+  # a CI concern.
+  #
+  # On failure we upload playwright-report/ + test-results/ so screenshots,
+  # traces, and videos are available from the run summary.
+  # ────────────────────────────────────────────────────────────────────────────
+  test-e2e:
+    name: E2E tests (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install root tooling (Playwright)
+        run: npm ci
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (when cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # Materialise backend/.env.test from secrets.  The committed copy is
+      # gitignored; CI builds it fresh each run.
+      #
+      # The heredoc uses 'EOF' (quoted) so bash does NOT expand $-prefixed
+      # values inside.  GitHub Actions still substitutes ${{ secrets.X }}
+      # before bash sees the script, which is what we want.
+      - name: Write backend/.env.test from secrets
+        env:
+          # Re-export with shell-safe names so we can interpolate after the
+          # GitHub-Actions templating layer.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+          TEST_SUPABASE_SECRET_KEY: ${{ secrets.TEST_SUPABASE_SECRET_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          cat > backend/.env.test <<EOF
+          NODE_ENV=test
+          PORT=3001
+          FRONTEND_URL=http://localhost:3000
+
+          SUPABASE_URL=${SUPABASE_URL}
+          SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
+          NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+          TEST_SUPABASE_URL=${TEST_SUPABASE_URL}
+          TEST_SUPABASE_SECRET_KEY=${TEST_SUPABASE_SECRET_KEY}
+
+          GEMINI_API_KEY=${GEMINI_API_KEY}
+          ANTHROPIC_API_KEY=
+          OPENAI_API_KEY=
+          RESEND_API_KEY=
+
+          USER_API_KEYS_ENCRYPTION_SECRET=0000000000000000000000000000000000000000000000000000000000000000
+          DOWNLOAD_SIGNING_SECRET=0000000000000000000000000000000000000000000000000000000000000001
+
+          ALLOW_FREE_TIER_LLM=true
+          FREE_TIER_FIXTURE_ALLOWLIST=sample.pdf,test-cim.pdf
+
+          RATE_LIMIT_GENERAL_MAX=100000
+          RATE_LIMIT_CHAT_MAX=100000
+          RATE_LIMIT_CHAT_CREATE_MAX=100000
+          RATE_LIMIT_UPLOAD_MAX=100000
+          EOF
+
+      # Cache the Next.js incremental build output (.next/cache).
+      # This is separate from node_modules and dramatically speeds up
+      # subsequent `next build` runs (turbopack traces + RSC chunks).
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: frontend/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-${{ hashFiles('frontend/src/**/*.{ts,tsx}', 'frontend/public/**') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-
+
+      # Pre-build the frontend so Playwright can serve it with `next start`
+      # instead of `next dev`.  next start boots in ~2 s with no cold-compile
+      # during tests; next dev in CI caused the 30-minute timeout.
+      # NEXT_PUBLIC_* vars must be present at build time (baked into the bundle).
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          # Supabase renamed the anon key — frontend/src/lib/supabase.ts reads
+          # this name.  Same secret value as NEXT_PUBLIC_SUPABASE_ANON_KEY.
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - name: Run Playwright suite
+        run: npm run test:e2e
+
+      # Upload artefacts on every outcome — success, failure, timeout,
+      # cancellation.  We specifically want artefacts on cancellation
+      # too: a job killed by the concurrency-cancel-in-progress hook (a
+      # new push canceled an older run) or by job timeout still has a
+      # partial playwright-report that's useful to inspect.
+      # `if-no-files-found: ignore` keeps green runs quiet — Playwright
+      # only writes a report when there's something to report.
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # npm audit — fails on high or critical vulns in either workspace.
+  # Dev-only deps are included; if audit is too noisy, can switch to
+  # `--omit=dev` later.
+  # ────────────────────────────────────────────────────────────────────────────
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Audit backend
+        working-directory: backend
+        run: npm audit --audit-level=high
+
+      - name: Audit frontend
+        working-directory: frontend
+        run: npm audit --audit-level=high

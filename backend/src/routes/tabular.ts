@@ -43,7 +43,7 @@ function formatPromptSuffix(format?: string, tags?: string[]): string {
             return ' The "summary" field in your JSON response must be the date only in DD Month YYYY format (e.g. 1 January 2024). If a range, give both dates separated by an em dash. The "reasoning" field MUST include an inline citation [[page:N||quote:verbatim excerpt ≤25 words]] pointing to the exact place in the document where the date is found.';
         case "tag":
             return tags?.length
-                ? ` The \"summary\" field in your JSON response must contain exactly one tag wrapped in double square brackets. Available tags: ${tags.map((t) => `[[${t}]]`).join(", ")}. No other text. The \"reasoning\" field MUST include an inline citation [[page:N||quote:verbatim excerpt ≤25 words]] pointing to the exact language in the document that supports the chosen tag.`
+                ? ` The "summary" field in your JSON response must contain exactly one tag wrapped in double square brackets. Available tags: ${tags.map((t) => `[[${t}]]`).join(", ")}. No other text. The "reasoning" field MUST include an inline citation [[page:N||quote:verbatim excerpt ≤25 words]] pointing to the exact language in the document that supports the chosen tag.`
                 : "";
         default:
             return "";
@@ -164,7 +164,7 @@ tabularRouter.get("/", requireAuth, async (req, res) => {
 
     // Fetch distinct document counts per review
     const reviewIds = reviews.map((r) => (r as { id: string }).id);
-    let docCounts: Record<string, number> = {};
+    const docCounts: Record<string, number> = {};
     if (reviewIds.length > 0) {
         const { data: cells } = await db
             .from("tabular_cells")
