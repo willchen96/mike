@@ -120,48 +120,6 @@ export async function ensureReviewAccess(
 }
 
 /**
- * Filter user-supplied document IDs down to documents the caller can read.
- *
- * Tabular review routes accept document IDs from request bodies. Without this
- * check, a caller with access to any review could attach arbitrary document
- * UUIDs and later cause /generate or /regenerate-cell to extract those bytes.
- */
-export async function filterAccessibleDocumentIds(
-    documentIds: string[],
-    userId: string,
-    userEmail: string | null | undefined,
-    db: Db,
-): Promise<string[]> {
-    if (documentIds.length === 0) return [];
-    const { data: docs } = await db
-        .from("documents")
-        .select("id, user_id, project_id")
-        .in("id", documentIds);
-    const rows = (docs ?? []) as {
-        id: string;
-        user_id: string;
-        project_id: string | null;
-    }[];
-    if (rows.length === 0) return [];
-
-    const accessibleProjectIds = new Set(
-        await listAccessibleProjectIds(userId, userEmail, db),
-    );
-    const allowed: string[] = [];
-    for (const doc of rows) {
-        if (doc.user_id === userId) {
-            allowed.push(doc.id);
-        } else if (
-            doc.project_id &&
-            accessibleProjectIds.has(doc.project_id)
-        ) {
-            allowed.push(doc.id);
-        }
-    }
-    return allowed;
-}
-
-/**
  * Returns the set of project IDs the user can access — own projects plus
  * any project where their email is in `shared_with`. Used to scope chat
  * lists and similar collection queries.
@@ -171,18 +129,26 @@ export async function listAccessibleProjectIds(
     userEmail: string | null | undefined,
     db: Db,
 ): Promise<string[]> {
-    const [{ data: own }, { data: shared }] = await Promise.all([
+    const [{ data: own }, { data: sharedCandidates }] = await Promise.all([
         db.from("projects").select("id").eq("user_id", userId),
         userEmail
             ? db
-                  .from("projects")
-                  .select("id")
-                  .filter("shared_with", "cs", JSON.stringify([userEmail]))
-                  .neq("user_id", userId)
+                .from("projects")
+                .select("id, shared_with")
+                .neq("user_id", userId)
             : Promise.resolve({ data: [] as { id: string }[] }),
     ]);
     const ids = new Set<string>();
     for (const p of (own ?? []) as { id: string }[]) ids.add(p.id);
-    for (const p of (shared ?? []) as { id: string }[]) ids.add(p.id);
+    const email = (userEmail ?? "").toLowerCase();
+    for (const p of (sharedCandidates ?? []) as {
+        id: string;
+        shared_with?: string[] | null;
+    }[]) {
+        const sharedWith = Array.isArray(p.shared_with) ? p.shared_with : [];
+        if (email && sharedWith.some((e) => (e ?? "").toLowerCase() === email)) {
+            ids.add(p.id);
+        }
+    }
     return [...ids];
 }

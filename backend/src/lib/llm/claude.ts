@@ -7,6 +7,7 @@ import type {
     NormalizedToolResult,
 } from "./types";
 import { toClaudeTools } from "./tools";
+import { logger } from "../logger";
 
 type ContentBlock =
     | { type: "text"; text: string }
@@ -72,6 +73,12 @@ export async function streamClaude(
         });
 
         let sawThinking = false;
+
+        stream.on("streamEvent", (event) => {
+            if (process.env.LLM_STREAM_DEBUG) {
+                logger.debug({ event }, "[claude raw stream]");
+            }
+        });
 
         stream.on("text", (delta) => {
             callbacks.onContentDelta?.(delta);
