@@ -1,9 +1,58 @@
--- Mike Supabase schema
--- Based on supabase-migration.sql plus the later backend/migrations/*.sql files.
--- Use this for a fresh Supabase database. Existing deployments should continue
+-- Mike Postgres schema
+-- Use this for a fresh Postgres database. Existing deployments should continue
 -- to apply the incremental migration files instead.
 
 create extension if not exists "pgcrypto";
+
+-- ---------------------------------------------------------------------------
+-- Better Auth
+-- ---------------------------------------------------------------------------
+
+create table if not exists public."user" (
+  id text primary key,
+  name text not null,
+  email text not null unique,
+  "emailVerified" boolean not null,
+  image text,
+  "createdAt" timestamptz not null,
+  "updatedAt" timestamptz not null
+);
+
+create table if not exists public.session (
+  id text primary key,
+  "expiresAt" timestamptz not null,
+  token text not null unique,
+  "createdAt" timestamptz not null,
+  "updatedAt" timestamptz not null,
+  "ipAddress" text,
+  "userAgent" text,
+  "userId" text not null references public."user"(id) on delete cascade
+);
+
+create table if not exists public.account (
+  id text primary key,
+  "accountId" text not null,
+  "providerId" text not null,
+  "userId" text not null references public."user"(id) on delete cascade,
+  "accessToken" text,
+  "refreshToken" text,
+  "idToken" text,
+  "accessTokenExpiresAt" timestamptz,
+  "refreshTokenExpiresAt" timestamptz,
+  scope text,
+  password text,
+  "createdAt" timestamptz not null,
+  "updatedAt" timestamptz not null
+);
+
+create table if not exists public.verification (
+  id text primary key,
+  identifier text not null,
+  value text not null,
+  "expiresAt" timestamptz not null,
+  "createdAt" timestamptz,
+  "updatedAt" timestamptz
+);
 
 -- ---------------------------------------------------------------------------
 -- User profiles
@@ -11,7 +60,7 @@ create extension if not exists "pgcrypto";
 
 create table if not exists public.user_profiles (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null unique references auth.users(id) on delete cascade,
+  user_id text not null unique references public."user"(id) on delete cascade,
   display_name text,
   organisation text,
   tier text not null default 'Free',
@@ -25,31 +74,9 @@ create table if not exists public.user_profiles (
 create index if not exists idx_user_profiles_user
   on public.user_profiles(user_id);
 
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.user_profiles (user_id)
-  values (new.id)
-  on conflict (user_id) do nothing;
-  return new;
-exception when others then
-  -- Never block signup if the profile insert fails.
-  return new;
-end;
-$$;
-
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
-
 create table if not exists public.user_api_keys (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id text not null references public."user"(id) on delete cascade,
   provider text not null check (provider in ('claude', 'gemini', 'openai')),
   encrypted_key text not null,
   iv text not null,
@@ -339,29 +366,3 @@ create table if not exists public.tabular_review_chat_messages (
 
 create index if not exists tabular_review_chat_messages_chat_idx
   on public.tabular_review_chat_messages(chat_id, created_at);
-
--- ---------------------------------------------------------------------------
--- Direct client grant hardening
--- ---------------------------------------------------------------------------
---
--- The frontend uses Supabase directly only for authentication. Application
--- data access goes through the backend API with the service role after the
--- backend verifies the user's JWT. Do not grant the browser anon/authenticated
--- roles direct table privileges for backend-owned data.
-
-revoke all on public.user_profiles from anon, authenticated;
-revoke all on public.projects from anon, authenticated;
-revoke all on public.project_subfolders from anon, authenticated;
-revoke all on public.documents from anon, authenticated;
-revoke all on public.document_versions from anon, authenticated;
-revoke all on public.document_edits from anon, authenticated;
-revoke all on public.workflows from anon, authenticated;
-revoke all on public.hidden_workflows from anon, authenticated;
-revoke all on public.workflow_shares from anon, authenticated;
-revoke all on public.chats from anon, authenticated;
-revoke all on public.chat_messages from anon, authenticated;
-revoke all on public.tabular_reviews from anon, authenticated;
-revoke all on public.tabular_cells from anon, authenticated;
-revoke all on public.tabular_review_chats from anon, authenticated;
-revoke all on public.tabular_review_chat_messages from anon, authenticated;
-revoke all on public.user_api_keys from anon, authenticated;

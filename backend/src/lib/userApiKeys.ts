@@ -1,9 +1,9 @@
 import crypto from "crypto";
-import { createServerSupabase } from "./supabase";
+import { createServerDb } from "./db";
 import type { UserApiKeys } from "./llm";
 import { isOllamaConfigured } from "./llm/ollama";
 
-type Db = ReturnType<typeof createServerSupabase>;
+type Db = ReturnType<typeof createServerDb>;
 export type ApiKeyProvider = "claude" | "gemini" | "openai" | "ollama";
 export type ApiKeySource = "user" | "env" | null;
 export type ApiKeyStatus = Record<ApiKeyProvider, boolean> & {
@@ -43,8 +43,7 @@ export function hasEnvApiKey(provider: ApiKeyProvider): boolean {
 function encryptionKey(): Buffer {
     const secret =
         process.env.USER_API_KEYS_ENCRYPTION_SECRET ||
-        process.env.API_KEYS_ENCRYPTION_SECRET ||
-        process.env.SUPABASE_SECRET_KEY;
+        process.env.API_KEYS_ENCRYPTION_SECRET;
     if (!secret) {
         throw new Error("API key encryption secret is not configured");
     }
@@ -97,7 +96,7 @@ export function normalizeApiKeyProvider(value: string): ApiKeyProvider | null {
 
 export async function getUserApiKeyStatus(
     userId: string,
-    db: Db = createServerSupabase(),
+    db: Db = createServerDb(),
 ): Promise<ApiKeyStatus> {
     const status: ApiKeyStatus = {
         claude: false,
@@ -120,9 +119,9 @@ export async function getUserApiKeyStatus(
     }
 
     const { data, error } = await db
-        .from("user_api_keys")
-        .select("provider")
-        .eq("user_id", userId);
+        .selectFrom("userApiKeys")
+        .select(["provider"])
+        .where("userId", "=", userId);
     if (error) throw error;
 
     for (const row of data ?? []) {
@@ -138,7 +137,7 @@ export async function getUserApiKeyStatus(
 
 export async function getUserApiKeys(
     userId: string,
-    db: Db = createServerSupabase(),
+    db: Db = createServerDb(),
 ): Promise<UserApiKeys> {
     const apiKeys: UserApiKeys = {
         claude: envApiKey("claude"),
@@ -147,9 +146,9 @@ export async function getUserApiKeys(
     };
 
     const { data, error } = await db
-        .from("user_api_keys")
-        .select("provider, encrypted_key, iv, auth_tag")
-        .eq("user_id", userId);
+        .selectFrom("userApiKeys")
+        .select(["provider", "encryptedKey", "iv", "authTag"])
+        .where("userId", "=", userId);
     if (error) throw error;
 
     for (const row of (data ?? []) as EncryptedKeyRow[]) {
@@ -166,22 +165,21 @@ export async function saveUserApiKey(
     userId: string,
     provider: ApiKeyProvider,
     value: string | null,
-    db: Db = createServerSupabase(),
+    db: Db = createServerDb(),
 ): Promise<void> {
     if (provider === "ollama") return;
 
     const normalized = value?.trim() || null;
     if (!normalized) {
         const { error } = await db
-            .from("user_api_keys")
-            .delete()
-            .eq("user_id", userId)
-            .eq("provider", provider);
+            .deleteFrom("userApiKeys")
+            .where("userId", "=", userId)
+            .where("provider", "=", provider);
         if (error) throw error;
         return;
     }
 
-    const { error } = await db.from("user_api_keys").upsert(
+    const { error } = await db.insertInto("userApiKeys").upsert(
         {
             user_id: userId,
             provider,

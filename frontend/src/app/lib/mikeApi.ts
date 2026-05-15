@@ -1,9 +1,9 @@
 /**
  * Mike API client — all requests to the Node.js backend.
- * Attaches the Supabase auth token for user authentication.
+ * Attaches the auth auth token for user authentication.
  */
 
-import { supabase } from "@/lib/supabase";
+import { authSession } from "@/lib/auth-session";
 import type {
     AssistantEvent,
     MikeChat,
@@ -40,7 +40,7 @@ const API_BASE =
 async function getAuthHeader(): Promise<Record<string, string>> {
     const {
         data: { session },
-    } = await supabase.auth.getSession();
+    } = await authSession.auth.getSession();
     if (!session?.access_token) return {};
     return { Authorization: `Bearer ${session.access_token}` };
 }
@@ -50,6 +50,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     const { headers: initHeaders, ...restInit } = init ?? {};
     const response = await fetch(`${API_BASE}${path}`, {
         cache: "no-store",
+        credentials: "include",
         ...restInit,
         headers: {
             Accept: "application/json",
@@ -320,6 +321,7 @@ export async function uploadDocumentVersion(
     const response = await fetch(
         `${API_BASE}/single-documents/${documentId}/versions`,
         {
+            credentials: "include",
             method: "POST",
             headers: { ...authHeaders },
             body: form,
@@ -354,6 +356,7 @@ export async function uploadProjectDocument(
     const response = await fetch(
         `${API_BASE}/projects/${projectId}/documents`,
         {
+            credentials: "include",
             method: "POST",
             headers: { ...authHeaders },
             body: form,
@@ -370,6 +373,7 @@ export async function uploadStandaloneDocument(
     const form = new FormData();
     form.append("file", file);
     const response = await fetch(`${API_BASE}/single-documents`, {
+        credentials: "include",
         method: "POST",
         headers: { ...authHeaders },
         body: form,
@@ -399,6 +403,7 @@ export async function downloadDocumentsZip(
 ): Promise<Blob> {
     const authHeaders = await getAuthHeader();
     const response = await fetch(`${API_BASE}/single-documents/download-zip`, {
+        credentials: "include",
         method: "POST",
         cache: "no-store",
         headers: {
@@ -502,6 +507,7 @@ export async function streamChat(payload: {
     const { signal, ...body } = payload;
     const authHeaders = await getAuthHeader();
     return fetch(`${API_BASE}/chat`, {
+        credentials: "include",
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -532,6 +538,7 @@ export async function streamProjectChat(payload: {
     const { projectId, signal, ...body } = payload;
     const authHeaders = await getAuthHeader();
     return fetch(`${API_BASE}/projects/${projectId}/chat`, {
+        credentials: "include",
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -646,6 +653,7 @@ export async function streamTabularGeneration(
 ): Promise<Response> {
     const authHeaders = await getAuthHeader();
     return fetch(`${API_BASE}/tabular-review/${reviewId}/generate`, {
+        credentials: "include",
         method: "POST",
         headers: { ...authHeaders },
     });
@@ -660,6 +668,7 @@ export async function streamTabularChat(
 ): Promise<Response> {
     const authHeaders = await getAuthHeader();
     return fetch(`${API_BASE}/tabular-review/${reviewId}/chat`, {
+        credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({

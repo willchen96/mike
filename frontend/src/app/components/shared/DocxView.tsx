@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { MikeIcon } from "@/components/chat/mike-icon";
 import { useFetchDocxBytes } from "@/app/hooks/useFetchDocxBytes";
-import { supabase } from "@/lib/supabase";
+import { authSession } from "@/lib/auth-session";
 import {
     clearDocxQuoteHighlights,
     highlightDocxQuote,
@@ -146,7 +146,7 @@ async function tagWIdsOnRenderedDom(
     try {
         const {
             data: { session },
-        } = await supabase.auth.getSession();
+        } = await authSession.auth.getSession();
         const token = session?.access_token;
         const apiBase =
             process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
@@ -155,7 +155,10 @@ async function tagWIdsOnRenderedDom(
             : "";
         const resp = await fetch(
             `${apiBase}/single-documents/${documentId}/tracked-change-ids${qs}`,
-            { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+            {
+                credentials: "include",
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            },
         );
         if (!resp.ok) {
             console.warn(

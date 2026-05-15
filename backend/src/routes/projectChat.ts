@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
-import { createServerSupabase } from "../lib/supabase";
+import { createServerDb } from "../lib/db";
 import {
     buildProjectDocContext,
     buildMessages,
@@ -38,7 +38,7 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
             attached_documents?: { filename: string; document_id: string }[];
         };
 
-    const db = createServerSupabase();
+    const db = createServerDb();
 
     // Verify the user has access to the project (owner or shared member).
     const projectAccess = await checkProjectAccess(
@@ -55,9 +55,9 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
 
     if (chatId) {
         const { data: existing } = await db
-            .from("chats")
-            .select("id, title, project_id")
-            .eq("id", chatId)
+            .selectFrom("chats")
+            .select(["id", "title", "projectId"])
+            .where("id", "=", chatId)
             .single();
         const canUse = !!existing && existing.project_id === projectId;
         if (!canUse) chatId = null;
@@ -66,8 +66,8 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
 
     if (!chatId) {
         const { data: newChat, error } = await db
-            .from("chats")
-            .insert({ user_id: userId, project_id: projectId })
+            .insertInto("chats")
+            .values({ user_id: userId, project_id: projectId })
             .select("id, title")
             .single();
         if (error || !newChat)
@@ -80,7 +80,7 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
 
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (lastUser) {
-        await db.from("chat_messages").insert({
+        await db.insertInto("chatMessages").values({
             chat_id: chatId,
             role: "user",
             content: lastUser.content,
@@ -172,7 +172,7 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
         });
 
         const annotations = extractAnnotations(fullText, docIndex, events);
-        await db.from("chat_messages").insert({
+        await db.insertInto("chatMessages").values({
             chat_id: chatId,
             role: "assistant",
             content: events.length ? events : null,
@@ -181,9 +181,9 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
 
         if (!chatTitle && lastUser?.content) {
             await db
-                .from("chats")
-                .update({ title: lastUser.content.slice(0, 120) })
-                .eq("id", chatId);
+                .updateTable("chats")
+                .set({ title: lastUser.content.slice(0, 120) })
+                .where("id", "=", chatId);
         }
     } catch (err) {
         console.error("[project-chat/stream] error:", err);

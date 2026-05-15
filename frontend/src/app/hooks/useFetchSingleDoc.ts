@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { authSession } from "@/lib/auth-session";
 
 /**
  * /display returns either PDF bytes (when the active version has a PDF
@@ -39,7 +39,7 @@ export function useFetchSingleDoc(
             try {
                 const {
                     data: { session },
-                } = await supabase.auth.getSession();
+                } = await authSession.auth.getSession();
                 const token = session?.access_token;
                 if (cancelled) return;
 
@@ -52,6 +52,7 @@ export function useFetchSingleDoc(
                 const response = await fetch(
                     `${apiBase}/single-documents/${documentId}/display${qs}`,
                     {
+                        credentials: "include",
                         headers: token
                             ? { Authorization: `Bearer ${token}` }
                             : {},

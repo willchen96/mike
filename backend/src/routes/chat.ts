@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
-import { createServerSupabase } from "../lib/supabase";
+import { createServerDb } from "../lib/db";
 import {
     buildDocContext,
     buildMessages,
@@ -16,7 +16,7 @@ import { checkProjectAccess } from "../lib/access";
 
 export const chatRouter = Router();
 
-type Db = ReturnType<typeof createServerSupabase>;
+type Db = ReturnType<typeof createServerDb>;
 const isDev = process.env.NODE_ENV !== "production";
 const devLog = (...args: Parameters<typeof console.log>) => {
     if (isDev) console.log(...args);
@@ -110,9 +110,9 @@ async function getAccessibleChat(
     db: Db,
 ): Promise<AccessibleChat | null> {
     const { data: chat, error } = await db
-        .from("chats")
-        .select("*")
-        .eq("id", chatId)
+        .selectFrom("chats")
+        .selectAll()
+        .where("id", "=", chatId)
         .maybeSingle();
     if (error || !chat) return null;
 
@@ -140,12 +140,12 @@ async function getAccessibleChat(
 // listed per-project via GET /projects/:projectId/chats.
 chatRouter.get("/", requireAuth, async (req, res) => {
     const userId = res.locals.userId as string;
-    const db = createServerSupabase();
+    const db = createServerDb();
 
     const { data: ownProjects, error: projErr } = await db
-        .from("projects")
-        .select("id")
-        .eq("user_id", userId);
+        .selectFrom("projects")
+        .select(["id"])
+        .where("userId", "=", userId);
     if (projErr) return void res.status(500).json({ detail: projErr.message });
     const ownProjectIds = ((ownProjects ?? []) as { id: string }[]).map(
         (p) => p.id,
@@ -157,10 +157,10 @@ chatRouter.get("/", requireAuth, async (req, res) => {
             : `user_id.eq.${userId}`;
 
     const { data, error } = await db
-        .from("chats")
-        .select("*")
+        .selectFrom("chats")
+        .selectAll()
         .or(filter)
-        .order("created_at", { ascending: false });
+        .orderBy("createdAt", "desc");
     if (error) return void res.status(500).json({ detail: error.message });
     res.json(data ?? []);
 });
@@ -174,7 +174,7 @@ chatRouter.post("/create", requireAuth, async (req, res) => {
         return void res.status(400).json({ detail: parsedProjectId.detail });
     }
     const projectId = parsedProjectId.projectId;
-    const db = createServerSupabase();
+    const db = createServerDb();
     const projectAccess = await validateAccessibleProjectId(
         projectId,
         userId,
@@ -187,8 +187,8 @@ chatRouter.post("/create", requireAuth, async (req, res) => {
             .json({ detail: projectAccess.detail });
 
     const { data, error } = await db
-        .from("chats")
-        .insert({ user_id: userId, project_id: projectId ?? null })
+        .insertInto("chats")
+        .values({ user_id: userId, project_id: projectId ?? null })
         .select("id")
         .single();
 
@@ -201,17 +201,17 @@ chatRouter.get("/:chatId", requireAuth, async (req, res) => {
     const userId = res.locals.userId as string;
     const userEmail = res.locals.userEmail as string | undefined;
     const { chatId } = req.params;
-    const db = createServerSupabase();
+    const db = createServerDb();
 
     const chat = await getAccessibleChat(chatId, userId, userEmail, db);
     if (!chat)
         return void res.status(404).json({ detail: "Chat not found" });
 
     const { data: messages } = await db
-        .from("chat_messages")
-        .select("*")
-        .eq("chat_id", chatId)
-        .order("created_at", { ascending: true });
+        .selectFrom("chatMessages")
+        .selectAll()
+        .where("chatId", "=", chatId)
+        .orderBy("createdAt", "asc");
 
     const hydrated = await hydrateEditStatuses(messages ?? [], db);
     res.json({ chat, messages: hydrated });
@@ -224,7 +224,7 @@ chatRouter.get("/:chatId", requireAuth, async (req, res) => {
 // EditCards render with the real state.
 async function hydrateEditStatuses(
     messages: Record<string, unknown>[],
-    db: ReturnType<typeof createServerSupabase>,
+    db: ReturnType<typeof createServerDb>,
 ): Promise<Record<string, unknown>[]> {
     const editIds = new Set<string>();
     const versionIds = new Set<string>();
@@ -255,9 +255,9 @@ async function hydrateEditStatuses(
     const statusById = new Map<string, "pending" | "accepted" | "rejected">();
     if (editIds.size > 0) {
         const { data: rows } = await db
-            .from("document_edits")
-            .select("id, status")
-            .in("id", Array.from(editIds));
+            .selectFrom("documentEdits")
+            .select(["id", "status"])
+            .where("id", "in", Array.from(editIds));
         for (const r of (rows ?? []) as { id: string; status: string }[]) {
             if (
                 r.status === "pending" ||
@@ -275,9 +275,9 @@ async function hydrateEditStatuses(
     const versionNumberById = new Map<string, number | null>();
     if (versionIds.size > 0) {
         const { data: vrows } = await db
-            .from("document_versions")
-            .select("id, version_number")
-            .in("id", Array.from(versionIds));
+            .selectFrom("documentVersions")
+            .select(["id", "versionNumber"])
+            .where("id", "in", Array.from(versionIds));
         for (const r of (vrows ?? []) as {
             id: string;
             version_number: number | null;
@@ -342,12 +342,12 @@ chatRouter.patch("/:chatId", requireAuth, async (req, res) => {
     if (!title)
         return void res.status(400).json({ detail: "title is required" });
 
-    const db = createServerSupabase();
+    const db = createServerDb();
     const { data, error } = await db
-        .from("chats")
-        .update({ title })
-        .eq("id", chatId)
-        .eq("user_id", userId)
+        .updateTable("chats")
+        .set({ title })
+        .where("id", "=", chatId)
+        .where("userId", "=", userId)
         .select("id, title")
         .single();
 
@@ -360,12 +360,11 @@ chatRouter.patch("/:chatId", requireAuth, async (req, res) => {
 chatRouter.delete("/:chatId", requireAuth, async (req, res) => {
     const userId = res.locals.userId as string;
     const { chatId } = req.params;
-    const db = createServerSupabase();
+    const db = createServerDb();
     const { error } = await db
-        .from("chats")
-        .delete()
-        .eq("id", chatId)
-        .eq("user_id", userId);
+        .deleteFrom("chats")
+        .where("id", "=", chatId)
+        .where("userId", "=", userId);
 
     if (error) return void res.status(500).json({ detail: error.message });
     res.status(204).send();
@@ -381,7 +380,7 @@ chatRouter.post("/:chatId/generate-title", requireAuth, async (req, res) => {
     if (!message)
         return void res.status(400).json({ detail: "message is required" });
 
-    const db = createServerSupabase();
+    const db = createServerDb();
     const chat = await getAccessibleChat(chatId, userId, userEmail, db);
     if (!chat)
         return void res.status(404).json({ detail: "Chat not found" });
@@ -400,9 +399,9 @@ chatRouter.post("/:chatId/generate-title", requireAuth, async (req, res) => {
         const title = titleText.trim() || message.slice(0, 60);
 
         await db
-            .from("chats")
-            .update({ title })
-            .eq("id", chatId);
+            .updateTable("chats")
+            .set({ title })
+            .where("id", "=", chatId);
 
         res.json({ title });
     } catch (err) {
@@ -449,7 +448,7 @@ chatRouter.post("/", requireAuth, async (req, res) => {
     });
 
     const userEmail = res.locals.userEmail as string | undefined;
-    const db = createServerSupabase();
+    const db = createServerDb();
     let chatId = chat_id ?? null;
     let chatTitle: string | null = null;
     let resolvedProjectId: string | null = parsedProjectId.projectId;
@@ -487,8 +486,8 @@ chatRouter.post("/", requireAuth, async (req, res) => {
                 .json({ detail: projectAccess.detail });
 
         const { data: newChat, error } = await db
-            .from("chats")
-            .insert({ user_id: userId, project_id: resolvedProjectId })
+            .insertInto("chats")
+            .values({ user_id: userId, project_id: resolvedProjectId })
             .select("id, title")
             .single();
         if (error || !newChat) {
@@ -505,7 +504,7 @@ chatRouter.post("/", requireAuth, async (req, res) => {
 
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (lastUser) {
-        await db.from("chat_messages").insert({
+        await db.insertInto("chatMessages").values({
             chat_id: chatId,
             role: "user",
             content: lastUser.content,
@@ -572,7 +571,7 @@ chatRouter.post("/", requireAuth, async (req, res) => {
         });
 
         const annotations = extractAnnotations(fullText, docIndex, events);
-        await db.from("chat_messages").insert({
+        await db.insertInto("chatMessages").values({
             chat_id: chatId,
             role: "assistant",
             content: events.length ? events : null,
@@ -581,9 +580,9 @@ chatRouter.post("/", requireAuth, async (req, res) => {
 
         if (!chatTitle && lastUser?.content) {
             await db
-                .from("chats")
-                .update({ title: lastUser.content.slice(0, 120) })
-                .eq("id", chatId);
+                .updateTable("chats")
+                .set({ title: lastUser.content.slice(0, 120) })
+                .where("id", "=", chatId);
         }
     } catch (err) {
         console.error("[chat/stream] error:", err);

@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "db:codegen": "kysely-codegen --dialect postgres --camel-case --out-file src/db/types.ts --env-file .env",
+    "db:codegen:verify": "kysely-codegen --dialect postgres --camel-case --out-file src/db/types.ts --env-file .env --verify",
     "start": "node dist/index.js"
   },
   "dependencies": {
@@ -12,7 +14,7 @@
     "@aws-sdk/client-s3": "^3.787.0",
     "@aws-sdk/s3-request-presigner": "^3.787.0",
     "@google/genai": "^1.50.1",
-    "@supabase/supabase-js": "^2.49.4",
+    "better-auth": "^1.6.11",
     "cors": "^2.8.5",
     "docx": "^9.5.0",
     "dotenv": "^17.4.1",
@@ -22,10 +24,12 @@
     "fast-xml-parser": "^5.7.1",
     "helmet": "^8.1.0",
     "jszip": "^3.10.1",
+    "kysely": "^0.28.17",
     "libreoffice-convert": "^1.6.0",
     "mammoth": "^1.9.0",
     "multer": "^1.4.5-lts.2",
     "pdfjs-dist": "^4.10.38",
+    "pg": "^8.20.0",
     "resend": "^4.5.1"
   },
   "devDependencies": {
@@ -33,6 +37,8 @@
     "@types/express": "^4.17.21",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.14.1",
+    "@types/pg": "^8.20.0",
+    "kysely-codegen": "^0.20.0",
     "prettier": "^3.8.1",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3"

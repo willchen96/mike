@@ -6,7 +6,7 @@ import {
     uploadFile,
 } from "./storage";
 import { convertedPdfKey } from "./convert";
-import { createServerSupabase } from "./supabase";
+import { createServerDb } from "./db";
 import {
     applyTrackedEdits,
     extractDocxBodyText,
@@ -544,16 +544,16 @@ function citationReminder(docLabel: string, filename: string): string {
 export async function enrichWithPriorEvents(
     messages: ChatMessage[],
     chatId: string | null | undefined,
-    db: ReturnType<typeof createServerSupabase>,
+    db: ReturnType<typeof createServerDb>,
     docIndex: DocIndex,
 ): Promise<ChatMessage[]> {
     if (!chatId) return messages;
     const { data: rows } = await db
-        .from("chat_messages")
-        .select("content, created_at")
-        .eq("chat_id", chatId)
-        .eq("role", "assistant")
-        .order("created_at", { ascending: false })
+        .selectFrom("chatMessages")
+        .select(["content", "createdAt"])
+        .where("chatId", "=", chatId)
+        .where("role", "=", "assistant")
+        .orderBy("createdAt", "desc")
         .limit(1);
 
     const lastRow = rows?.[0] as { content?: unknown } | undefined;
@@ -731,7 +731,7 @@ export async function generateDocx(
     title: string,
     sections: unknown[],
     userId: string,
-    db: ReturnType<typeof createServerSupabase>,
+    db: ReturnType<typeof createServerDb>,
     options?: { landscape?: boolean; projectId?: string | null },
 ) {
     try {
@@ -1188,8 +1188,8 @@ export async function generateDocx(
         // sidebar; in the general chat we leave project_id null and it
         // stays a standalone document.
         const { data: docRow, error: docErr } = await db
-            .from("documents")
-            .insert({
+            .insertInto("documents")
+            .values({
                 project_id: options?.projectId ?? null,
                 user_id: userId,
                 filename,
@@ -1207,8 +1207,8 @@ export async function generateDocx(
         const documentId = docRow.id as string;
 
         const { data: versionRow, error: verErr } = await db
-            .from("document_versions")
-            .insert({
+            .insertInto("documentVersions")
+            .values({
                 document_id: documentId,
                 storage_path: key,
                 source: "generated",
@@ -1225,9 +1225,9 @@ export async function generateDocx(
         const versionId = versionRow.id as string;
 
         await db
-            .from("documents")
-            .update({ current_version_id: versionId })
-            .eq("id", documentId);
+            .updateTable("documents")
+            .set({ current_version_id: versionId })
+            .where("id", "=", documentId);
 
         return {
             filename,
@@ -1253,7 +1253,7 @@ export async function generateDocx(
  */
 export async function loadCurrentVersionBytes(
     documentId: string,
-    db: ReturnType<typeof createServerSupabase>,
+    db: ReturnType<typeof createServerDb>,
 ): Promise<{ bytes: Buffer; storage_path: string } | null> {
     const active = await loadActiveVersion(documentId, db);
     if (!active) return null;
@@ -1271,7 +1271,7 @@ export async function runEditDocument(params: {
     documentId: string;
     userId: string;
     edits: EditInput[];
-    db: ReturnType<typeof createServerSupabase>;
+    db: ReturnType<typeof createServerDb>;
     /**
      * If provided, append these edits to the existing turn-scoped version
      * (overwrites the file at storagePath and reuses the document_versions
@@ -1299,9 +1299,9 @@ export async function runEditDocument(params: {
     const { documentId, userId, edits, db, reuseVersion } = params;
 
     const { data: doc } = await db
-        .from("documents")
-        .select("id, filename")
-        .eq("id", documentId)
+        .selectFrom("documents")
+        .select(["id", "filename"])
+        .where("id", "=", documentId)
         .single();
     if (!doc) return { ok: false, error: "Document not found." };
 
@@ -1356,11 +1356,11 @@ export async function runEditDocument(params: {
         // version. The counter spans upload + user_upload + assistant_edit
         // so the original upload is V1 and the first assistant edit is V2.
         const { data: maxRow } = await db
-            .from("document_versions")
-            .select("version_number")
-            .eq("document_id", documentId)
-            .in("source", ["upload", "user_upload", "assistant_edit"])
-            .order("version_number", { ascending: false, nullsFirst: false })
+            .selectFrom("documentVersions")
+            .select(["versionNumber"])
+            .where("documentId", "=", documentId)
+            .where("source", "in", ["upload", "user_upload", "assistant_edit"])
+            .orderBy("versionNumber", "desc")
             .limit(1)
             .maybeSingle();
         nextVersionNumber =
@@ -1373,10 +1373,10 @@ export async function runEditDocument(params: {
         // doc). We intentionally do NOT append "[Edited Vn]" — the version
         // number is surfaced separately as a tag in the UI.
         const { data: prevRow } = await db
-            .from("document_versions")
-            .select("display_name, created_at")
-            .eq("document_id", documentId)
-            .order("created_at", { ascending: false })
+            .selectFrom("documentVersions")
+            .select(["displayName", "createdAt"])
+            .where("documentId", "=", documentId)
+            .orderBy("createdAt", "desc")
             .limit(1)
             .maybeSingle();
         const inheritedDisplayName =
@@ -1385,8 +1385,8 @@ export async function runEditDocument(params: {
             null;
 
         const { data: versionRow, error: verErr } = await db
-            .from("document_versions")
-            .insert({
+            .insertInto("documentVersions")
+            .values({
                 document_id: documentId,
                 storage_path: newPath,
                 source: "assistant_edit",
@@ -1415,8 +1415,8 @@ export async function runEditDocument(params: {
         status: "pending" as const,
     }));
     const { data: insertedEdits, error: editsErr } = await db
-        .from("document_edits")
-        .insert(editRows)
+        .insertInto("documentEdits")
+        .values(editRows)
         .select(
             "id, change_id, del_w_id, ins_w_id, deleted_text, inserted_text, context_before, context_after",
         );
@@ -1426,9 +1426,9 @@ export async function runEditDocument(params: {
     }
 
     await db
-        .from("documents")
-        .update({ current_version_id: versionRowId })
-        .eq("id", documentId);
+        .updateTable("documents")
+        .set({ current_version_id: versionRowId })
+        .where("id", "=", documentId);
 
     const annotations: EditAnnotation[] = insertedEdits.map(
         (r: {
@@ -1483,7 +1483,7 @@ async function readDocumentContent(
     docStore: DocStore,
     write: (s: string) => void,
     docIndex?: DocIndex,
-    db?: ReturnType<typeof createServerSupabase>,
+    db?: ReturnType<typeof createServerDb>,
     opts?: { emitEvents?: boolean },
 ): Promise<string> {
     const emitEvents = opts?.emitEvents ?? true;
@@ -1669,7 +1669,7 @@ async function findInDocumentContent(params: {
     docStore: DocStore;
     write: (s: string) => void;
     docIndex?: DocIndex;
-    db?: ReturnType<typeof createServerSupabase>;
+    db?: ReturnType<typeof createServerDb>;
 }): Promise<string> {
     const {
         docLabel,
@@ -1838,7 +1838,7 @@ export async function runToolCalls(
     toolCalls: ToolCall[],
     docStore: DocStore,
     userId: string,
-    db: ReturnType<typeof createServerSupabase>,
+    db: ReturnType<typeof createServerDb>,
     write: (s: string) => void,
     workflowStore?: WorkflowStore,
     tabularStore?: TabularCellStore,
@@ -2319,8 +2319,8 @@ export async function runToolCalls(
                             status: "ready",
                         }));
                         const { data: insertedDocs, error: docErr } = await db
-                            .from("documents")
-                            .insert(docRows)
+                            .insertInto("documents")
+                            .values(docRows)
                             .select("id, filename");
                         if (
                             docErr ||
@@ -2332,7 +2332,7 @@ export async function runToolCalls(
                             );
                         } else {
                             // Preserve the request order so each row pairs
-                            // with the right filename. Supabase returns
+                            // with the right filename. The DB returns
                             // inserted rows in the same order as the
                             // payload.
                             const newDocs = insertedDocs as {
@@ -2389,8 +2389,8 @@ export async function runToolCalls(
                             }));
                             const { data: insertedVersions, error: verErr } =
                                 await db
-                                    .from("document_versions")
-                                    .insert(versionRows)
+                                    .insertInto("documentVersions")
+                                    .values(versionRows)
                                     .select("id, document_id");
                             if (
                                 verErr ||
@@ -2419,12 +2419,12 @@ export async function runToolCalls(
                                 await Promise.all(
                                     newDocs.map((d) =>
                                         db
-                                            .from("documents")
-                                            .update({
+                                            .updateTable("documents")
+                                            .set({
                                                 current_version_id:
                                                     versionByDocId.get(d.id),
                                             })
-                                            .eq("id", d.id),
+                                            .where("id", "=", d.id),
                                     ),
                                 );
 
@@ -2715,7 +2715,7 @@ export async function runLLMStream(params: {
     docStore: DocStore;
     docIndex: DocIndex;
     userId: string;
-    db: ReturnType<typeof createServerSupabase>;
+    db: ReturnType<typeof createServerDb>;
     write: (s: string) => void;
     extraTools?: unknown[];
     workflowStore?: WorkflowStore;
@@ -3049,7 +3049,7 @@ export function extractAnnotations(
 export async function buildDocContext(
     messages: ChatMessage[],
     userId: string,
-    db: ReturnType<typeof createServerSupabase>,
+    db: ReturnType<typeof createServerDb>,
     chatId?: string | null,
 ): Promise<{ docIndex: DocIndex; docStore: DocStore }> {
     const docIndex: DocIndex = {};
@@ -3070,10 +3070,10 @@ export async function buildDocContext(
     // them, and can't call edit_document / read_document on them.
     if (chatId) {
         const { data: rows } = await db
-            .from("chat_messages")
-            .select("content")
-            .eq("chat_id", chatId)
-            .eq("role", "assistant");
+            .selectFrom("chatMessages")
+            .select(["content"])
+            .where("chatId", "=", chatId)
+            .where("role", "=", "assistant");
         for (const row of rows ?? []) {
             const content = (row as { content?: unknown }).content;
             if (!Array.isArray(content)) continue;
@@ -3091,11 +3091,11 @@ export async function buildDocContext(
     const ids = [...documentIds];
     if (ids.length > 0) {
         const { data: docs } = await db
-            .from("documents")
-            .select("id, filename, file_type, current_version_id, status")
-            .in("id", ids)
-            .eq("user_id", userId)
-            .eq("status", "ready");
+            .selectFrom("documents")
+            .select(["id", "filename", "fileType", "currentVersionId", "status"])
+            .where("id", "in", ids)
+            .where("userId", "=", userId)
+            .where("status", "=", "ready");
 
         const docList = (docs ?? []) as unknown as {
             id: string;
@@ -3138,7 +3138,7 @@ export async function buildDocContext(
 export async function buildProjectDocContext(
     projectId: string,
     _userId: string,
-    db: ReturnType<typeof createServerSupabase>,
+    db: ReturnType<typeof createServerDb>,
 ): Promise<{
     docIndex: DocIndex;
     docStore: DocStore;
@@ -3149,17 +3149,17 @@ export async function buildProjectDocContext(
 
     const [{ data: docs }, { data: folders }] = await Promise.all([
         db
-            .from("documents")
+            .selectFrom("documents")
             .select(
                 "id, filename, file_type, current_version_id, status, folder_id",
             )
-            .eq("project_id", projectId)
-            .eq("status", "ready")
-            .order("created_at", { ascending: true }),
+            .where("projectId", "=", projectId)
+            .where("status", "=", "ready")
+            .orderBy("createdAt", "asc"),
         db
-            .from("project_subfolders")
-            .select("id, name, parent_folder_id")
-            .eq("project_id", projectId),
+            .selectFrom("projectSubfolders")
+            .select(["id", "name", "parentFolderId"])
+            .where("projectId", "=", projectId),
     ]);
     const docList = (docs ?? []) as unknown as {
         id: string;
@@ -3232,7 +3232,7 @@ export async function buildProjectDocContext(
 export async function buildWorkflowStore(
     userId: string,
     userEmail: string | null | undefined,
-    db: ReturnType<typeof createServerSupabase>,
+    db: ReturnType<typeof createServerDb>,
 ): Promise<WorkflowStore> {
     const { BUILTIN_WORKFLOWS } = await import("./builtinWorkflows");
     const store: WorkflowStore = new Map();
@@ -3245,10 +3245,10 @@ export async function buildWorkflowStore(
 
     // Then overlay user-owned assistant workflows.
     const { data: workflows } = await db
-        .from("workflows")
-        .select("id, title, prompt_md")
-        .eq("user_id", userId)
-        .eq("type", "assistant");
+        .selectFrom("workflows")
+        .select(["id", "title", "promptMd"])
+        .where("userId", "=", userId)
+        .where("type", "=", "assistant");
     for (const wf of workflows ?? []) {
         if (wf.prompt_md) {
             store.set(wf.id, { title: wf.title, prompt_md: wf.prompt_md });
@@ -3258,18 +3258,18 @@ export async function buildWorkflowStore(
     // Shared assistant workflows must also be readable by workflow tools.
     if (normalizedUserEmail) {
         const { data: shares } = await db
-            .from("workflow_shares")
-            .select("workflow_id")
-            .eq("shared_with_email", normalizedUserEmail);
+            .selectFrom("workflowShares")
+            .select(["workflowId"])
+            .where("sharedWithEmail", "=", normalizedUserEmail);
         const sharedIds = [
-            ...new Set((shares ?? []).map((share) => share.workflow_id)),
+            ...new Set(((shares ?? []) as any[]).map((share) => share.workflow_id)),
         ];
         if (sharedIds.length > 0) {
             const { data: sharedWorkflows } = await db
-                .from("workflows")
-                .select("id, title, prompt_md")
-                .in("id", sharedIds)
-                .eq("type", "assistant");
+                .selectFrom("workflows")
+                .select(["id", "title", "promptMd"])
+                .where("id", "in", sharedIds)
+                .where("type", "=", "assistant");
             for (const wf of sharedWorkflows ?? []) {
                 if (wf.prompt_md) {
                     store.set(wf.id, {

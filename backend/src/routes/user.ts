@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
-import { createServerSupabase } from "../lib/supabase";
+import { createServerDb } from "../lib/db";
 import { DEFAULT_TABULAR_MODEL, resolveModel } from "../lib/llm";
 import {
   type ApiKeyStatus,
@@ -102,11 +102,11 @@ function validateProfilePayload(body: unknown):
 }
 
 async function ensureProfileRow(
-  db: ReturnType<typeof createServerSupabase>,
+  db: ReturnType<typeof createServerDb>,
   userId: string,
 ) {
   const { error } = await db
-    .from("user_profiles")
+    .insertInto("userProfiles")
     .upsert(
       { user_id: userId },
       { onConflict: "user_id", ignoreDuplicates: true },
@@ -115,16 +115,16 @@ async function ensureProfileRow(
 }
 
 async function loadProfile(
-  db: ReturnType<typeof createServerSupabase>,
+  db: ReturnType<typeof createServerDb>,
   userId: string,
   options: { repairMissing?: boolean } = {},
 ) {
   let { data, error } = await db
-    .from("user_profiles")
+    .selectFrom("userProfiles")
     .select(
       "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model",
     )
-    .eq("user_id", userId)
+    .where("userId", "=", userId)
     .maybeSingle();
 
   if (error) return { data: null, error };
@@ -137,11 +137,11 @@ async function loadProfile(
     if (ensureError) return { data: null, error: ensureError };
 
     const created = await db
-      .from("user_profiles")
+      .selectFrom("userProfiles")
       .select(
         "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model",
       )
-      .eq("user_id", userId)
+      .where("userId", "=", userId)
       .single();
     if (created.error) return { data: null, error: created.error };
     data = created.data;
@@ -152,13 +152,13 @@ async function loadProfile(
     const creditsResetDate = new Date();
     creditsResetDate.setDate(creditsResetDate.getDate() + 30);
     const { data: resetData, error: resetError } = await db
-      .from("user_profiles")
-      .update({
+      .updateTable("userProfiles")
+      .set({
         message_credits_used: 0,
         credits_reset_date: creditsResetDate.toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .eq("user_id", userId)
+      .where("userId", "=", userId)
       .select(
         "display_name, organisation, message_credits_used, credits_reset_date, tier, tabular_model",
       )
@@ -174,7 +174,7 @@ async function loadProfile(
 // POST /user/profile
 userRouter.post("/profile", requireAuth, async (_req, res) => {
   const userId = res.locals.userId as string;
-  const db = createServerSupabase();
+  const db = createServerDb();
   const error = await ensureProfileRow(db, userId);
   if (error) return void res.status(500).json({ detail: error.message });
   res.json({ ok: true });
@@ -183,7 +183,7 @@ userRouter.post("/profile", requireAuth, async (_req, res) => {
 // GET /user/profile
 userRouter.get("/profile", requireAuth, async (_req, res) => {
   const userId = res.locals.userId as string;
-  const db = createServerSupabase();
+  const db = createServerDb();
   const { data, error } = await loadProfile(db, userId, {
     repairMissing: true,
   });
@@ -198,15 +198,15 @@ userRouter.patch("/profile", requireAuth, async (req, res) => {
   const parsed = validateProfilePayload(req.body);
   if (!parsed.ok) return void res.status(400).json({ detail: parsed.detail });
 
-  const db = createServerSupabase();
+  const db = createServerDb();
   const ensureError = await ensureProfileRow(db, userId);
   if (ensureError)
     return void res.status(500).json({ detail: ensureError.message });
 
   const { error: updateError } = await db
-    .from("user_profiles")
-    .update(parsed.update)
-    .eq("user_id", userId);
+    .updateTable("userProfiles")
+    .set(parsed.update)
+    .where("userId", "=", userId);
   if (updateError)
     return void res.status(500).json({ detail: updateError.message });
 
@@ -219,7 +219,7 @@ userRouter.patch("/profile", requireAuth, async (req, res) => {
 // GET /user/api-keys
 userRouter.get("/api-keys", requireAuth, async (_req, res) => {
   const userId = res.locals.userId as string;
-  const db = createServerSupabase();
+  const db = createServerDb();
   const status = await getUserApiKeyStatus(userId, db);
   res.json(status);
 });
@@ -233,7 +233,7 @@ userRouter.put("/api-keys/:provider", requireAuth, async (req, res) => {
 
   const apiKey =
     typeof req.body?.api_key === "string" ? req.body.api_key : null;
-  const db = createServerSupabase();
+  const db = createServerDb();
   try {
     if (hasEnvApiKey(provider)) {
       return void res.status(409).json({
@@ -256,7 +256,7 @@ userRouter.put("/api-keys/:provider", requireAuth, async (req, res) => {
 // DELETE /user/account
 userRouter.delete("/account", requireAuth, async (_req, res) => {
   const userId = res.locals.userId as string;
-  const db = createServerSupabase();
+  const db = createServerDb();
   const { error } = await db.auth.admin.deleteUser(userId);
   if (error) return void res.status(500).json({ detail: error.message });
   res.status(204).send();

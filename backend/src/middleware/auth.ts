@@ -1,37 +1,21 @@
 import { Request, Response, NextFunction } from "express";
-import { createClient } from "@supabase/supabase-js";
+import { fromNodeHeaders } from "better-auth/node";
+import { auth } from "../lib/auth";
 
 export async function requireAuth(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const auth = req.headers.authorization ?? "";
-  if (!auth.startsWith("Bearer ")) {
-    res.status(401).json({ detail: "Missing or invalid Authorization header" });
-    return;
-  }
-  const token = auth.slice(7).trim();
-
-  const supabaseUrl = process.env.SUPABASE_URL ?? "";
-  const serviceKey = process.env.SUPABASE_SECRET_KEY ?? "";
-
-  if (!supabaseUrl || !serviceKey) {
-    res.status(500).json({ detail: "Server auth is not configured" });
-    return;
-  }
-
-  const admin = createClient(supabaseUrl, serviceKey, {
-    auth: { persistSession: false },
+  const session = await auth.api.getSession({
+    headers: fromNodeHeaders(req.headers),
   });
-  const { data } = await admin.auth.getUser(token);
-  if (!data.user) {
+  if (!session?.user) {
     res.status(401).json({ detail: "Invalid or expired token" });
     return;
   }
 
-  res.locals.userId = data.user.id;
-  res.locals.userEmail = data.user.email?.toLowerCase() ?? "";
-  res.locals.token = token;
+  res.locals.userId = session.user.id;
+  res.locals.userEmail = session.user.email?.toLowerCase() ?? "";
   next();
 }

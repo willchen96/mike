@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { authSession } from "@/lib/auth-session";
 import { applyOptimisticResolution } from "../assistant/EditCard";
 import { DocView } from "./DocView";
 import { DocxView } from "./DocxView";
@@ -357,7 +357,7 @@ function EditResolveButtons({
             try {
                 const {
                     data: { session },
-                } = await supabase.auth.getSession();
+                } = await authSession.auth.getSession();
                 const token = session?.access_token;
                 const apiBase =
                     process.env.NEXT_PUBLIC_API_BASE_URL ??
@@ -365,6 +365,7 @@ function EditResolveButtons({
                 const resp = await fetch(
                     `${apiBase}/single-documents/${edit.document_id}/edits/${edit.edit_id}/${verb}`,
                     {
+                        credentials: "include",
                         method: "POST",
                         headers: token
                             ? { Authorization: `Bearer ${token}` }
@@ -459,7 +460,7 @@ function DownloadButton({
         try {
             const {
                 data: { session },
-            } = await supabase.auth.getSession();
+            } = await authSession.auth.getSession();
             const token = session?.access_token;
             const apiBase =
                 process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
@@ -469,6 +470,7 @@ function DownloadButton({
             const resp = await fetch(
                 `${apiBase}/single-documents/${documentId}/docx${qs}`,
                 {
+                    credentials: "include",
                     headers: token ? { Authorization: `Bearer ${token}` } : {},
                 },
             );

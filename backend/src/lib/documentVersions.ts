@@ -1,6 +1,6 @@
-import type { createServerSupabase } from "./supabase";
+import type { createServerDb } from "./db";
 
-type Supa = ReturnType<typeof createServerSupabase>;
+type Supa = ReturnType<typeof createServerDb>;
 
 interface DocRow {
     id: string;
@@ -41,9 +41,9 @@ export async function loadActiveVersion(
     versionId?: string | null,
 ): Promise<ActiveVersion | null> {
     const { data: doc } = await db
-        .from("documents")
-        .select("current_version_id")
-        .eq("id", documentId)
+        .selectFrom("documents")
+        .select(["currentVersionId"])
+        .where("id", "=", documentId)
         .single();
     const targetVersionId =
         (typeof versionId === "string" && versionId) ||
@@ -52,11 +52,11 @@ export async function loadActiveVersion(
     if (!targetVersionId) return null;
 
     const { data: v } = await db
-        .from("document_versions")
+        .selectFrom("documentVersions")
         .select(
             "id, document_id, storage_path, pdf_storage_path, version_number, display_name, source",
         )
-        .eq("id", targetVersionId)
+        .where("id", "=", targetVersionId)
         .single();
     if (!v || v.document_id !== documentId || !v.storage_path) return null;
     return {
@@ -91,9 +91,9 @@ export async function attachActiveVersionPaths<T extends VersionPathRow>(
         return docs;
     }
     const { data: rows } = await db
-        .from("document_versions")
-        .select("id, storage_path, pdf_storage_path, version_number")
-        .in("id", versionIds);
+        .selectFrom("documentVersions")
+        .select(["id", "storagePath", "pdfStoragePath", "versionNumber"])
+        .where("id", "in", versionIds);
     const byId = new Map<
         string,
         {
@@ -136,11 +136,11 @@ export async function attachLatestVersionNumbers<T extends DocRow>(
     if (docs.length === 0) return docs;
     const ids = docs.map((d) => d.id);
     const { data: rows } = await db
-        .from("document_versions")
-        .select("document_id, version_number")
-        .in("document_id", ids)
-        .eq("source", "assistant_edit")
-        .not("version_number", "is", null);
+        .selectFrom("documentVersions")
+        .select(["documentId", "versionNumber"])
+        .where("documentId", "in", ids)
+        .where("source", "=", "assistant_edit")
+        .where("versionNumber", "is not", null);
 
     const latestByDoc = new Map<string, number>();
     for (const r of (rows ?? []) as {

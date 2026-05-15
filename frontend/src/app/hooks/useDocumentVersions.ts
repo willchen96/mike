@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { authSession } from "@/lib/auth-session";
 
 export interface DocumentVersionRow {
     id: string;
@@ -54,7 +54,7 @@ export function useDocumentVersions(
             try {
                 const {
                     data: { session },
-                } = await supabase.auth.getSession();
+                } = await authSession.auth.getSession();
                 const token = session?.access_token;
                 const apiBase =
                     process.env.NEXT_PUBLIC_API_BASE_URL ??
@@ -62,6 +62,7 @@ export function useDocumentVersions(
                 const resp = await fetch(
                     `${apiBase}/single-documents/${documentId}/versions`,
                     {
+                        credentials: "include",
                         headers: token
                             ? { Authorization: `Bearer ${token}` }
                             : {},

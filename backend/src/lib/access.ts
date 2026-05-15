@@ -11,9 +11,9 @@
  * owner-only (delete, rename, member management).
  */
 
-import type { createServerSupabase } from "./supabase";
+import type { createServerDb } from "./db";
 
-type Db = ReturnType<typeof createServerSupabase>;
+type Db = ReturnType<typeof createServerDb>;
 
 export type ProjectAccess =
     | {
@@ -34,9 +34,9 @@ export async function checkProjectAccess(
     db: Db,
 ): Promise<ProjectAccess> {
     const { data: project } = await db
-        .from("projects")
-        .select("id, user_id, shared_with")
-        .eq("id", projectId)
+        .selectFrom("projects")
+        .select(["id", "userId", "sharedWith"])
+        .where("id", "=", projectId)
         .single();
     if (!project) return { ok: false };
     const proj = project as {
@@ -134,9 +134,9 @@ export async function filterAccessibleDocumentIds(
 ): Promise<string[]> {
     if (documentIds.length === 0) return [];
     const { data: docs } = await db
-        .from("documents")
-        .select("id, user_id, project_id")
-        .in("id", documentIds);
+        .selectFrom("documents")
+        .select(["id", "userId", "projectId"])
+        .where("id", "in", documentIds);
     const rows = (docs ?? []) as {
         id: string;
         user_id: string;
@@ -172,13 +172,13 @@ export async function listAccessibleProjectIds(
     db: Db,
 ): Promise<string[]> {
     const [{ data: own }, { data: shared }] = await Promise.all([
-        db.from("projects").select("id").eq("user_id", userId),
+        db.selectFrom("projects").select(["id"]).where("userId", "=", userId),
         userEmail
             ? db
-                  .from("projects")
-                  .select("id")
-                  .filter("shared_with", "cs", JSON.stringify([userEmail]))
-                  .neq("user_id", userId)
+                  .selectFrom("projects")
+                  .select(["id"])
+                  .where("sharedWith", "cs", JSON.stringify([userEmail]))
+                  .where("userId", "!=", userId)
             : Promise.resolve({ data: [] as { id: string }[] }),
     ]);
     const ids = new Set<string>();
