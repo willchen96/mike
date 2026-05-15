@@ -19,7 +19,7 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-export const kysely = new Kysely<DB>({
+export const db = new Kysely<DB>({
   dialect: new PostgresDialect({ pool }),
   plugins: [new CamelCasePlugin()],
 });
@@ -289,7 +289,7 @@ class KyselyResultQuery<T = unknown> implements PromiseLike<DbResult<T>> {
 
   private async selectRows(): Promise<DbResult<T>> {
     if (this.head) {
-      let countQuery = kysely
+      let countQuery = db
         .selectFrom(camelCase(this.table) as never)
         .select((eb) => eb.fn.countAll<number>().as("count"));
       countQuery = this.applyFilters(countQuery);
@@ -297,7 +297,7 @@ class KyselyResultQuery<T = unknown> implements PromiseLike<DbResult<T>> {
       return { data: null, error: null, count: Number(row?.count ?? 0) };
     }
 
-    let query = kysely.selectFrom(camelCase(this.table) as never);
+    let query = db.selectFrom(camelCase(this.table) as never);
     const columns = selectedColumns(this.columns);
     query = columns ? query.select(columns as never) : query.selectAll();
     query = this.applyFilters(query);
@@ -326,14 +326,14 @@ class KyselyResultQuery<T = unknown> implements PromiseLike<DbResult<T>> {
       if (this.action === "select") return await this.selectRows();
 
       if (this.action === "delete") {
-        let query = kysely.deleteFrom(table).returningAll();
+        let query = db.deleteFrom(table).returningAll();
         query = this.applyFilters(query);
         const rows = (await query.execute()) as Record<string, unknown>[];
         return { data: snakeRows(rows) as T, error: null };
       }
 
       if (this.action === "update") {
-        let query = kysely
+        let query = db
           .updateTable(table)
           .set(camelRow(this.updates) as never)
           .returningAll();
@@ -347,7 +347,7 @@ class KyselyResultQuery<T = unknown> implements PromiseLike<DbResult<T>> {
 
       const rows = this.rows.map(camelRow);
       if (rows.length === 0) return { data: [] as T, error: null };
-      let query = kysely.insertInto(table).values(rows as never).returningAll();
+      let query = db.insertInto(table).values(rows as never).returningAll();
       if (this.action === "upsert") {
         const conflictKeys = this.onConflict ?? [
           Object.hasOwn(rows[0], "id") ? "id" : Object.keys(rows[0])[0],
@@ -385,7 +385,7 @@ async function listUsers(
   _options?: Record<string, unknown>,
 ): Promise<DbResult<{ users: { id: string; email: string }[] }>> {
   try {
-    const users = await kysely
+    const users = await db
       .selectFrom("user")
       .select(["id", "email"])
       .orderBy("email", "asc")
@@ -403,7 +403,7 @@ async function getUserById(
   id: string,
 ): Promise<DbResult<{ user: { id: string; email: string } | null }>> {
   try {
-    const user = await kysely
+    const user = await db
       .selectFrom("user")
       .select(["id", "email"])
       .where("id", "=", id)
@@ -419,7 +419,7 @@ async function getUserById(
 
 async function deleteUser(id: string): Promise<DbResult<null>> {
   try {
-    await kysely.deleteFrom("user").where("id", "=", id).execute();
+    await db.deleteFrom("user").where("id", "=", id).execute();
     return { data: null, error: null };
   } catch (error) {
     return {
