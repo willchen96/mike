@@ -17,7 +17,16 @@ const memoryUpload = multer({
 export function singleFileUpload(fieldName: string): RequestHandler {
   return (req, res, next) => {
     memoryUpload.single(fieldName)(req, res, (err) => {
-      if (!err) return next();
+      if (!err) {
+        if (req.file?.originalname) {
+          req.file.originalname = Buffer.from(
+            req.file.originalname,
+            "latin1",
+          ).toString("utf-8");
+        }
+
+        return next();
+      }
 
       if (err instanceof multer.MulterError) {
         if (err.code === "LIMIT_FILE_SIZE") {
