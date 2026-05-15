@@ -21,6 +21,21 @@ Website: [mikeoss.com](https://mikeoss.com)
 - At least one supported model provider API key: Anthropic, Google Gemini, or OpenAI
 - LibreOffice installed locally if you need DOC/DOCX to PDF conversion
 
+## Safe Local Testing
+
+Mike handles legal documents, model-provider keys, Supabase credentials, and
+object storage. For a first local run, use disposable infrastructure and
+synthetic documents only:
+
+- create a throwaway Supabase project
+- create a throwaway R2 / S3-compatible bucket
+- use capped or disposable model-provider API keys
+- upload synthetic or public sample documents, not client, privileged, firm, or
+  confidential material
+
+See [`docs/safe-local-testing.md`](docs/safe-local-testing.md) before testing
+with anything sensitive.
+
 ## Database Setup
 
 For a new Supabase database, open the Supabase SQL editor and run:
@@ -64,13 +79,21 @@ RESEND_API_KEY=your-resend-key
 USER_API_KEYS_ENCRYPTION_SECRET=your-long-random-secret
 ```
 
-Create `frontend/.env.local`:
+Create `frontend/.env.local`.
+
+Browser-safe public variables:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=your-supabase-anon-key
-SUPABASE_SECRET_KEY=your-supabase-service-role-key
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
+```
+
+Server-side Next.js runtime variables:
+
+```bash
+# Server-side only. Never prefix this with NEXT_PUBLIC_.
+SUPABASE_SECRET_KEY=your-supabase-service-role-key
 ```
 
 Supabase values come from the project dashboard. Use the project URL for `SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL`, the service role key for `SUPABASE_SECRET_KEY`, and the anon/public key for `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`. If your Supabase project shows multiple key formats, use the legacy JWT-style anon and service role keys expected by the Supabase client libraries.
