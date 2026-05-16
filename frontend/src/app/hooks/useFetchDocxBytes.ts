@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/app/lib/supabase";
 
 export interface FetchDocxResult {
     bytes: ArrayBuffer | null;
@@ -46,14 +46,6 @@ export function useFetchDocxBytes(
     const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    console.log("[useFetchDocxBytes] init", {
-        documentId,
-        versionId,
-        refetchKey,
-        initialKey,
-        cacheHit: initialKey ? bytesCache.has(initialKey) : null,
-    });
 
     useEffect(() => {
         if (!documentId) {

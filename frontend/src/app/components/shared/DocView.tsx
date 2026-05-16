@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ZoomIn, ZoomOut } from "lucide-react";
-import { MikeIcon } from "@/components/chat/mike-icon";
+import { ZoomIn, ZoomOut, FileX, RefreshCw } from "lucide-react";
+import { MikeIcon } from "@/app/components/chat/mike-icon";
 import { useFetchSingleDoc } from "@/app/hooks/useFetchSingleDoc";
 import { DocxView } from "./DocxView";
 import type { CitationQuote } from "./types";
@@ -15,6 +15,8 @@ import {
 
 interface Props {
     doc: { document_id: string; version_id?: string | null } | null;
+    pdfStatus?: "pending" | "ok" | "failed" | null;
+    onRetryPdf?: () => void | Promise<void>;
     /** Preferred: one or more (page, quote) pairs to highlight. */
     quotes?: CitationQuote[];
     /** Back-compat single-quote API. Ignored if `quotes` is provided. */
@@ -41,6 +43,8 @@ type RenderedPage = {
 
 export function DocView({
     doc,
+    pdfStatus,
+    onRetryPdf,
     quotes,
     quote,
     fallbackPage,
@@ -73,6 +77,7 @@ export function DocView({
     const [zoom, setZoom] = useState(1.0);
     const [currentPage, setCurrentPage] = useState(1);
     const [numPages, setNumPages] = useState(0);
+    const [retrying, setRetrying] = useState(false);
 
     const { result, loading, error } = useFetchSingleDoc(
         doc?.document_id ?? null,
@@ -83,6 +88,16 @@ export function DocView({
     // rendition, so fall back to docx-preview (still applies citation
     // highlighting via the same `quotes` API).
     const fallbackToDocx = result?.type === "docx";
+
+    const handleRetry = async () => {
+        if (!onRetryPdf || retrying) return;
+        setRetrying(true);
+        try {
+            await Promise.resolve(onRetryPdf());
+        } finally {
+            setRetrying(false);
+        }
+    };
 
     // Track container width via ResizeObserver so re-renders fire on resize
     useEffect(() => {
@@ -556,6 +571,34 @@ export function DocView({
                 {error && (
                     <div className="flex h-full items-center justify-center">
                         <p className="text-sm text-red-500">{error}</p>
+                    </div>
+                )}
+                {!loading && !error && !result && pdfStatus === "pending" && (
+                    <div className="flex h-full flex-col items-center justify-center gap-3">
+                        <MikeIcon spin mike size={28} />
+                        <p className="text-sm font-medium text-gray-700">Generating preview&#8230;</p>
+                        <p className="text-xs text-gray-500 text-center max-w-xs">
+                            The PDF preview is being prepared. This usually takes a few seconds.
+                        </p>
+                    </div>
+                )}
+                {!loading && !error && !result && pdfStatus === "failed" && (
+                    <div className="flex h-full flex-col items-center justify-center gap-3">
+                        <FileX className="h-8 w-8 text-gray-400" />
+                        <p className="text-sm font-medium text-gray-700">Preview unavailable</p>
+                        <p className="text-xs text-gray-500 text-center max-w-xs">
+                            The PDF preview could not be generated.
+                        </p>
+                        {onRetryPdf && (
+                            <button
+                                onClick={handleRetry}
+                                disabled={retrying}
+                                className="mt-4 flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                <RefreshCw className="h-3.5 w-3.5" />
+                                {retrying ? "Retrying…" : "Retry preview"}
+                            </button>
+                        )}
                     </div>
                 )}
                 <div ref={containerRef} />

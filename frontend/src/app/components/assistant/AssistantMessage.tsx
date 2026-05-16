@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { Copy, Check, ChevronDown, Download, Loader2 } from "lucide-react";
-import { MikeIcon } from "@/components/chat/mike-icon";
+import { MikeIcon } from "@/app/components/chat/mike-icon";
 import { displayCitationQuote, formatCitationPage } from "../shared/types";
 import type {
     AssistantEvent,
@@ -16,20 +16,7 @@ import type {
 } from "../shared/types";
 import { EditCard, applyOptimisticResolution } from "./EditCard";
 import { PreResponseWrapper } from "../shared/PreResponseWrapper";
-import { supabase } from "@/lib/supabase";
-
-function toolCallLabel(name: string): string {
-    if (name === "generate_docx") return "Creating document...";
-    if (name === "edit_document") return "Editing document...";
-    if (name === "read_document") return "Reading document...";
-    if (name === "fetch_documents") return "Reading documents...";
-    if (name === "find_in_document") return "Searching document...";
-    if (name === "replicate_document") return "Copying document...";
-    if (name === "read_workflow") return "Loading workflow...";
-    if (name === "list_workflows") return "Loading workflows...";
-    if (name === "list_documents") return "Loading documents...";
-    return name ? `Running ${name}...` : "Working...";
-}
+import { supabase } from "@/app/lib/supabase";
 
 /**
  * Card rendered above the per-edit EditCards when a message produced
@@ -1250,8 +1237,9 @@ export function AssistantMessage({
                         <div className="absolute bottom-0 w-[1px] bg-gray-300 top-[13px] left-[2.5px] h-[calc(100%+11px)]" />
                     )}
                     <div className="w-1.5 h-1.5 rounded-full border border-gray-400 border-t-transparent animate-spin shrink-0" />
-                    <span className="font-medium ml-2">
-                        {toolCallLabel(event.name)}
+                    <span className="font-medium ml-2">Running</span>
+                    <span className="ml-1">
+                        {event.name ? `${event.name}...` : "tool..."}
                     </span>
                 </div>
             );

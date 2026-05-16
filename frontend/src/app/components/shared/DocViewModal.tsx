@@ -15,6 +15,7 @@ interface Props {
     versionLabel?: string | null;
     onClose: () => void;
     onDelete?: (doc: MikeDocument) => void;
+    onRetryPdf?: () => void | Promise<void>;
 }
 
 export function DocViewModal({
@@ -23,6 +24,7 @@ export function DocViewModal({
     versionLabel,
     onClose,
     onDelete,
+    onRetryPdf,
 }: Props) {
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
@@ -92,6 +94,8 @@ export function DocViewModal({
                             document_id: doc.id,
                             version_id: versionId ?? null,
                         }}
+                        pdfStatus={doc.pdf_conversion_status}
+                        onRetryPdf={onRetryPdf}
                     />
                 </div>
             </div>
