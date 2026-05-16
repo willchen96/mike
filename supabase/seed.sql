@@ -1,0 +1,2 @@
+-- Intentionally empty.
+-- Local Supabase runs with seeding enabled, so keep a no-op seed file present.

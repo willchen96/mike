@@ -88,9 +88,20 @@ app.use(
   }),
 );
 
+const allowedOrigins = new Set<string>(
+  [process.env.FRONTEND_URL ?? "http://localhost:3000"].filter(Boolean),
+);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL ?? "http://localhost:3000",
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.has(origin)) return callback(null, true);
+      if (!isProduction && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
     credentials: true,
   }),
 );

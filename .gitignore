@@ -9,6 +9,12 @@ build
 .env.*
 !.env.example
 !.env.local.example
+!.env.docker.example
+!.env.local.docker.example
+!**/.env.example
+!**/.env.local.example
+!**/.env.docker.example
+!**/.env.local.docker.example
 
 *.log
 *.tsbuildinfo

@@ -85,6 +85,76 @@ npm install --prefix backend
 npm install --prefix frontend
 ```
 
+## Docker Dev Setup
+
+Use this when you want a local containerized stack with:
+
+- Supabase local for auth, Postgres, and related services
+- MinIO for R2-compatible object storage
+- frontend on `http://localhost:4000`
+- backend on `http://localhost:4001`
+
+Prerequisites:
+
+- Docker Desktop
+- Supabase CLI: `brew install supabase/tap/supabase`
+
+Start the local stack:
+
+```bash
+supabase start
+cp backend/.env.docker.example backend/.env.docker
+cp frontend/.env.local.docker.example frontend/.env.local.docker
+docker compose up -d --build
+```
+
+Local service ports:
+
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:4000 |
+| Backend | http://localhost:4001 |
+| Supabase API | http://localhost:54321 |
+| Supabase DB | `postgresql://postgres:postgres@localhost:54322/postgres` |
+| Mailpit | http://localhost:54324 |
+| MinIO S3 API | http://localhost:9000 |
+| MinIO Console | http://localhost:9001 |
+
+Docker-local env values:
+
+```bash
+# backend/.env.docker
+PORT=3001
+FRONTEND_URL=http://localhost:4000
+SUPABASE_URL=http://host.docker.internal:54321
+SUPABASE_SECRET_KEY=<secret key from `supabase status`>
+R2_ENDPOINT_URL=http://minio:9000
+R2_ACCESS_KEY_ID=minioadmin
+R2_SECRET_ACCESS_KEY=minioadmin
+R2_BUCKET_NAME=mike
+
+# frontend/.env.local.docker
+NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=<publishable key from `supabase status`>
+SUPABASE_SECRET_KEY=<secret key from `supabase status`>
+NEXT_PUBLIC_API_BASE_URL=http://localhost:4001
+```
+
+Notes:
+
+- The Docker stack bootstraps the `mike` bucket in MinIO automatically.
+- Existing cloud env files stay untouched because Docker uses the dedicated `.env.docker` files.
+- This setup works with the existing backend CORS config by setting `FRONTEND_URL=http://localhost:4000`.
+
+Useful lifecycle commands:
+
+```bash
+docker compose logs -f
+docker compose down
+supabase stop
+supabase db reset
+```
+
 ## Run Locally
 
 Start the backend:

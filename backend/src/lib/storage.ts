@@ -1,21 +1,30 @@
 /**
- * Cloudflare R2 storage utilities for Mike document management.
- * R2 is S3-compatible — uses @aws-sdk/client-s3.
+ * S3-compatible storage utilities for Mike document management.
+ *
+ * Works with Cloudflare R2 in hosted environments and MinIO in local Docker.
  *
  * Required env vars:
- *   R2_ENDPOINT_URL     — https://<account-id>.r2.cloudflarestorage.com
- *   R2_ACCESS_KEY_ID    — R2 API token (Access Key ID)
- *   R2_SECRET_ACCESS_KEY — R2 API token (Secret Access Key)
- *   R2_BUCKET_NAME      — bucket name (default: "mike")
+ *   R2_ENDPOINT_URL        — S3 endpoint URL
+ *   R2_ACCESS_KEY_ID       — access key
+ *   R2_SECRET_ACCESS_KEY   — secret key
+ *   R2_BUCKET_NAME         — bucket name (default: "mike")
  */
 
 import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl as awsGetSignedUrl } from "@aws-sdk/s3-request-presigner";
+
+const BUCKET = process.env.R2_BUCKET_NAME ?? "mike";
+
+export const storageEnabled = Boolean(
+  process.env.R2_ENDPOINT_URL &&
+  process.env.R2_ACCESS_KEY_ID &&
+  process.env.R2_SECRET_ACCESS_KEY,
+);
 
 function getClient(): S3Client {
   return new S3Client({
@@ -26,16 +35,9 @@ function getClient(): S3Client {
       accessKeyId: process.env.R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
     },
+    forcePathStyle: true,
   });
 }
-
-const BUCKET = process.env.R2_BUCKET_NAME ?? "mike";
-
-export const storageEnabled = Boolean(
-  process.env.R2_ENDPOINT_URL &&
-  process.env.R2_ACCESS_KEY_ID &&
-  process.env.R2_SECRET_ACCESS_KEY,
-);
 
 // ---------------------------------------------------------------------------
 // Upload
@@ -87,7 +89,7 @@ export async function deleteFile(key: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Signed URL (pre-signed for temporary direct access)
+// Signed URL (temporary direct access)
 // ---------------------------------------------------------------------------
 
 export async function getSignedUrl(
@@ -98,17 +100,17 @@ export async function getSignedUrl(
   if (!storageEnabled) return null;
   try {
     const client = getClient();
-    // Override the response Content-Disposition so the browser uses this
-    // filename on download, instead of the last path segment of the R2 key
-    // (which includes the document UUID). The `download` attribute on <a>
-    // is ignored for cross-origin URLs, so we have to set it server-side.
-    const responseContentDisposition = downloadFilename
-      ? buildContentDisposition("attachment", downloadFilename)
-      : undefined;
     const command = new GetObjectCommand({
       Bucket: BUCKET,
       Key: key,
-      ResponseContentDisposition: responseContentDisposition,
+      ...(downloadFilename
+        ? {
+            ResponseContentDisposition: buildContentDisposition(
+              "attachment",
+              downloadFilename,
+            ),
+          }
+        : {}),
     });
     return await awsGetSignedUrl(client, command, { expiresIn });
   } catch {

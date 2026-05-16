@@ -1,8 +1,7 @@
 node_modules
 dist
-.env*
+.env
+.env.*
 !.env.example
-!.env.docker.example
 *.log
-logs/
 .DS_Store
