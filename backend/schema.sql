@@ -365,3 +365,44 @@ revoke all on public.tabular_cells from anon, authenticated;
 revoke all on public.tabular_review_chats from anon, authenticated;
 revoke all on public.tabular_review_chat_messages from anon, authenticated;
 revoke all on public.user_api_keys from anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Row Level Security (defense-in-depth second wall)
+-- ---------------------------------------------------------------------------
+--
+-- The REVOKE block above is the first wall. RLS with a deny-all policy is
+-- the second: if any future migration accidentally GRANTs a privilege to
+-- anon or authenticated (a common AI-agent "fix" for empty-result queries),
+-- this policy still blocks the row.
+--
+-- The service role bypasses RLS, so the backend (which uses
+-- SUPABASE_SECRET_KEY via createServerSupabase) is unaffected.
+--
+-- Idempotent — safe to re-run on existing deployments.
+
+do $$
+declare
+    tbl text;
+    policy_name text;
+begin
+    for tbl in
+        select table_name
+        from information_schema.tables
+        where table_schema = 'public'
+          and table_type = 'BASE TABLE'
+    loop
+        execute format('alter table public.%I enable row level security', tbl);
+        policy_name := 'deny_client_access_' || tbl;
+        if not exists (
+            select 1 from pg_policies
+            where schemaname = 'public'
+              and tablename = tbl
+              and policyname = policy_name
+        ) then
+            execute format(
+                'create policy %I on public.%I for all to anon, authenticated using (false) with check (false)',
+                policy_name, tbl
+            );
+        end if;
+    end loop;
+end$$;
