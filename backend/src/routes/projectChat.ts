@@ -14,6 +14,8 @@ import {
 import { getUserApiKeys } from "../lib/userSettings";
 import { checkProjectAccess } from "../lib/access";
 
+const STREAM_TIMEOUT_MS = 180_000;
+
 const PROJECT_SYSTEM_PROMPT_EXTRA = `PROJECT CONTEXT:
 You are operating within a project folder that contains a collection of legal documents the user has organised for a single matter. The user's questions will usually refer to one or more documents in this project — your job is to find the relevant files to work on. Use list_documents to see what is available and fetch_documents / read_document to pull in any documents you need before answering.
 
@@ -157,19 +159,30 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
     try {
         write(`data: ${JSON.stringify({ type: "chat_id", chatId })}\n\n`);
 
-        const { fullText, events } = await runLLMStream({
-            apiMessages,
-            docStore,
-            docIndex,
-            userId,
-            db,
-            write,
-            extraTools: PROJECT_EXTRA_TOOLS,
-            workflowStore,
-            model,
-            apiKeys,
-            projectId,
+        let timerId: ReturnType<typeof setTimeout>;
+        const streamTimeout = new Promise<never>((_, reject) => {
+            timerId = setTimeout(
+                () => reject(new Error("Stream timed out")),
+                STREAM_TIMEOUT_MS,
+            );
         });
+        const { fullText, events } = await Promise.race([
+            runLLMStream({
+                apiMessages,
+                docStore,
+                docIndex,
+                userId,
+                db,
+                write,
+                extraTools: PROJECT_EXTRA_TOOLS,
+                workflowStore,
+                model,
+                apiKeys,
+                projectId,
+            }),
+            streamTimeout,
+        ]);
+        clearTimeout(timerId!);
 
         const annotations = extractAnnotations(fullText, docIndex, events);
         await db.from("chat_messages").insert({
@@ -187,9 +200,10 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
         }
     } catch (err) {
         console.error("[project-chat/stream] error:", err);
+        const isTimeout = err instanceof Error && err.message === "Stream timed out";
         try {
             write(
-                `data: ${JSON.stringify({ type: "error", message: "Stream error" })}\n\n`,
+                `data: ${JSON.stringify({ type: "error", message: isTimeout ? "Request timed out" : "Stream error" })}\n\n`,
             );
             write("data: [DONE]\n\n");
         } catch {
