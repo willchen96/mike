@@ -1,0 +1,18 @@
+{
+  "scenario": "tool-call-read-document",
+  "providerChunks": [
+    {
+      "type": "content_delta",
+      "text": "Reading the document."
+    },
+    {
+      "type": "tool_call_start",
+      "id": "call-1",
+      "name": "read_document",
+      "input": {
+        "doc_id": "doc-0"
+      }
+    }
+  ],
+  "expectedSseSequence": "data: {\"type\":\"content_delta\",\"text\":\"Reading the\"}\n\ndata: {\"type\":\"content_delta\",\"text\":\" document.\"}\n\ndata: {\"type\":\"tool_call_start\",\"name\":\"read_document\"}\n\ndata: {\"type\":\"citations\",\"citations\":[]}\n\ndata: [DONE]\n\n"
+}
