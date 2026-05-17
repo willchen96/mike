@@ -17,16 +17,21 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl as awsGetSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+let _client: S3Client | null = null;
+
 function getClient(): S3Client {
-  return new S3Client({
-    region: "auto",
-    endpoint: process.env.R2_ENDPOINT_URL!,
-    forcePathStyle: true,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-    },
-  });
+  if (!_client) {
+    _client = new S3Client({
+      region: "auto",
+      endpoint: process.env.R2_ENDPOINT_URL!,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      },
+    });
+  }
+  return _client;
 }
 
 const BUCKET = process.env.R2_BUCKET_NAME ?? "mike";
@@ -71,7 +76,8 @@ export async function downloadFile(key: string): Promise<ArrayBuffer | null> {
     if (!response.Body) return null;
     const bytes = await response.Body.transformToByteArray();
     return bytes.buffer as ArrayBuffer;
-  } catch {
+  } catch (err) {
+    console.error("[storage] downloadFile failed", { key, error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }
@@ -111,7 +117,8 @@ export async function getSignedUrl(
       ResponseContentDisposition: responseContentDisposition,
     });
     return await awsGetSignedUrl(client, command, { expiresIn });
-  } catch {
+  } catch (err) {
+    console.error("[storage] getSignedUrl failed", { key, error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }
