@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willchen96/mike/schemas/workflow.schema.json",
+  "title": "Mike Workflow",
+  "description": "Proposed declarative workflow/prompt pack definition for Mike workflows.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "type", "prompt_md"],
+  "properties": {
+    "id": {
+      "description": "Stable workflow/prompt pack identifier. Importers may map this to a database primary key or derive one from it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "enum": ["assistant", "tabular"]
+    },
+    "practice": {
+      "type": "string"
+    },
+    "jurisdiction": {
+      "type": "string"
+    },
+    "language": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "is_system": {
+      "type": "boolean"
+    },
+    "prompt_md": {
+      "type": "string",
+      "minLength": 1
+    },
+    "columns_config": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "format", "prompt"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "format": {
+                "type": "string",
+                "minLength": 1
+              },
+              "prompt": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tabular"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "required": ["columns_config"],
+        "properties": {
+          "columns_config": {
+            "type": "array",
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "assistant"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "columns_config": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

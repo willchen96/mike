@@ -1,0 +1,25 @@
+id: nda-review
+title: NDA Review
+type: tabular
+practice: commercial
+jurisdiction: generic
+language: en
+version: "0.1.0"
+is_system: true
+prompt_md: |
+  Review the uploaded NDA using only the provided document. Extract the requested
+  information into the configured columns. Flag missing, ambiguous, or high-risk
+  provisions clearly.
+columns_config:
+  - name: Parties
+    format: text
+    prompt: Identify the parties to the NDA and their roles.
+  - name: Confidentiality obligations
+    format: text
+    prompt: Summarize the main confidentiality obligations and any notable carve-outs.
+  - name: Term and survival
+    format: text
+    prompt: Identify the agreement term and any survival period for confidentiality obligations.
+  - name: Risk level
+    format: select
+    prompt: Assign a low, medium, or high risk level and briefly explain the reason.
