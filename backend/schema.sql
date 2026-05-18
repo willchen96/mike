@@ -366,3 +366,105 @@ revoke all on public.tabular_cells from anon, authenticated;
 revoke all on public.tabular_review_chats from anon, authenticated;
 revoke all on public.tabular_review_chat_messages from anon, authenticated;
 revoke all on public.user_api_keys from anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Row Level Security (defense-in-depth second wall)
+-- ---------------------------------------------------------------------------
+--
+-- The REVOKE block above is the first wall. RLS with a deny-all policy is
+-- the second: if any future migration accidentally GRANTs a privilege to
+-- anon or authenticated (a common AI-agent "fix" for empty-result queries),
+-- this policy still blocks the row.
+--
+-- The service role bypasses RLS, so the backend (which uses
+-- SUPABASE_SECRET_KEY via createServerSupabase) is unaffected.
+--
+-- Idempotent — safe to re-run on existing deployments.
+
+do $$
+declare
+    tbl text;
+    policy_name text;
+begin
+    for tbl in
+        select table_name
+        from information_schema.tables
+        where table_schema = 'public'
+          and table_type = 'BASE TABLE'
+    loop
+        execute format('alter table public.%I enable row level security', tbl);
+        policy_name := 'deny_client_access_' || tbl;
+        if not exists (
+            select 1 from pg_policies
+            where schemaname = 'public'
+              and tablename = tbl
+              and policyname = policy_name
+        ) then
+            execute format(
+                'create policy %I on public.%I for all to anon, authenticated using (false) with check (false)',
+                policy_name, tbl
+            );
+        end if;
+    end loop;
+end$$;
+
+-- ---------------------------------------------------------------------------
+-- Auto-enforce RLS + deny-all on any future public table
+-- ---------------------------------------------------------------------------
+--
+-- Event trigger that fires after CREATE TABLE statements. If the new table
+-- lives in the public schema, it gets the same deny-all treatment as the
+-- existing tables above. This makes it impossible to add a public table
+-- without RLS — eliminating the foot-gun where a future migration adds a
+-- table and forgets the security boundary.
+--
+-- Filters on schema_name = 'public' so DDL in auth/storage/realtime schemas
+-- is unaffected. The function is SECURITY DEFINER so it runs as its owner
+-- (postgres) — required because the event trigger fires inside the calling
+-- transaction and needs privileges to ALTER + CREATE POLICY on the new table.
+
+create or replace function public.enforce_rls_on_public_tables()
+returns event_trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    obj record;
+    tbl_name text;
+    policy_name text;
+begin
+    for obj in
+        select objid, schema_name
+        from pg_event_trigger_ddl_commands()
+        where command_tag = 'CREATE TABLE' and schema_name = 'public'
+    loop
+        -- pg_class.relname is the unquoted internal identifier; safe to use
+        -- as the suffix of the policy name and to %I-quote when re-emitting.
+        select c.relname into tbl_name
+        from pg_class c
+        where c.oid = obj.objid and c.relkind in ('r', 'p');
+        if tbl_name is null then
+            continue;
+        end if;
+        execute format('alter table public.%I enable row level security', tbl_name);
+        policy_name := 'deny_client_access_' || tbl_name;
+        if not exists (
+            select 1 from pg_policies
+            where schemaname = 'public'
+              and tablename = tbl_name
+              and policyname = policy_name
+        ) then
+            execute format(
+                'create policy %I on public.%I for all to anon, authenticated using (false) with check (false)',
+                policy_name, tbl_name
+            );
+        end if;
+    end loop;
+end$$;
+
+drop event trigger if exists enforce_rls_on_public_tables;
+create event trigger enforce_rls_on_public_tables
+    on ddl_command_end
+    when tag in ('CREATE TABLE')
+    execute procedure public.enforce_rls_on_public_tables();
