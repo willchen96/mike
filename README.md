@@ -76,6 +76,30 @@ Supabase values come from the project dashboard. Use the project URL for `SUPABA
 
 Provider keys are only needed for the models and email features you plan to use. Model provider keys can be configured in `backend/.env` for the whole instance, or per user in **Account > Models & API Keys**. If a provider key is present in `backend/.env`, that provider is available by default and the matching browser API key field is read-only.
 
+## Docker
+
+The easiest way to run the full stack is with Docker Compose.
+
+**1. Copy and fill in env files:**
+
+```bash
+cp .env.example .env
+cp backend/.env.example backend/.env
+cp frontend/.env.local.example frontend/.env.local
+```
+
+Edit each file with your Supabase, R2, and provider keys (see [Environment](#environment) below for details). The root `.env` supplies build-time values for the frontend image.
+
+**2. Build and start:**
+
+```bash
+docker compose up --build
+```
+
+Frontend is served at `http://localhost:3000`, backend at `http://localhost:3001`.
+
+**Note:** `NEXT_PUBLIC_*` variables are baked into the frontend image at build time. If you change them, re-run `docker compose up --build` to rebuild the image.
+
 ## Install
 
 Install each app package:
