@@ -16,3 +16,7 @@ next-env.d.ts
 .DS_Store
 .vercel
 coverage
+.current-issue.md
+.implementation-plan.md
+.implement-config
+CLAUDE.md

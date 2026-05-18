@@ -34,9 +34,13 @@ function b64urlDecode(s: string): Buffer {
     return Buffer.from(t, "base64");
 }
 
-function timingSafeEqStr(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+export function timingSafeEqStr(a: string, b: string): boolean {
+    const aBuf = Buffer.from(a);
+    const bBuf = Buffer.alloc(aBuf.length);
+    Buffer.from(b).copy(bBuf);
+    // Always run the constant-time comparison before checking length,
+    // so the return path doesn't leak information about which strings differ.
+    return crypto.timingSafeEqual(aBuf, bBuf) && a.length === b.length;
 }
 
 export function signDownload(path: string, filename: string): string {
