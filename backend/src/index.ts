@@ -11,6 +11,8 @@ import { tabularRouter } from "./routes/tabular";
 import { workflowsRouter } from "./routes/workflows";
 import { userRouter } from "./routes/user";
 import { downloadsRouter } from "./routes/downloads";
+import { requestContext } from "./middleware/requestContext";
+import { logger } from "./lib/logger";
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -95,6 +97,8 @@ app.use(
   }),
 );
 
+app.use(requestContext());
+
 app.use(generalLimiter);
 
 app.use(express.json({ limit: "50mb" }));
@@ -122,5 +126,5 @@ app.use("/download", downloadsRouter);
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.listen(PORT, () => {
-  console.log(`Mike backend running on port ${PORT}`);
+  logger.info({ port: PORT }, "backend listening");
 });
