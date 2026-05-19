@@ -24,19 +24,129 @@ When the user wants to use an existing project document as a starting point for 
 
 export const projectChatRouter = Router({ mergeParams: true });
 
+// Mirrors the hand-written parsers in routes/chat.ts so this route doesn't
+// rely on a bare `req.body as { ... }` cast — every field flowing into the
+// LLM, the DB, or the response stream is shape-checked first.
+
+function parseChatMessages(value: unknown):
+    | { ok: true; messages: ChatMessage[] }
+    | { ok: false; detail: string } {
+    if (!Array.isArray(value) || value.length === 0) {
+        return { ok: false, detail: "messages must be a non-empty array" };
+    }
+    for (const message of value) {
+        if (!message || typeof message !== "object" || Array.isArray(message)) {
+            return { ok: false, detail: "messages must contain objects" };
+        }
+        const row = message as Record<string, unknown>;
+        if (typeof row.role !== "string") {
+            return { ok: false, detail: "message.role must be a string" };
+        }
+        if (row.content !== null && typeof row.content !== "string") {
+            return {
+                ok: false,
+                detail: "message.content must be a string or null",
+            };
+        }
+    }
+    return { ok: true, messages: value as ChatMessage[] };
+}
+
+function parseOptionalChatId(value: unknown):
+    | { ok: true; chatId: string | null }
+    | { ok: false; detail: string } {
+    if (value === undefined || value === null) return { ok: true, chatId: null };
+    if (typeof value !== "string" || !value.trim()) {
+        return { ok: false, detail: "chat_id must be a non-empty string" };
+    }
+    return { ok: true, chatId: value.trim() };
+}
+
+function parseOptionalModel(value: unknown):
+    | { ok: true; model: string | undefined }
+    | { ok: false; detail: string } {
+    if (value === undefined) return { ok: true, model: undefined };
+    if (typeof value !== "string" || !value.trim()) {
+        return { ok: false, detail: "model must be a non-empty string" };
+    }
+    return { ok: true, model: value.trim() };
+}
+
+function parseDocRef(value: unknown):
+    | { ok: true; ref: { filename: string; document_id: string } }
+    | { ok: false; detail: string } {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return { ok: false, detail: "expected an object with filename and document_id" };
+    }
+    const row = value as Record<string, unknown>;
+    if (typeof row.filename !== "string" || !row.filename.trim()) {
+        return { ok: false, detail: "filename must be a non-empty string" };
+    }
+    if (typeof row.document_id !== "string" || !row.document_id.trim()) {
+        return { ok: false, detail: "document_id must be a non-empty string" };
+    }
+    return {
+        ok: true,
+        ref: { filename: row.filename, document_id: row.document_id },
+    };
+}
+
+function parseOptionalDisplayedDoc(value: unknown):
+    | { ok: true; doc: { filename: string; document_id: string } | undefined }
+    | { ok: false; detail: string } {
+    if (value === undefined || value === null) return { ok: true, doc: undefined };
+    const parsed = parseDocRef(value);
+    if (!parsed.ok) return { ok: false, detail: `displayed_doc: ${parsed.detail}` };
+    return { ok: true, doc: parsed.ref };
+}
+
+function parseOptionalAttachedDocuments(value: unknown):
+    | { ok: true; docs: { filename: string; document_id: string }[] | undefined }
+    | { ok: false; detail: string } {
+    if (value === undefined || value === null) return { ok: true, docs: undefined };
+    if (!Array.isArray(value)) {
+        return { ok: false, detail: "attached_documents must be an array" };
+    }
+    const out: { filename: string; document_id: string }[] = [];
+    for (const entry of value) {
+        const parsed = parseDocRef(entry);
+        if (!parsed.ok)
+            return { ok: false, detail: `attached_documents: ${parsed.detail}` };
+        out.push(parsed.ref);
+    }
+    return { ok: true, docs: out };
+}
+
 // POST /projects/:projectId/chat — streaming
 projectChatRouter.post("/", requireAuth, async (req, res) => {
     const userId = res.locals.userId as string;
     const userEmail = res.locals.userEmail as string | undefined;
     const { projectId } = req.params;
-    const { messages, chat_id, model, displayed_doc, attached_documents } =
-        req.body as {
-            messages: ChatMessage[];
-            chat_id?: string;
-            model?: string;
-            displayed_doc?: { filename: string; document_id: string };
-            attached_documents?: { filename: string; document_id: string }[];
-        };
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const messagesParsed = parseChatMessages(body.messages);
+    if (!messagesParsed.ok)
+        return void res.status(400).json({ detail: messagesParsed.detail });
+    const chatIdParsed = parseOptionalChatId(body.chat_id);
+    if (!chatIdParsed.ok)
+        return void res.status(400).json({ detail: chatIdParsed.detail });
+    const modelParsed = parseOptionalModel(body.model);
+    if (!modelParsed.ok)
+        return void res.status(400).json({ detail: modelParsed.detail });
+    const displayedDocParsed = parseOptionalDisplayedDoc(body.displayed_doc);
+    if (!displayedDocParsed.ok)
+        return void res.status(400).json({ detail: displayedDocParsed.detail });
+    const attachedDocsParsed = parseOptionalAttachedDocuments(
+        body.attached_documents,
+    );
+    if (!attachedDocsParsed.ok)
+        return void res.status(400).json({ detail: attachedDocsParsed.detail });
+
+    const messages = messagesParsed.messages;
+    const chat_id = chatIdParsed.chatId ?? undefined;
+    const model = modelParsed.model;
+    const displayed_doc = displayedDocParsed.doc;
+    const attached_documents = attachedDocsParsed.docs;
 
     const db = createServerSupabase();
 
