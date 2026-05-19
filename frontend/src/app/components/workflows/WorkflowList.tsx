@@ -10,6 +10,7 @@ import {
     User,
     ChevronDown,
     Check,
+    Download,
 } from "lucide-react";
 import { HeaderSearchBtn } from "../shared/HeaderSearchBtn";
 import {
@@ -23,6 +24,8 @@ import type { MikeWorkflow } from "../shared/types";
 import { BUILT_IN_WORKFLOWS, BUILT_IN_IDS } from "./builtinWorkflows";
 import { DisplayWorkflowModal } from "./DisplayWorkflowModal";
 import { NewWorkflowModal } from "./NewWorkflowModal";
+import { UploadWorkflowButton } from "./UploadWorkflowButton";
+import { downloadWorkflow } from "@/app/lib/workflowFile";
 import { ToolbarTabs } from "../shared/ToolbarTabs";
 import { RowActions } from "../shared/RowActions";
 import { MikeIcon } from "@/components/chat/mike-icon";
@@ -370,6 +373,11 @@ export function WorkflowList() {
                         onChange={setSearch}
                         placeholder="Search workflows…"
                     />
+                    <UploadWorkflowButton
+                        onUploaded={(wf) => {
+                            setCustom((prev) => [wf, ...prev]);
+                        }}
+                    />
                     <button
                         onClick={() => setNewModalOpen(true)}
                         className="flex items-center justify-center p-1.5 text-gray-500 hover:text-gray-900 transition-colors"
@@ -410,7 +418,7 @@ export function WorkflowList() {
                         <div className="ml-auto w-28 shrink-0">Type</div>
                         <div className="w-40 shrink-0">Practice</div>
                         <div className="w-28 shrink-0">Source</div>
-                        <div className="w-8 shrink-0" />
+                        <div className="w-16 shrink-0" />
                     </div>
 
                     {loading && activeTab !== "builtin" ? (
@@ -433,7 +441,7 @@ export function WorkflowList() {
                                     <div className="w-28 shrink-0">
                                         <div className="h-3 w-14 rounded bg-gray-100 animate-pulse" />
                                     </div>
-                                    <div className="w-8 shrink-0" />
+                                    <div className="w-16 shrink-0" />
                                 </div>
                             ))}
                         </div>
@@ -555,9 +563,19 @@ export function WorkflowList() {
                                     )}
                                 </div>
                                 <div
-                                    className="w-8 shrink-0 flex justify-end"
+                                    className="w-16 shrink-0 flex items-center justify-end gap-1"
                                     onClick={(e) => e.stopPropagation()}
                                 >
+                                    {activeTab !== "hidden" && (
+                                        <button
+                                            onClick={() => downloadWorkflow(wf)}
+                                            aria-label="Download workflow"
+                                            title="Download workflow"
+                                            className="flex items-center justify-center p-1 text-gray-400 hover:text-gray-900 transition-colors"
+                                        >
+                                            <Download className="h-3.5 w-3.5" />
+                                        </button>
+                                    )}
                                     {wf.is_system ? (
                                         activeTab === "hidden" ? (
                                             <RowActions
