@@ -9,10 +9,9 @@ import {
   normalizeApiKeyProvider,
   saveUserApiKey,
 } from "../lib/userApiKeys";
+import { monthlyCreditLimit } from "../lib/credits";
 
 export const userRouter = Router();
-
-const MONTHLY_CREDIT_LIMIT = 999999;
 
 type UserProfileRow = {
   display_name: string | null;
@@ -33,7 +32,7 @@ function serializeProfile(
     organisation: row.organisation,
     messageCreditsUsed: creditsUsed,
     creditsResetDate: row.credits_reset_date,
-    creditsRemaining: Math.max(MONTHLY_CREDIT_LIMIT - creditsUsed, 0),
+    creditsRemaining: Math.max(monthlyCreditLimit() - creditsUsed, 0),
     tier: row.tier || "Free",
     tabularModel: resolveModel(row.tabular_model, DEFAULT_TABULAR_MODEL),
     ...(apiKeyStatus ? { apiKeyStatus } : {}),

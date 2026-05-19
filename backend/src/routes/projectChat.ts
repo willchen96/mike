@@ -13,6 +13,7 @@ import {
 } from "../lib/chatTools";
 import { getUserApiKeys } from "../lib/userSettings";
 import { checkProjectAccess } from "../lib/access";
+import { getCreditState, incrementMessageCredits } from "../lib/credits";
 
 const PROJECT_SYSTEM_PROMPT_EXTRA = `PROJECT CONTEXT:
 You are operating within a project folder that contains a collection of legal documents the user has organised for a single matter. The user's questions will usually refer to one or more documents in this project — your job is to find the relevant files to work on. Use list_documents to see what is available and fetch_documents / read_document to pull in any documents you need before answering.
@@ -49,6 +50,18 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
     );
     if (!projectAccess.ok)
         return void res.status(404).json({ detail: "Project not found" });
+
+    // Pre-call budget check. Default cap is 999999 (set via
+    // MONTHLY_MESSAGE_CREDIT_LIMIT) so this is a no-op unless the
+    // operator configures a smaller limit.
+    const creditState = await getCreditState(userId, db);
+    if (creditState.remaining <= 0) {
+        return void res.status(402).json({
+            detail: "Monthly message credit limit reached.",
+            creditsUsed: creditState.used,
+            creditsLimit: creditState.limit,
+        });
+    }
 
     let chatId = chat_id ?? null;
     let chatTitle: string | null = null;
@@ -178,6 +191,10 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
             content: events.length ? events : null,
             annotations: annotations.length ? annotations : null,
         });
+
+        // Bump the monthly counter exactly once per successful
+        // user-initiated message — not per tool turn.
+        await incrementMessageCredits(userId, db);
 
         if (!chatTitle && lastUser?.content) {
             await db

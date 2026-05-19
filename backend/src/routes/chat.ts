@@ -13,6 +13,7 @@ import {
 import { completeText } from "../lib/llm";
 import { getUserApiKeys, getUserModelSettings } from "../lib/userSettings";
 import { checkProjectAccess } from "../lib/access";
+import { getCreditState, incrementMessageCredits } from "../lib/credits";
 
 export const chatRouter = Router();
 
@@ -511,6 +512,20 @@ chatRouter.post("/", requireAuth, async (req, res) => {
 
     devLog("[chat/stream] resolved chatId", chatId);
 
+    // Pre-call budget check. We reject before doing any LLM work so a
+    // user who has run out can't spend tokens; the increment after a
+    // successful stream is what bumps the counter. Default cap is
+    // 999999 (set via MONTHLY_MESSAGE_CREDIT_LIMIT) so this is a no-op
+    // unless the operator configures a smaller limit.
+    const creditState = await getCreditState(userId, db);
+    if (creditState.remaining <= 0) {
+        return void res.status(402).json({
+            detail: "Monthly message credit limit reached.",
+            creditsUsed: creditState.used,
+            creditsLimit: creditState.limit,
+        });
+    }
+
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (lastUser) {
         await db.from("chat_messages").insert({
@@ -586,6 +601,11 @@ chatRouter.post("/", requireAuth, async (req, res) => {
             content: events.length ? events : null,
             annotations: annotations.length ? annotations : null,
         });
+
+        // Bump the monthly counter exactly once per successful
+        // user-initiated message — not per tool turn — so the user-
+        // visible "credits remaining" reflects message volume.
+        await incrementMessageCredits(userId, db);
 
         if (!chatTitle && lastUser?.content) {
             await db
