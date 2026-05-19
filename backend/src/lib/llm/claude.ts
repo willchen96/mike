@@ -6,6 +6,7 @@ import type {
     NormalizedToolCall,
     NormalizedToolResult,
 } from "./types";
+import { heyJudeApiKey, heyJudeBaseUrl, heyJudeEnabled } from "./heyJude";
 import { toClaudeTools } from "./tools";
 
 type ContentBlock =
@@ -31,6 +32,12 @@ function apiKey(override?: string | null): string {
 }
 
 function client(override?: string | null): Anthropic {
+    if (heyJudeEnabled()) {
+        return new Anthropic({
+            apiKey: heyJudeApiKey(),
+            baseURL: heyJudeBaseUrl(),
+        });
+    }
     const apiKeyValue = apiKey(override);
     return new Anthropic({ apiKey: apiKeyValue });
 }

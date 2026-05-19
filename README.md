@@ -62,6 +62,11 @@ ANTHROPIC_API_KEY=your-anthropic-key
 OPENAI_API_KEY=your-openai-key
 RESEND_API_KEY=your-resend-key
 USER_API_KEYS_ENCRYPTION_SECRET=your-long-random-secret
+
+# Optional: route model calls through Hey Jude.
+HEY_JUDE_ENABLED=false
+HEY_JUDE_BASE_URL=http://localhost:4005
+HEY_JUDE_API_KEY=sk-heyjude-dev
 ```
 
 Create `frontend/.env.local`:
@@ -75,6 +80,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 Supabase values come from the project dashboard. Use the project URL for `SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL`, the service role key for the backend `SUPABASE_SECRET_KEY`, and the anon/public key for `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`. If your Supabase project shows multiple key formats, use the legacy JWT-style anon and service role keys expected by the Supabase client libraries.
 
 Provider keys are only needed for the models and email features you plan to use. Model provider keys can be configured in `backend/.env` for the whole instance, or per user in **Account > Models & API Keys**. If a provider key is present in `backend/.env`, that provider is available by default and the matching browser API key field is read-only.
+
+To pseudonymize provider prompts before model calls, run [Hey Jude](https://github.com/sure-scale/hey-jude) locally and set `HEY_JUDE_ENABLED=true`. Mike still stores original chat text in its database.
 
 ## Install
 

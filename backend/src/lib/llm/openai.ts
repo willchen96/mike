@@ -6,6 +6,7 @@ import type {
     StreamChatParams,
     StreamChatResult,
 } from "./types";
+import { heyJudeApiKey, heyJudeBaseUrl, heyJudeEnabled } from "./heyJude";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const MAX_OUTPUT_TOKENS = 16384;
@@ -36,6 +37,9 @@ type ResponseStreamEvent = {
 };
 
 function apiKey(override?: string | null): string {
+    if (heyJudeEnabled()) {
+        return heyJudeApiKey();
+    }
     const key = override?.trim() || process.env.OPENAI_API_KEY?.trim() || "";
     if (!key) {
         throw new Error(
@@ -43,6 +47,13 @@ function apiKey(override?: string | null): string {
         );
     }
     return key;
+}
+
+function responsesUrl(): string {
+    if (heyJudeEnabled()) {
+        return `${heyJudeBaseUrl()}/v1/responses`;
+    }
+    return OPENAI_RESPONSES_URL;
 }
 
 function toResponseTools(tools: OpenAIToolSchema[]): ResponseFunctionTool[] {
@@ -115,7 +126,7 @@ async function createResponse(params: {
     reasoningSummary?: boolean;
     apiKey: string;
 }): Promise<Response> {
-    const response = await fetch(OPENAI_RESPONSES_URL, {
+    const response = await fetch(responsesUrl(), {
         method: "POST",
         headers: {
             Authorization: `Bearer ${params.apiKey}`,

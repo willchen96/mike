@@ -19,9 +19,15 @@ export type UserModelSettings = {
 // available, otherwise OpenAI nano, otherwise Claude Haiku. With no user keys
 // set, defaults to Gemini (the dev-mode env fallback).
 function resolveTitleModel(apiKeys: UserApiKeys): string {
-    if (apiKeys.gemini?.trim()) return DEFAULT_TITLE_MODEL;
-    if (apiKeys.openai?.trim()) return OPENAI_LOW_MODELS[0];
-    if (apiKeys.claude?.trim()) return "claude-haiku-4-5";
+    if (apiKeys.gemini?.trim() || process.env.GEMINI_API_KEY?.trim()) {
+        return DEFAULT_TITLE_MODEL;
+    }
+    if (apiKeys.openai?.trim() || process.env.OPENAI_API_KEY?.trim()) {
+        return OPENAI_LOW_MODELS[0];
+    }
+    if (apiKeys.claude?.trim() || process.env.ANTHROPIC_API_KEY?.trim()) {
+        return "claude-haiku-4-5";
+    }
     return DEFAULT_TITLE_MODEL;
 }
 

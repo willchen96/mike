@@ -4,6 +4,7 @@ import type {
     StreamChatResult,
     NormalizedToolCall,
 } from "./types";
+import { heyJudeApiKey, heyJudeBaseUrl, heyJudeEnabled } from "./heyJude";
 import { toGeminiTools } from "./tools";
 
 type GeminiPart = {
@@ -39,6 +40,12 @@ function apiKey(override?: string | null): string {
 }
 
 function client(override?: string | null): GoogleGenAI {
+    if (heyJudeEnabled()) {
+        return new GoogleGenAI({
+            apiKey: heyJudeApiKey(),
+            httpOptions: { baseUrl: heyJudeBaseUrl() },
+        });
+    }
     return new GoogleGenAI({ apiKey: apiKey(override) });
 }
 
