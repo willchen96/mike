@@ -13,6 +13,7 @@ import {
 } from "../lib/chatTools";
 import { getUserApiKeys } from "../lib/userSettings";
 import { checkProjectAccess } from "../lib/access";
+import { errFields, logger, type Logger } from "../lib/logger";
 
 const PROJECT_SYSTEM_PROMPT_EXTRA = `PROJECT CONTEXT:
 You are operating within a project folder that contains a collection of legal documents the user has organised for a single matter. The user's questions will usually refer to one or more documents in this project — your job is to find the relevant files to work on. Use list_documents to see what is available and fetch_documents / read_document to pull in any documents you need before answering.
@@ -186,7 +187,11 @@ projectChatRouter.post("/", requireAuth, async (req, res) => {
                 .eq("id", chatId);
         }
     } catch (err) {
-        console.error("[project-chat/stream] error:", err);
+        const log = (res.locals.log as Logger | undefined) ?? logger;
+        log.error(
+            { route: "project-chat/stream", project_id: projectId, ...errFields(err) },
+            "stream error",
+        );
         try {
             write(
                 `data: ${JSON.stringify({ type: "error", message: "Stream error" })}\n\n`,
