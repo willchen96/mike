@@ -882,6 +882,28 @@ export async function setMcpToolEnabled(
     );
 }
 
+// ---------------------------------------------------------------------------
+// Native Google Drive integration (first-party — not an MCP connector)
+// ---------------------------------------------------------------------------
+
+export type GoogleDriveStatus = {
+    connected: boolean;
+    scope: string | null;
+    /** Whether the backend has a Google OAuth client configured at all. */
+    configured: boolean;
+    /**
+     * Whether the Drive token tables exist. False means the deployment has
+     * not applied the Drive migration yet — a different fix from `configured`.
+     * Optional so older backends (which omit it) read as ready.
+     */
+    schemaReady?: boolean;
+    /**
+     * The redirect URI this deployment will send to Google, for the operator
+     * to register on the OAuth client. Null when the backend cannot derive it.
+     */
+    redirectUri?: string | null;
+};
+
 /**
  * Error code the backend attaches when a connector cannot start because the
  * deployment is missing operator-side setup (an OAuth client for a provider
@@ -896,6 +918,25 @@ export function isConnectorSetupError(error: unknown): error is MikeApiError {
         error instanceof MikeApiError &&
         error.code === CONNECTOR_SETUP_REQUIRED_CODE
     );
+}
+
+export async function getGoogleDriveStatus(): Promise<GoogleDriveStatus> {
+    return apiRequest<GoogleDriveStatus>("/user/integrations/google-drive");
+}
+
+export async function startGoogleDriveOAuth(): Promise<{
+    authorizationUrl: string;
+}> {
+    return apiRequest<{ authorizationUrl: string }>(
+        "/user/integrations/google-drive/oauth/start",
+        { method: "POST" },
+    );
+}
+
+export async function disconnectGoogleDrive(): Promise<void> {
+    return apiRequest<void>("/user/integrations/google-drive", {
+        method: "DELETE",
+    });
 }
 
 export async function getProject(projectId: string): Promise<Project> {

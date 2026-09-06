@@ -24,7 +24,9 @@ export type NewMcpStep = "form" | "working" | "auth" | "success";
 /**
  * Known hosted MCP servers, offered as one-click prefills. Only the fields
  * change — the create flow is identical to a hand-typed server, so presets
- * stay purely presentational.
+ * stay purely presentational. Google Drive is intentionally absent: it ships
+ * as a first-party integration (its own card on the Connectors page), not as
+ * an MCP connector.
  */
 const CONNECTOR_PRESETS: ReadonlyArray<{
     name: string;

@@ -5,6 +5,7 @@ import {
     MikeApiError,
     type McpConnectorSummary,
     createMcpConnector,
+    getGoogleDriveStatus,
     getMcpConnector,
     listMcpConnectors,
     refreshMcpConnectorTools,
@@ -23,6 +24,7 @@ vi.mock("@/app/lib/mikeApi", async (importOriginal) => {
         refreshMcpConnectorTools: vi.fn(),
         startMcpConnectorOAuth: vi.fn(),
         getMcpConnector: vi.fn(),
+        getGoogleDriveStatus: vi.fn(),
     };
 });
 
@@ -116,6 +118,13 @@ describe("ConnectorsPage OAuth poll cancellation", () => {
             alreadyAuthorized: false,
             callbackOrigin: "https://api.example",
         });
+        // This file exercises the MCP OAuth wait, not the first-party Drive
+        // card that shares the page. Leave its status pending so the card stays
+        // in its "Loading…" state and never contributes a second "Connect" or
+        // "Cancel" button to these role queries.
+        vi.mocked(getGoogleDriveStatus).mockReturnValue(
+            new Promise(() => {}),
+        );
         // Authorization never completes, so the poll keeps running until
         // something cancels it.
         vi.mocked(getMcpConnector).mockResolvedValue(
@@ -267,6 +276,7 @@ describe("ConnectorsPage operator setup guidance", () => {
         // operator steps and this deployment's redirect URI. The Add modal
         // must NOT stay open on its form (a second Connect would create a
         // duplicate); the new connector's details open instead.
+        vi.mocked(getGoogleDriveStatus).mockReturnValue(new Promise(() => {}));
         vi.mocked(createMcpConnector).mockResolvedValue(makeSummary());
         vi.mocked(getMcpConnector).mockResolvedValue(makeSummary());
         vi.mocked(refreshMcpConnectorTools).mockRejectedValue(
@@ -316,5 +326,61 @@ describe("ConnectorsPage operator setup guidance", () => {
         // left behind: nothing will ever navigate it on this path.
         expect(window.open).toHaveBeenCalledTimes(1);
         expect(popupClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("tells the operator which redirect URI to register while Drive is not configured", async () => {
+        vi.mocked(getGoogleDriveStatus).mockResolvedValue({
+            connected: false,
+            scope: null,
+            configured: false,
+            schemaReady: true,
+            redirectUri:
+                "http://localhost:3000/api/user/integrations/google-drive/oauth/callback",
+        });
+
+        render(<ConnectorsPage />);
+        await act(async () => {
+            await flushMicrotasks();
+        });
+
+        expect(
+            screen.getByText(/administrator needs to configure a Google OAuth client/i),
+        ).toBeTruthy();
+        expect(
+            screen.getByText(
+                "http://localhost:3000/api/user/integrations/google-drive/oauth/callback",
+            ),
+        ).toBeTruthy();
+        expect(
+            (screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement)
+                .disabled,
+        ).toBe(true);
+    });
+
+    it("blames the missing migration, not the OAuth client, when the Drive tables are absent", async () => {
+        vi.mocked(getGoogleDriveStatus).mockResolvedValue({
+            connected: false,
+            scope: null,
+            configured: true,
+            schemaReady: false,
+            redirectUri: null,
+        });
+
+        render(<ConnectorsPage />);
+        await act(async () => {
+            await flushMicrotasks();
+        });
+
+        expect(
+            screen.getByText(/missing the Google Drive migration/i),
+        ).toBeTruthy();
+        expect(
+            screen.queryByText(/administrator needs to configure a Google OAuth client/i),
+        ).toBeNull();
+        // Connect cannot work without the tables, so it stays disabled.
+        expect(
+            (screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement)
+                .disabled,
+        ).toBe(true);
     });
 });
