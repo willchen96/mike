@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Check,
   Download,
   History,
   Loader2,
   RotateCcw,
-  Save,
   Trash2,
 } from "lucide-react";
 import { SettingsSection } from "@/app/(pages)/settings/SettingsSection";
@@ -15,6 +15,7 @@ import { ConfirmPopup } from "@/app/components/popups/ConfirmPopup";
 import { GlassCard } from "@/app/components/ui/glass-card";
 import { MarkdownEditor } from "@/app/components/ui/markdown-editor";
 import { PillButton } from "@/app/components/ui/pill-button";
+import { useMemoryAutosave } from "@/app/components/memory/useMemoryAutosave";
 import {
   MikeApiError,
   downloadUserMemoryMarkdown,
@@ -87,19 +88,23 @@ export function UserMemoryPage() {
   const [loadError, setLoadError] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [restoreCandidate, setRestoreCandidate] =
     useState<MemoryVersion | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [conflict, setConflict] = useState<MemoryCurrent | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [settingsMutation, setSettingsMutation] = useState<
     "enable" | "disable" | "wipe" | null
   >(null);
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(
+    null,
+  );
   const historyRequestRef = useRef(0);
+  const memoryRef = useRef<MemoryCurrent | null>(null);
+  memoryRef.current = memory;
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -111,6 +116,7 @@ export function UserMemoryPage() {
       setDraft(current.content);
       setConflict(null);
       setError(null);
+      setAutosaveError(null);
     } catch {
       if (!signal?.aborted) {
         setLoadError(true);
@@ -148,6 +154,10 @@ export function UserMemoryPage() {
       setHistoryError(false);
     } catch {
       if (historyRequest === historyRequestRef.current) setHistoryError(true);
+    } finally {
+      if (historyRequest === historyRequestRef.current) {
+        setHistoryLoading(false);
+      }
     }
   }, []);
 
@@ -157,9 +167,77 @@ export function UserMemoryPage() {
     return () => controller.abort();
   }, [load]);
 
+  async function resolveConflict(cause: unknown) {
+    if (
+      !(cause instanceof MikeApiError) ||
+      cause.status !== 409 ||
+      cause.code !== "memory_version_conflict"
+    ) {
+      return false;
+    }
+    try {
+      setConflict(await getUserMemory());
+    } catch {
+      setError(
+        "Memory changed while you were editing. Reload the page before saving again.",
+      );
+    }
+    return true;
+  }
+
+  const autosave = useMemoryAutosave({
+    value: draft,
+    persistedValue: memory?.content ?? "",
+    enabled:
+      !!memory?.enabled &&
+      !loading &&
+      !loadError &&
+      !restoring &&
+      !conflict &&
+      !confirmAction &&
+      !restoreCandidate &&
+      !settingsMutation,
+    flushOnUnmount:
+      !!memory?.enabled && !restoring && settingsMutation === null,
+    save: async (value) => {
+      const current = memoryRef.current;
+      if (!current) throw new Error("Memory is unavailable");
+      const saved = await updateUserMemory(value, current.version);
+      // Advance the CAS ref even during a best-effort unmount flush, when UI
+      // callbacks are intentionally skipped but a queued newer draft may run.
+      memoryRef.current = saved;
+      return saved;
+    },
+    getPersistedValue: (current) => current.content,
+    onSaved: (current, { isLatest }) => {
+      memoryRef.current = current;
+      setMemory(current);
+      // Reconcile server-normalized Markdown only if no newer keystroke has
+      // landed since this write began.
+      if (isLatest) setDraft(current.content);
+      setAutosaveError(null);
+      void refreshVersions();
+    },
+    onError: async (cause) => {
+      if (!(await resolveConflict(cause))) {
+        setAutosaveError(
+          userFacingApiError(
+            cause,
+            "Memory could not be saved. Your draft has been kept.",
+          ),
+        );
+      }
+    },
+  });
+
   const dirty = !!memory && draft !== memory.content;
   const interactionLocked =
-    saving ||
+    autosave.inFlight ||
+    restoring ||
+    settingsMutation !== null ||
+    confirmAction !== null ||
+    restoreCandidate !== null;
+  const editorLocked =
     restoring ||
     settingsMutation !== null ||
     confirmAction !== null ||
@@ -181,6 +259,7 @@ export function UserMemoryPage() {
         .then((current) => {
           if (controller.signal.aborted) return;
           const versionChanged = current.version !== memory.version;
+          memoryRef.current = current;
           setMemory(current);
           setDraft(current.content);
           if (versionChanged) void refreshVersions();
@@ -196,66 +275,12 @@ export function UserMemoryPage() {
     };
   }, [conflict, dirty, interactionLocked, memory, refreshVersions]);
 
-  async function resolveConflict(cause: unknown) {
-    if (
-      !(cause instanceof MikeApiError) ||
-      cause.status !== 409 ||
-      cause.code !== "memory_version_conflict"
-    ) {
-      return false;
-    }
-    try {
-      setConflict(await getUserMemory());
-    } catch {
-      setError(
-        "Memory changed while you were editing. Reload the page before saving again.",
-      );
-    }
-    return true;
-  }
-
-  async function saveMemory() {
-    if (
-      !memory ||
-      !memory.enabled ||
-      !dirty ||
-      saving ||
-      restoring ||
-      conflict ||
-      confirmAction ||
-      restoreCandidate ||
-      settingsMutation
-    )
-      return;
-    setSaving(true);
-    setError(null);
-    setSavedNotice(null);
-    try {
-      const current = await updateUserMemory(draft, memory.version);
-      setMemory(current);
-      setDraft(current.content);
-      setSavedNotice("Memory saved");
-      await refreshVersions();
-    } catch (cause) {
-      if (!(await resolveConflict(cause))) {
-        setError(
-          userFacingApiError(
-            cause,
-            "Memory could not be saved. Your draft has been kept.",
-          ),
-        );
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function restoreVersion() {
     if (
       !memory ||
       !restoreCandidate ||
       restoring ||
-      saving ||
+      autosave.inFlight ||
       conflict ||
       confirmAction ||
       settingsMutation
@@ -263,12 +288,14 @@ export function UserMemoryPage() {
       return;
     setRestoring(true);
     setError(null);
+    setAutosaveError(null);
     setSavedNotice(null);
     try {
       const current = await restoreUserMemoryVersion(
         restoreCandidate.id,
         memory.version,
       );
+      memoryRef.current = current;
       setMemory(current);
       setDraft(current.content);
       setRestoreCandidate(null);
@@ -316,34 +343,30 @@ export function UserMemoryPage() {
 
   function useLatestConflict() {
     if (!conflict) return;
+    memoryRef.current = conflict;
     setMemory(conflict);
     setDraft(conflict.content);
     setConflict(null);
     setError(null);
+    setAutosaveError(null);
+    autosave.cancelPending();
     void refreshVersions();
   }
 
   function keepDraftAfterConflict() {
     if (!conflict) return;
+    memoryRef.current = conflict;
     setMemory(conflict);
     setConflict(null);
     setError(null);
+    setAutosaveError(null);
+    autosave.retry();
     void refreshVersions();
   }
 
-  function cancelDraft() {
-    if (!memory) return;
-    setDraft(memory.content);
-    setConflict(null);
-    setError(null);
-    setSavedNotice(null);
-  }
-
-  function syncSettingsMutation(
-    current: MemoryCurrent,
-    notice: string,
-  ) {
+  function syncSettingsMutation(current: MemoryCurrent, notice: string) {
     historyRequestRef.current += 1;
+    memoryRef.current = current;
     setMemory(current);
     setDraft(current.content);
     setVersions([]);
@@ -352,6 +375,7 @@ export function UserMemoryPage() {
     setConflict(null);
     setRestoreCandidate(null);
     setError(null);
+    setAutosaveError(null);
     setSavedNotice(notice);
   }
 
@@ -381,7 +405,7 @@ export function UserMemoryPage() {
     if (
       !confirmAction ||
       settingsMutation ||
-      saving ||
+      autosave.inFlight ||
       restoring ||
       restoreCandidate
     )
@@ -408,7 +432,7 @@ export function UserMemoryPage() {
           cause,
           action === "disable"
             ? "App-wide memory could not be turned off. Please try again."
-            : "App-wide memory could not be wiped. Please try again.",
+            : "App-wide memory could not be deleted. Please try again.",
         ),
       );
       setConfirmAction(null);
@@ -492,7 +516,10 @@ export function UserMemoryPage() {
                     ariaLabel="App-wide memory"
                     onChange={(enabled) => {
                       if (enabled) void enableMemory();
-                      else setConfirmAction("disable");
+                      else {
+                        autosave.cancelPending();
+                        setConfirmAction("disable");
+                      }
                     }}
                   />
                 </div>
@@ -502,7 +529,7 @@ export function UserMemoryPage() {
                 <div className="flex flex-col gap-3 border-t border-gray-100 px-4 py-5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-gray-700">
-                      Wipe memory
+                      Delete memory
                     </p>
                     <p className="max-w-xl text-sm text-gray-500">
                       Delete the file and its history while keeping memory
@@ -516,10 +543,13 @@ export function UserMemoryPage() {
                       interactionLocked ||
                       (memory.hash === null && memory.status === "idle")
                     }
-                    onClick={() => setConfirmAction("wipe")}
+                    onClick={() => {
+                      autosave.cancelPending();
+                      setConfirmAction("wipe");
+                    }}
                   >
                     <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
-                    Wipe memory
+                    Delete
                   </PillButton>
                 </div>
               ) : null}
@@ -574,13 +604,42 @@ export function UserMemoryPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {autosaveError ? (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-red-600" role="alert">
+                      {autosaveError}
+                    </span>
+                    <button
+                      type="button"
+                      className="font-medium text-gray-700 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-2"
+                      onClick={() => {
+                        setAutosaveError(null);
+                        autosave.retry();
+                      }}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : autosave.status !== "idle" ? (
+                  <span
+                    className="inline-flex items-center gap-1.5 px-1 text-sm text-gray-500"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {autosave.status === "saved" ? (
+                      <Check
+                        aria-hidden="true"
+                        className="h-3.5 w-3.5 text-green-600"
+                      />
+                    ) : null}
+                    {autosave.status === "saving" ? "Saving…" : "Saved"}
+                  </span>
+                ) : null}
                 <PillButton
                   tone="white"
                   size="sm"
                   disabled={
-                    memory.hash === null ||
-                    downloading ||
-                    interactionLocked
+                    memory.hash === null || downloading || interactionLocked
                   }
                   onClick={() => void downloadMemory()}
                 >
@@ -594,32 +653,6 @@ export function UserMemoryPage() {
                   )}
                   {downloading ? "Downloading…" : "Download memory.md"}
                 </PillButton>
-                <PillButton
-                  tone="white"
-                  size="sm"
-                  disabled={!dirty || interactionLocked}
-                  onClick={cancelDraft}
-                >
-                  Cancel
-                </PillButton>
-                <PillButton
-                  tone="black"
-                  size="sm"
-                  disabled={
-                    !dirty || conflict !== null || interactionLocked
-                  }
-                  onClick={() => void saveMemory()}
-                >
-                  {saving ? (
-                    <Loader2
-                      aria-hidden="true"
-                      className="h-3.5 w-3.5 animate-spin"
-                    />
-                  ) : (
-                    <Save aria-hidden="true" className="h-3.5 w-3.5" />
-                  )}
-                  {saving ? "Saving…" : "Save"}
-                </PillButton>
               </div>
             </div>
 
@@ -632,7 +665,7 @@ export function UserMemoryPage() {
                   Memory changed while you were editing
                 </p>
                 <p className="mt-1 text-xs text-amber-800">
-                  Reload the latest version or keep your draft and save it
+                  Reload the latest version or keep your draft and let it save
                   against the new version.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -659,11 +692,14 @@ export function UserMemoryPage() {
                 value={draft}
                 onChange={(value) => {
                   setDraft(value);
+                  setAutosaveError(null);
+                  setError(null);
                   setSavedNotice(null);
                 }}
                 ariaLabel="App-wide memory"
-                className="min-h-[24rem]"
-                readOnly={interactionLocked}
+                className="memory-editor-surface min-h-[24rem]"
+                readOnly={editorLocked}
+                allowTables={false}
               />
             </div>
           </section>
@@ -672,12 +708,13 @@ export function UserMemoryPage() {
             versions={versions}
             currentVersion={memory.version}
             loading={historyLoading}
-            disabled={
-              conflict !== null || interactionLocked
-            }
+            disabled={conflict !== null || interactionLocked}
             error={historyError}
             onRetry={() => void refreshVersions()}
-            onRestore={setRestoreCandidate}
+            onRestore={(version) => {
+              autosave.cancelPending();
+              setRestoreCandidate(version);
+            }}
           />
         </>
       ) : null}
@@ -687,14 +724,14 @@ export function UserMemoryPage() {
         title={
           confirmIsDisable
             ? "Turn off and delete app-wide memory?"
-            : "Wipe app-wide memory?"
+            : "Delete app-wide memory?"
         }
         message={
           confirmIsDisable
             ? `This permanently deletes memory.md, its version history${dirty ? ", and your unsaved draft" : ""}, and cancels pending memory updates. Memory will remain off until you turn it on again. This cannot be undone.`
             : `This permanently deletes memory.md, its version history${dirty ? ", and your unsaved draft" : ""}, and cancels pending memory updates. Memory stays on and can be rebuilt from future conversations. This cannot be undone.`
         }
-        confirmLabel={confirmIsDisable ? "Disable" : "Wipe memory"}
+        confirmLabel={confirmIsDisable ? "Disable" : "Delete"}
         confirmVariant="danger"
         confirmStatus={settingsMutation ? "loading" : "idle"}
         onConfirm={() => void confirmSettingsMutation()}

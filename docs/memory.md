@@ -12,6 +12,10 @@ of authorization, instructions, or citations.
 - Project memory belongs to the project. Members with `project.view` can read
   it, members with `content.edit` can edit or restore it, and members with
   `access.manage` can enable, disable, or wipe it.
+- Both scopes are on by default: a new account's app memory is enabled when
+  the account is created, and a new project's shared memory is enabled unless
+  its creator clears the toggle. Turning either off is destructive — see
+  "Disable, wipe, and deletion".
 - A project curator runs separately from the actor's app curator and never
   receives app memory. This prevents private app context from being copied into
   shared project memory.

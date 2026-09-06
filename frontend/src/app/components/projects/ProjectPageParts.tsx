@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import {
+    Brain,
     CornerDownRight,
     Loader2,
     Pencil,
@@ -27,8 +28,7 @@ import {
 export type ProjectWorkspaceSection =
     | "documents"
     | "assistant"
-    | "reviews"
-    | "memory";
+    | "reviews";
 
 export type ProjectContextMenu = {
     x: number;
@@ -372,6 +372,7 @@ export function ProjectPageHeader({
     onBackToProjects,
     onProjectRoot,
     onOpenDetails,
+    onOpenMemory,
     onDeleteProject,
     onSearchChange,
     onOpenAccess,
@@ -398,6 +399,7 @@ export function ProjectPageHeader({
     onBackToProjects: () => void;
     onProjectRoot: () => void;
     onOpenDetails: () => void;
+    onOpenMemory: () => void;
     onDeleteProject: () => void;
     onSearchChange: (search: string) => void;
     onOpenAccess: () => void;
@@ -473,20 +475,16 @@ export function ProjectPageHeader({
                     ? [{ label: "Chats" }]
                     : activeSection === "reviews"
                       ? [{ label: "Tabular Reviews" }]
-                      : activeSection === "memory"
-                        ? [{ label: "Memory" }]
                       : (documentFolderBreadcrumbs ?? [])),
             ]}
             actionGroups={[
                 [
-                    activeSection === "memory"
-                        ? null
-                        : {
-                              type: "search",
-                              value: search,
-                              onChange: onSearchChange,
-                              placeholder: "Search…",
-                          },
+                    {
+                        type: "search",
+                        value: search,
+                        onChange: onSearchChange,
+                        placeholder: "Search…",
+                    },
                     {
                         onClick: onOpenAccess,
                         iconOnly: true,
@@ -504,6 +502,12 @@ export function ProjectPageHeader({
                                             : "View details",
                                         icon: Pencil,
                                         onSelect: onOpenDetails,
+                                        disabled: !roleKnown,
+                                    },
+                                    {
+                                        label: "Memory",
+                                        icon: Brain,
+                                        onSelect: onOpenMemory,
                                         disabled: !roleKnown,
                                     },
                                     {

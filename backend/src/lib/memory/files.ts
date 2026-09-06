@@ -358,7 +358,7 @@ export async function writeMemoryFile(args: {
     args.db,
     args.file.scope,
     (args.file.user_id ?? args.file.project_id) as string,
-    args.file.scope === "user",
+    true,
   );
   if (!fresh.enabled) throw new MemoryDisabledError("Memory is disabled");
   const expectedEpoch =

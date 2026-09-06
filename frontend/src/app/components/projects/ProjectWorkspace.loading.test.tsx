@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { getProject } from "@/app/lib/mikeApi";
@@ -34,6 +35,14 @@ vi.mock("@/app/components/modals/AccessModal", () => ({
     AccessModal: () => null,
 }));
 vi.mock("./ProjectDetailsModal", () => ({ ProjectDetailsModal: () => null }));
+vi.mock("./ProjectMemoryModal", () => ({
+    ProjectMemoryModal: ({ projectId }: { projectId: string }) => {
+        // A remount scopes the modal's serialized autosave queue to one
+        // project even when the App Router preserves the surrounding layout.
+        const [mountedProjectId] = useState(projectId);
+        return <span data-testid="memory-modal-scope">{mountedProjectId}</span>;
+    },
+}));
 vi.mock("@/app/contexts/ChatHistoryContext", () => ({
     useChatHistoryContext: () => ({ saveChat: vi.fn(async () => "chat-1") }),
 }));
@@ -167,6 +176,9 @@ describe("ProjectWorkspace while the project is still loading", () => {
         await waitFor(() =>
             expect(screen.getByTestId("role")).toHaveTextContent("owner"),
         );
+        expect(screen.getByTestId("memory-modal-scope")).toHaveTextContent(
+            "p1",
+        );
 
         // The next project's row never arrives in this test — the whole
         // point is what the window before it arrives looks like.
@@ -179,6 +191,9 @@ describe("ProjectWorkspace while the project is still loading", () => {
 
         await waitFor(() =>
             expect(screen.getByTestId("role")).toHaveTextContent("null"),
+        );
+        expect(screen.getByTestId("memory-modal-scope")).toHaveTextContent(
+            "p2",
         );
         expect(screen.getByTestId("can-delete")).toHaveTextContent("false");
         expect(screen.getByTestId("role-known")).toHaveTextContent("false");

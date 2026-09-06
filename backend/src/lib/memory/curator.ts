@@ -1111,7 +1111,7 @@ export async function handleMemoryConsolidation(
         db,
         "project",
         conversation.projectId,
-        false,
+        true,
       );
       const projectTranscript = buildMemoryCuratorTranscript(
         conversation.messages,

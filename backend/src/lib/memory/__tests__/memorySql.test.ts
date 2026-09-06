@@ -4,12 +4,23 @@ import { resolve } from "node:path";
 
 const backendRoot = resolve(__dirname, "../../../..");
 const sources = [
-  readFileSync(resolve(backendRoot, "schema.sql"), "utf8"),
-  readFileSync(
-    resolve(backendRoot, "migrations/20260905_01_scoped_memory_files.sql"),
-    "utf8",
+  ["schema", readFileSync(resolve(backendRoot, "schema.sql"), "utf8"), true],
+  [
+    "migration",
+    readFileSync(
+      resolve(backendRoot, "migrations/20260905_01_scoped_memory_files.sql"),
+      "utf8",
+    ),
+    false,
+  ],
+] as const;
+const projectDefaultMigration = readFileSync(
+  resolve(
+    backendRoot,
+    "migrations/20260907_01_project_memory_default_on.sql",
   ),
-];
+  "utf8",
+);
 
 function functionBody(sql: string, name: string): string {
   const start = sql.indexOf(`create or replace function public.${name}`);
@@ -19,16 +30,18 @@ function functionBody(sql: string, name: string): string {
   return sql.slice(start, end);
 }
 
-describe.each(sources.map((sql, index) => [index === 0 ? "schema" : "migration", sql]))(
+describe.each(sources)(
   "%s scoped memory SQL",
-  (_name, sql) => {
-    it("backfills existing owners disabled while leaving new rows enabled by default", () => {
+  (_name, sql, projectDefaultsOn) => {
+    it("keeps account rollout explicit and applies the expected project default", () => {
       expect(sql).toMatch(/enabled boolean not null default true/);
       expect(sql).toMatch(
         /insert into public\.memory_files\(scope, user_id, enabled\)[\s\S]*select 'user', id, false from auth\.users/,
       );
       expect(sql).toMatch(
-        /insert into public\.memory_files\(scope, project_id, enabled\)[\s\S]*select 'project', id, false from public\.projects/,
+        new RegExp(
+          `insert into public\\.memory_files\\(scope, project_id, enabled\\)[\\s\\S]*select 'project', id, ${projectDefaultsOn ? "true" : "false"} from public\\.projects`,
+        ),
       );
     });
 
@@ -106,6 +119,9 @@ describe.each(sources.map((sql, index) => [index === 0 ? "schema" : "migration",
       expect(schedule).toContain("project_curator_actor_user_id");
       expect(schedule).toContain("order by memory_file.id");
       expect(schedule).toContain("order by pending.actor_user_id, pending.id");
+      expect(schedule).toContain(
+        `values ('project', activity.project_id, ${projectDefaultsOn ? "true" : "false"})`,
+      );
     });
 
     it("keeps state status updates from taking file locks in reverse order", () => {
@@ -181,3 +197,40 @@ describe.each(sources.map((sql, index) => [index === 0 ? "schema" : "migration",
     });
   },
 );
+
+describe("project memory default-on upgrade SQL", () => {
+  it("only enables untouched backfill rows and advances their learning cutoff", () => {
+    expect(projectDefaultMigration).toMatch(
+      /set enabled = true,[\s\S]*learning_cutoff_at = greatest\(file\.learning_cutoff_at, now\(\)\)/,
+    );
+    for (const predicate of [
+      "file.enabled = false",
+      "file.epoch = 0",
+      "file.version = 0",
+      "file.status = 'idle'",
+      "file.current_version_id is null",
+      "file.last_source is null",
+      "file.last_error_code is null",
+      "file.updated_by is null",
+      "file.created_at > project.created_at",
+    ]) {
+      expect(projectDefaultMigration).toContain(predicate);
+    }
+  });
+
+  it("idempotently upgrades only the scheduler's missing-project default", () => {
+    expect(projectDefaultMigration).toContain(
+      "pg_get_functiondef(scheduler)",
+    );
+    expect(projectDefaultMigration).toContain(
+      "values (''project'', activity.project_id, false)",
+    );
+    expect(projectDefaultMigration).toContain(
+      "values (''project'', activity.project_id, true)",
+    );
+    expect(projectDefaultMigration).toContain("disabled_occurrences <> 1");
+    expect(projectDefaultMigration).toMatch(
+      /disabled_occurrences = 0[\s\S]*position\(enabled_literal in definition\) > 0[\s\S]*return/,
+    );
+  });
+});

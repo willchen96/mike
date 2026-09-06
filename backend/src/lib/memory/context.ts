@@ -45,7 +45,7 @@ export async function buildMemoryPromptContext(args: {
                 args.db,
                 "project",
                 args.projectId as string,
-                false,
+                true,
               ),
           },
         ]

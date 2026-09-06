@@ -36,6 +36,12 @@ export interface MarkdownEditorProps {
   readOnly?: boolean;
   ariaLabel?: string;
   className?: string;
+  /**
+   * Offer the insert-table control. Tables already present in the Markdown
+   * still render and round-trip when this is off; only authoring a new one
+   * is withheld, which is what the memory editors want.
+   */
+  allowTables?: boolean;
 }
 
 function comparableMarkdown(value: string) {
@@ -114,6 +120,7 @@ export function MarkdownEditor({
   readOnly = false,
   ariaLabel = "Markdown editor",
   className,
+  allowTables = true,
 }: MarkdownEditorProps) {
   const lastEmittedRef = useRef(value);
   const rawTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -491,97 +498,101 @@ export function MarkdownEditor({
           >
             <ListOrdered className="h-4 w-4" />
           </AppToolbarButton>
-          <div aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-gray-200" />
-          <DropdownMenu
-            open={tablePickerOpen}
-            onOpenChange={(open) => {
-              setTablePickerOpen(open);
-              if (!open) setTablePickerSize(null);
-            }}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                title="Insert table"
-                aria-label="Insert table"
-                aria-pressed={tablePickerOpen}
-                className={`h-7 w-7 text-gray-600 hover:bg-white hover:text-gray-900 ${
-                  tablePickerOpen
-                    ? "bg-gray-300 text-gray-950 hover:bg-gray-300"
-                    : ""
-                }`}
-                onPointerDown={rememberTableInsertionSelection}
+          {allowTables ? (
+            <>
+              <div aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-gray-200" />
+              <DropdownMenu
+                open={tablePickerOpen}
+                onOpenChange={(open) => {
+                  setTablePickerOpen(open);
+                  if (!open) setTablePickerSize(null);
+                }}
               >
-                <Table2 className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <LiquidDropdownContent
-              align="start"
-              aria-label="Insert table"
-              className="z-[250] w-max p-2"
-              onCloseAutoFocus={(event) => event.preventDefault()}
-            >
-              <div className="space-y-2">
-                <div
-                  className="grid gap-1"
-                  style={{
-                    gridTemplateColumns: `repeat(${TABLE_PICKER_MAX_COLS}, 1rem)`,
-                  }}
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    title="Insert table"
+                    aria-label="Insert table"
+                    aria-pressed={tablePickerOpen}
+                    className={`h-7 w-7 text-gray-600 hover:bg-white hover:text-gray-900 ${
+                      tablePickerOpen
+                        ? "bg-gray-300 text-gray-950 hover:bg-gray-300"
+                        : ""
+                    }`}
+                    onPointerDown={rememberTableInsertionSelection}
+                  >
+                    <Table2 className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <LiquidDropdownContent
+                  align="start"
+                  aria-label="Insert table"
+                  className="z-[250] w-max p-2"
+                  onCloseAutoFocus={(event) => event.preventDefault()}
                 >
-                  {Array.from(
-                    { length: TABLE_PICKER_MAX_ROWS },
-                    (_, rowIndex) =>
-                      Array.from(
-                        {
-                          length: TABLE_PICKER_MAX_COLS,
-                        },
-                        (_, colIndex) => {
-                          const rows = rowIndex + 1;
-                          const cols = colIndex + 1;
-                          const selected =
-                            tablePickerSize !== null &&
-                            rows <= tablePickerSize.rows &&
-                            cols <= tablePickerSize.cols;
+                  <div className="space-y-2">
+                    <div
+                      className="grid gap-1"
+                      style={{
+                        gridTemplateColumns: `repeat(${TABLE_PICKER_MAX_COLS}, 1rem)`,
+                      }}
+                    >
+                      {Array.from(
+                        { length: TABLE_PICKER_MAX_ROWS },
+                        (_, rowIndex) =>
+                          Array.from(
+                            {
+                              length: TABLE_PICKER_MAX_COLS,
+                            },
+                            (_, colIndex) => {
+                              const rows = rowIndex + 1;
+                              const cols = colIndex + 1;
+                              const selected =
+                                tablePickerSize !== null &&
+                                rows <= tablePickerSize.rows &&
+                                cols <= tablePickerSize.cols;
 
-                          return (
-                            <LiquidDropdownItem
-                              key={`${rows}-${cols}`}
-                              aria-label={`Insert ${rows} by ${cols} table`}
-                              selected={selected}
-                              onPointerMove={() =>
-                                setTablePickerSize({
-                                  rows,
-                                  cols,
-                                })
-                              }
-                              onFocus={() =>
-                                setTablePickerSize({
-                                  rows,
-                                  cols,
-                                })
-                              }
-                              onSelect={() => insertTable(rows, cols)}
-                              className={`h-4 w-4 min-w-0 rounded-[3px] border p-0 transition-colors ${
-                                selected
-                                  ? "border-blue-600 bg-blue-600 focus:bg-blue-600"
-                                  : "border-gray-200 bg-white hover:border-gray-400 focus:bg-white"
-                              }`}
-                            />
-                          );
-                        },
-                      ),
-                  )}
-                </div>
-                <div className="text-center text-[11px] font-medium text-gray-500">
-                  {tablePickerSize
-                    ? `${tablePickerSize.rows} x ${tablePickerSize.cols}`
-                    : "Select table size"}
-                </div>
-              </div>
-            </LiquidDropdownContent>
-          </DropdownMenu>
+                              return (
+                                <LiquidDropdownItem
+                                  key={`${rows}-${cols}`}
+                                  aria-label={`Insert ${rows} by ${cols} table`}
+                                  selected={selected}
+                                  onPointerMove={() =>
+                                    setTablePickerSize({
+                                      rows,
+                                      cols,
+                                    })
+                                  }
+                                  onFocus={() =>
+                                    setTablePickerSize({
+                                      rows,
+                                      cols,
+                                    })
+                                  }
+                                  onSelect={() => insertTable(rows, cols)}
+                                  className={`h-4 w-4 min-w-0 rounded-[3px] border p-0 transition-colors ${
+                                    selected
+                                      ? "border-blue-600 bg-blue-600 focus:bg-blue-600"
+                                      : "border-gray-200 bg-white hover:border-gray-400 focus:bg-white"
+                                  }`}
+                                />
+                              );
+                            },
+                          ),
+                      )}
+                    </div>
+                    <div className="text-center text-[11px] font-medium text-gray-500">
+                      {tablePickerSize
+                        ? `${tablePickerSize.rows} x ${tablePickerSize.cols}`
+                        : "Select table size"}
+                    </div>
+                  </div>
+                </LiquidDropdownContent>
+              </DropdownMenu>
+            </>
+          ) : null}
           <div className="ml-auto" />
           {rawMode && rawModeRequired ? (
             <span className="whitespace-nowrap px-1 text-[11px] text-gray-500">

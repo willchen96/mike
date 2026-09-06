@@ -76,7 +76,7 @@ function projectContext(required: Capability) {
         .json({ detail: "You do not have permission to manage this memory." });
       return null;
     }
-    const file = await ensureMemoryFile(db, "project", projectId, false);
+    const file = await ensureMemoryFile(db, "project", projectId, true);
     return { scope: "project", ownerId: projectId, file };
   };
 }
@@ -89,12 +89,7 @@ function expectedVersion(value: unknown): number | null {
 
 async function currentForContext(ctx: MemoryRequestContext) {
   return (
-    await getMemoryCurrent(
-      createServerSupabase(),
-      ctx.scope,
-      ctx.ownerId,
-      ctx.scope === "user",
-    )
+    await getMemoryCurrent(createServerSupabase(), ctx.scope, ctx.ownerId, true)
   ).current;
 }
 

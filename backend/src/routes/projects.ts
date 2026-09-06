@@ -84,9 +84,10 @@ async function attachProjectMemoryEnabled<
   return {
     rows: projects.map((project) => ({
       ...project,
-      // Creation writes the row atomically. Missing/corrupt legacy state is
-      // fail-closed so an explicit historical opt-out cannot turn itself on.
-      memory_enabled: enabledByProject.get(project.id) ?? false,
+      // Creation writes the row atomically. Project memory is on by default,
+      // so a project with no row yet (one predating the memory tables) reads
+      // as enabled; an explicit opt-out is a stored `false`, not a gap.
+      memory_enabled: enabledByProject.get(project.id) ?? true,
     })),
     error: null,
   };

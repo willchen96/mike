@@ -190,6 +190,31 @@ describe("scoped memory routes", () => {
     expect(mocks.wipeMemoryFile).not.toHaveBeenCalled();
   });
 
+  it("opens a project's first memory file enabled", async () => {
+    mocks.checkProjectAccess.mockResolvedValue({
+      ok: true,
+      projectRole: "viewer",
+    });
+    const projectId = "00000000-0000-4000-8000-000000000020";
+
+    await request(testApp()).get(`/projects/${projectId}/memory`).expect(200);
+
+    // Project memory is on by default: a project whose row predates the
+    // memory tables must not be created opted out by the first read.
+    expect(mocks.ensureMemoryFile).toHaveBeenCalledWith(
+      { marker: "db" },
+      "project",
+      projectId,
+      true,
+    );
+    expect(mocks.getMemoryCurrent).toHaveBeenCalledWith(
+      { marker: "db" },
+      "project",
+      projectId,
+      true,
+    );
+  });
+
   it("returns 404 for every project operation when access is absent", async () => {
     mocks.checkProjectAccess.mockResolvedValue({ ok: false, status: 404 });
     const base = "/projects/00000000-0000-4000-8000-000000000020/memory";

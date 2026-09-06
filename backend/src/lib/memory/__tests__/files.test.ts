@@ -18,6 +18,7 @@ vi.mock("../../storage", () => ({
 }));
 
 import {
+  ensureMemoryFile,
   memoryVersionContent,
   normalizeMemoryMarkdown,
   wipeMemoryFile,
@@ -60,6 +61,40 @@ beforeEach(() => {
 });
 
 describe("memory object durability and integrity", () => {
+  it("creates a missing project memory file enabled by default", async () => {
+    const projectFile: MemoryFileRow = {
+      ...file,
+      id: "project-file-1",
+      scope: "project",
+      user_id: null,
+      project_id: "project-1",
+      current_version_id: null,
+      version: 0,
+    };
+    const maybeSingle = vi
+      .fn()
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: projectFile, error: null });
+    const builder: Record<string, ReturnType<typeof vi.fn>> = {};
+    builder.select = vi.fn(() => builder);
+    builder.eq = vi.fn(() => builder);
+    builder.upsert = vi.fn(() => builder);
+    builder.maybeSingle = maybeSingle;
+    const db = { from: vi.fn(() => builder) };
+
+    await expect(
+      ensureMemoryFile(db as never, "project", "project-1"),
+    ).resolves.toEqual(projectFile);
+    expect(builder.upsert).toHaveBeenCalledWith(
+      {
+        scope: "project",
+        project_id: "project-1",
+        enabled: true,
+      },
+      { onConflict: "project_id", ignoreDuplicates: true },
+    );
+  });
+
   it("rejects executable HTML but preserves Markdown hard breaks", () => {
     expect(normalizeMemoryMarkdown("first  \r\nsecond   \n")).toBe(
       "first  \nsecond  \n",

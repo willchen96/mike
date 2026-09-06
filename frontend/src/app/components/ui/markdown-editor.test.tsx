@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => {
     editor: {
       isDestroyed: false,
       state: { selection: { from: 4, to: 9 } },
-      storage: { markdown: { getMarkdown: () => "Prompt" } },
+      storage: { markdown: { getMarkdown: (): string => "Prompt" } },
       commands: { setContent: vi.fn() },
       setEditable: vi.fn(),
       chain: vi.fn(() => chain),
@@ -101,6 +101,22 @@ describe("MarkdownEditor", () => {
       cols: 4,
       withHeaderRow: true,
     });
+  });
+
+  it("withholds the table control when tables are not allowed", () => {
+    render(
+      <MarkdownEditor
+        value="Prompt"
+        ariaLabel="Memory document"
+        allowTables={false}
+      />,
+    );
+
+    expect(
+      screen.getByRole("toolbar", { name: "Markdown formatting" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Insert table" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Heading 1" })).toBeVisible();
   });
 
   it("names the rich and raw editors and gives raw mode a focus indicator", async () => {

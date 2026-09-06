@@ -9,7 +9,6 @@ import {
     type UIEvent,
 } from "react";
 import {
-  Brain,
   PanelLeft,
   ChevronsUpDown,
   ChevronDown,
@@ -623,25 +622,6 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                                     >
                                         <HistorySkeuoIcon className="h-4 w-4" />
                                         History
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            router.push("/settings/memory");
-                                            setIsDropdownOpen(false);
-                                        }}
-                                        className={cn(
-                                            "flex w-full items-center gap-2 rounded-md px-4 py-2 text-left text-sm text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-2",
-                                            LIQUID_GLASS_HOVER_CLASS,
-                                            pathname === "/settings/memory" &&
-                                                LIQUID_GLASS_SELECTED_CLASS,
-                                        )}
-                                    >
-                                        <Brain
-                                            aria-hidden="true"
-                                            className="h-4 w-4"
-                                        />
-                                        Memory
                                     </button>
                                     <button
                                         type="button"

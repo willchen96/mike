@@ -204,7 +204,7 @@ describe("projects.routes", () => {
                     org_id: "org-1",
                     access_scope: "organization",
                     organization_name: "Elite Law LLP",
-                    memory_enabled: false,
+                    memory_enabled: true,
                 },
             ]);
         });
@@ -238,7 +238,7 @@ describe("projects.routes", () => {
                     org_id: "org-1",
                     access_scope: "organization",
                     organization_name: "Elite Law LLP",
-                    memory_enabled: false,
+                    memory_enabled: true,
                 },
             ]);
         });
@@ -348,7 +348,7 @@ describe("projects.routes", () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual([
-        { id: "p1", name: "Recently updated", memory_enabled: false },
+        { id: "p1", name: "Recently updated", memory_enabled: true },
       ]);
       expect(captured.name).toBe("get_project_summaries");
       expect(captured.args).toEqual({

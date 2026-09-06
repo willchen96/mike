@@ -184,7 +184,8 @@
 }
 
 .transparent-tables .table-surface.tabular-review-table-surface,
-.transparent-tables .table-surface.workflow-prompt-editor-surface {
+.transparent-tables .table-surface.workflow-prompt-editor-surface,
+.transparent-tables .table-surface.memory-editor-surface {
     border: 1px solid var(--table-grid-border);
 }
 

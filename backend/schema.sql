@@ -4622,14 +4622,14 @@ alter table public.memory_conversation_activity enable row level security;
 alter table public.memory_conversation_turn_leases enable row level security;
 alter table public.memory_consolidation_results enable row level security;
 
--- Existing rows are opted out during upgrade. On a fresh install, the trigger
--- below explicitly enables each newly created account; project creation writes
--- its explicit setting in the same application transaction.
+-- Existing accounts are opted out during upgrade. Project memory is on by
+-- default; project creation writes its explicit setting in the same
+-- application transaction so a creator's opt-out remains authoritative.
 insert into public.memory_files(scope, user_id, enabled)
 select 'user', id, false from auth.users
 on conflict do nothing;
 insert into public.memory_files(scope, project_id, enabled)
-select 'project', id, false from public.projects
+select 'project', id, true from public.projects
 on conflict do nothing;
 
 create or replace function public.initialize_new_user_memory()
@@ -5867,7 +5867,7 @@ begin
   on conflict do nothing;
   if activity.project_id is not null then
     insert into public.memory_files(scope, project_id, enabled)
-    values ('project', activity.project_id, false)
+    values ('project', activity.project_id, true)
     on conflict do nothing;
   end if;
 

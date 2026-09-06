@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -126,7 +126,7 @@ describe("UserMemoryPage", () => {
     });
   });
 
-  it("loads the current file independently, exposes a named editor, and can cancel or save a draft", async () => {
+  it("loads the current file independently and autosaves editor changes", async () => {
     const user = userEvent.setup();
     render(<UserMemoryPage />);
 
@@ -150,20 +150,49 @@ describe("UserMemoryPage", () => {
       screen.getByText("Remembered a concise drafting preference"),
     ).toBeVisible();
 
-    await user.clear(editor);
-    await user.type(editor, "# Draft");
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(editor).toHaveValue("# Preferences");
-    expect(updateUserMemory).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
 
     await user.clear(editor);
     await user.type(editor, "# Saved");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateUserMemory).not.toHaveBeenCalled();
+    expect(screen.getByText("Saving…")).toBeVisible();
 
-    await waitFor(() =>
-      expect(updateUserMemory).toHaveBeenCalledWith("# Saved", 2),
+    await waitFor(
+      () => expect(updateUserMemory).toHaveBeenCalledWith("# Saved", 2),
+      { timeout: 2000 },
     );
-    expect(await screen.findByText("Memory saved")).toBeVisible();
+    expect(await screen.findByText("Saved")).toBeVisible();
+  });
+
+  it("adopts server-normalized Markdown without repeatedly saving it", async () => {
+    vi.mocked(updateUserMemory).mockResolvedValue(
+      current({ content: "# Normalized", version: 3, hash: "hash-3" }),
+    );
+    render(<UserMemoryPage />);
+
+    const editor = await screen.findByRole("textbox", {
+      name: "App-wide memory",
+    });
+    await screen.findByText("Version 2 · Current");
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(editor, { target: { value: "# Normalized " } });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(800);
+      });
+
+      expect(updateUserMemory).toHaveBeenCalledOnce();
+      expect(editor).toHaveValue("# Normalized");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(updateUserMemory).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps the editor available when only version history fails", async () => {
@@ -184,7 +213,41 @@ describe("UserMemoryPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("locks destructive controls and the editor while a save is in flight", async () => {
+  it("ignores an older history response after autosave refreshes it", async () => {
+    let resolveInitialHistory!: (value: MemoryVersion[]) => void;
+    vi.mocked(listUserMemoryVersions)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveInitialHistory = resolve;
+        }),
+      )
+      .mockResolvedValueOnce([
+        version({ id: "version-3", version: 3, hash: "hash-3" }),
+      ]);
+    const user = userEvent.setup();
+    render(<UserMemoryPage />);
+
+    const editor = await screen.findByRole("textbox", {
+      name: "App-wide memory",
+    });
+    await waitFor(() => expect(listUserMemoryVersions).toHaveBeenCalledOnce());
+    await user.clear(editor);
+    await user.type(editor, "# Updated");
+
+    expect(
+      await screen.findByText("Version 3 · Current", {}, { timeout: 3000 }),
+    ).toBeVisible();
+
+    await act(async () => {
+      resolveInitialHistory([version({ id: "version-1", version: 1 })]);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Version 3 · Current")).toBeVisible();
+    expect(screen.queryByText("Version 1")).toBeNull();
+  });
+
+  it("serializes saves without locking or overwriting newer editor input", async () => {
     let resolveSave!: (value: MemoryCurrent) => void;
     vi.mocked(updateUserMemory).mockReturnValueOnce(
       new Promise((resolve) => {
@@ -199,27 +262,34 @@ describe("UserMemoryPage", () => {
     });
     await user.clear(editor);
     await user.type(editor, "# Pending");
-    await user.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() =>
-      expect(updateUserMemory).toHaveBeenCalledWith("# Pending", 2),
+    await waitFor(
+      () => expect(updateUserMemory).toHaveBeenCalledWith("# Pending", 2),
+      { timeout: 2000 },
     );
-    expect(editor).toHaveAttribute("readonly");
+    expect(editor).not.toHaveAttribute("readonly");
     expect(
       screen.getByRole("switch", { name: "App-wide memory" }),
     ).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Wipe memory" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
 
-    await user.type(editor, " should-not-be-lost");
-    expect(editor).toHaveValue("# Pending");
+    await user.type(editor, " and newer");
+    expect(editor).toHaveValue("# Pending and newer");
 
     await act(async () => {
       resolveSave(
         current({ content: "# Pending", version: 3, hash: "hash-3" }),
       );
     });
-    await waitFor(() => expect(editor).not.toHaveAttribute("readonly"));
-    expect(editor).toHaveValue("# Pending");
+    expect(editor).toHaveValue("# Pending and newer");
+    await waitFor(
+      () =>
+        expect(updateUserMemory).toHaveBeenLastCalledWith(
+          "# Pending and newer",
+          3,
+        ),
+      { timeout: 2000 },
+    );
   });
 
   it("preserves a stale draft and requires an explicit conflict choice", async () => {
@@ -250,18 +320,70 @@ describe("UserMemoryPage", () => {
     });
     await user.clear(editor);
     await user.type(editor, "# My draft");
-    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(
-      await screen.findByText("Memory changed while you were editing"),
+      await screen.findByText(
+        "Memory changed while you were editing",
+        {},
+        {
+          timeout: 2000,
+        },
+      ),
     ).toBeVisible();
     expect(editor).toHaveValue("# My draft");
 
     await user.click(screen.getByRole("button", { name: "Keep my draft" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(
+      () => expect(updateUserMemory).toHaveBeenLastCalledWith("# My draft", 3),
+      { timeout: 2000 },
+    );
+  });
+
+  it("keeps a failed autosave draft and lets the user retry it", async () => {
+    vi.mocked(updateUserMemory).mockRejectedValueOnce(new Error("offline"));
+    const user = userEvent.setup();
+    render(<UserMemoryPage />);
+
+    const editor = await screen.findByRole("textbox", {
+      name: "App-wide memory",
+    });
+    await user.clear(editor);
+    await user.type(editor, "# Still here");
+
+    expect(
+      await screen.findByText(
+        "Memory could not be saved. Your draft has been kept.",
+        {},
+        { timeout: 2000 },
+      ),
+    ).toBeVisible();
+    expect(editor).toHaveValue("# Still here");
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(
+      () =>
+        expect(updateUserMemory).toHaveBeenLastCalledWith("# Still here", 2),
+      { timeout: 2000 },
+    );
+    expect(await screen.findByText("Saved")).toBeVisible();
+  });
+
+  it("flushes a pending autosave when the settings page unmounts", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<UserMemoryPage />);
+
+    const editor = await screen.findByRole("textbox", {
+      name: "App-wide memory",
+    });
+    await user.clear(editor);
+    await user.type(editor, "# Save on leave");
+    expect(updateUserMemory).not.toHaveBeenCalled();
+
+    unmount();
 
     await waitFor(() =>
-      expect(updateUserMemory).toHaveBeenLastCalledWith("# My draft", 3),
+      expect(updateUserMemory).toHaveBeenCalledWith("# Save on leave", 2),
     );
   });
 
@@ -325,9 +447,7 @@ describe("UserMemoryPage", () => {
     });
     await user.clear(editor);
     await user.type(editor, "# Unsaved");
-    await user.click(
-      screen.getByRole("switch", { name: "App-wide memory" }),
-    );
+    await user.click(screen.getByRole("switch", { name: "App-wide memory" }));
 
     expect(setUserMemoryEnabled).not.toHaveBeenCalled();
     expect(
@@ -335,7 +455,8 @@ describe("UserMemoryPage", () => {
     ).toBeVisible();
     expect(screen.getByText(/and your unsaved draft/i)).toBeVisible();
     expect(editor).toHaveAttribute("readonly");
-    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(updateUserMemory).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Disable" }));
 
@@ -348,20 +469,21 @@ describe("UserMemoryPage", () => {
     expect(screen.queryByText("Version 2 · Current")).not.toBeInTheDocument();
   });
 
-  it("wipes memory and history without disabling it", async () => {
+  it("deletes memory and history without disabling it", async () => {
     const user = userEvent.setup();
     render(<UserMemoryPage />);
 
     const editor = await screen.findByRole("textbox", {
       name: "App-wide memory",
     });
-    await user.click(screen.getByRole("button", { name: "Wipe memory" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(wipeUserMemory).not.toHaveBeenCalled();
+    expect(screen.getByText("Delete app-wide memory?")).toBeVisible();
 
-    const wipeButtons = screen.getAllByRole("button", {
-      name: "Wipe memory",
+    const deleteButtons = screen.getAllByRole("button", {
+      name: "Delete",
     });
-    await user.click(wipeButtons.at(-1)!);
+    await user.click(deleteButtons.at(-1)!);
 
     await waitFor(() => expect(wipeUserMemory).toHaveBeenCalledOnce());
     expect(editor).toHaveValue("");
