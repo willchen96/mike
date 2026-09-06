@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { Chat } from "@/app/components/shared/types";
 import { ProjectAssistantTable } from "./ProjectAssistantTable";
 
+// Owner rows: deleting is `container.delete`, which the table now checks
+// before it offers the confirmation, so a row with no served role would be
+// refused here rather than reaching the handler.
 const chats: Chat[] = [
     {
         id: "chat-1",
@@ -11,6 +14,7 @@ const chats: Chat[] = [
         user_id: "user-1",
         title: "First chat",
         created_at: "2026-08-27T00:00:00.000Z",
+        access_role: "owner",
     },
     {
         id: "chat-2",
@@ -18,6 +22,7 @@ const chats: Chat[] = [
         user_id: "user-1",
         title: "Second chat",
         created_at: "2026-08-27T00:00:00.000Z",
+        access_role: "owner",
     },
 ];
 
@@ -77,6 +82,9 @@ describe("ProjectAssistantTable row context actions", () => {
         const { onDeleteChat, onDeleteSelectedChats } = renderTable(["chat-2"]);
 
         fireEvent.contextMenu(screen.getByText("First chat"));
+        await user.click(screen.getByRole("button", { name: "Delete" }));
+        // The single-row delete is confirmed first; the bulk one is confirmed
+        // by the page that owns the selection.
         await user.click(screen.getByRole("button", { name: "Delete" }));
 
         expect(onDeleteChat).toHaveBeenCalledWith(chats[0]);

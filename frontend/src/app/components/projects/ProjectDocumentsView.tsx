@@ -395,7 +395,16 @@ export function ProjectDocumentsView({ projectId, folderId = null }: Props) {
                         ? handleUploadFilesActionChange
                         : undefined
                 }
-                onUploadFolderActionChange={handleUploadFolderActionChange}
+                // Uploading a folder is the same content.edit write as
+                // uploading files — one native picker further in. Left
+                // ungated, a viewer chose a folder from disk and only then
+                // met the failure, halfway through an upload session they
+                // were never allowed to open.
+                onUploadFolderActionChange={
+                    canDo("content.edit")
+                        ? handleUploadFolderActionChange
+                        : undefined
+                }
                 onCreateFolderActionChange={handleCreateFolderActionChange}
                 onFolderViewBackActionChange={handleFolderBackActionChange}
                 onFolderViewChange={handleFolderViewChange}

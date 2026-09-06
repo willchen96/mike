@@ -14,6 +14,7 @@ import type { Chat } from "@/app/components/shared/types";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { can, roleFrom } from "@/app/lib/permissions";
 import { userFacingApiError } from "@/app/lib/userFacingError";
+import { ConfirmPopup } from "@/app/components/popups/ConfirmPopup";
 import { WarningPopup } from "@/app/components/popups/WarningPopup";
 import { TabPillButton } from "@/app/components/ui/tab-pill-button";
 
@@ -75,6 +76,8 @@ export default function ProjectAssistantPage({ params }: Props) {
     const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
     const [renameChatValue, setRenameChatValue] = useState("");
     const [actionsOpen, setActionsOpen] = useState(false);
+    const [confirmDeleteSelectedOpen, setConfirmDeleteSelectedOpen] =
+        useState(false);
     // One place for "the server refused, or the request failed" — the
     // silent `.catch(() => {})` this replaces is why a 403 used to look
     // exactly like a success until the page was reloaded.
@@ -153,8 +156,20 @@ export default function ProjectAssistantPage({ params }: Props) {
         setProjectChats((prev) => (prev ?? []).filter((c) => c.id !== chat.id));
     }
 
+    /**
+     * Both bulk entry points — the toolbar's Actions menu and the row menu's
+     * "Delete N chats" — ask first. A multi-row delete is the least reversible
+     * thing on this page, and one of the rows may belong to a colleague.
+     */
+    function requestDeleteSelectedChats() {
+        if (selectedChatIds.length === 0) return;
+        setActionsOpen(false);
+        setConfirmDeleteSelectedOpen(true);
+    }
+
     const handleDeleteSelectedChats = useCallback(async () => {
         const ids = [...selectedChatIds];
+        setConfirmDeleteSelectedOpen(false);
         setActionsOpen(false);
         setActionNotice(null);
         const roleById = new Map(
@@ -203,7 +218,7 @@ export default function ProjectAssistantPage({ params }: Props) {
                         selectedCount={selectedChatIds.length}
                         open={actionsOpen}
                         onOpenChange={setActionsOpen}
-                        onDelete={() => void handleDeleteSelectedChats()}
+                        onDelete={requestDeleteSelectedChats}
                     />
                 ) : undefined}
             />
@@ -224,12 +239,25 @@ export default function ProjectAssistantPage({ params }: Props) {
                     )
                 }
                 onDeleteChat={handleDeleteChatRow}
-                onDeleteSelectedChats={handleDeleteSelectedChats}
+                onDeleteSelectedChats={requestDeleteSelectedChats}
                 onOwnerOnlyAction={setOwnerOnlyAction}
                 submitChatRename={submitChatRename}
                 setSelectedChatIds={setSelectedChatIds}
                 setRenamingChatId={setRenamingChatId}
                 setRenameChatValue={setRenameChatValue}
+            />
+            <ConfirmPopup
+                open={confirmDeleteSelectedOpen && selectedChatIds.length > 0}
+                title={
+                    selectedChatIds.length === 1
+                        ? "Delete chat?"
+                        : `Delete ${selectedChatIds.length} chats?`
+                }
+                message="This cannot be undone."
+                confirmLabel="Delete"
+                confirmVariant="danger"
+                onCancel={() => setConfirmDeleteSelectedOpen(false)}
+                onConfirm={() => void handleDeleteSelectedChats()}
             />
             <WarningPopup
                 open={!!actionNotice}

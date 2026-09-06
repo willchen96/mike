@@ -161,6 +161,36 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
     setInvitations(await listOrgInvitations(orgId));
   }, [org?.role, orgId]);
 
+  const refreshMembers = useCallback(async () => {
+    const nextMembers = await listOrgMembers(orgId);
+    setMembers(nextMembers);
+    setOrg((current) =>
+      current ? { ...current, member_count: nextMembers.length } : current,
+    );
+  }, [orgId]);
+
+  /**
+   * An invitation is accepted somewhere else entirely — in the recipient's
+   * browser — so nothing on this page hears about it. Both lists it lands in
+   * therefore have to be re-read together whenever the admin looks: the
+   * invitation leaves "Pending invitations" and the same person appears on the
+   * People roster. Reading only the invitations, which is what the Add member
+   * modal used to do, left the roster a reload behind.
+   *
+   * Neither refresh is the user's action, so a failure is logged rather than
+   * reported, and one failing does not cancel the other.
+   */
+  const refreshPeople = useCallback(async () => {
+    const results = await Promise.allSettled([
+      refreshInvitations(),
+      refreshMembers(),
+    ]);
+    for (const result of results) {
+      if (result.status === "rejected")
+        console.error("Failed to refresh organization people", result.reason);
+    }
+  }, [refreshInvitations, refreshMembers]);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -324,7 +354,12 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
                 ? "Add member"
                 : "Only organization admins can add members",
               disabled: !isAdmin,
-              onClick: () => setInviteOpen(true),
+              onClick: () => {
+                setInviteOpen(true);
+                // The modal shows the invitation list this page loaded, which
+                // by now may name people who have already accepted.
+                void refreshPeople();
+              },
             },
             isAdmin
               ? {
@@ -410,8 +445,16 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
             open={inviteOpen}
             org={org}
             invitations={invitations}
-            onClose={() => setInviteOpen(false)}
-            onChanged={refreshInvitations}
+            onClose={() => {
+              setInviteOpen(false);
+              // An invitation accepted while the modal was open changes the
+              // roster behind it, so the table the admin returns to is re-read
+              // rather than left as it was at page load.
+              void refreshMembers().catch((error) => {
+                console.error("Failed to refresh organization members", error);
+              });
+            }}
+            onChanged={refreshPeople}
           />
           <OrganizationSettingsModal
             open={settingsOpen}

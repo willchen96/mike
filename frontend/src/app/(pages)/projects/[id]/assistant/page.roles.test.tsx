@@ -182,6 +182,11 @@ describe("project assistant chat deletion gating", () => {
         fireEvent.click(await screen.findByText("Actions"));
         fireEvent.click(await screen.findByText("Delete"));
 
+        // The bulk path asks first — nothing is sent until it is confirmed.
+        expect(await screen.findByText("Delete 3 chats?")).toBeInTheDocument();
+        expect(deleteChat).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
         const notice = await screen.findByText(/skipped because only a project owner/);
         expect(notice.textContent).toContain(
             "1 selected chat was skipped because only a project owner can delete them.",

@@ -364,6 +364,77 @@ describe("OrganizationWorkspace", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("re-reads invitations and the roster when the Add member modal opens", async () => {
+    // An invitation is accepted in the recipient's browser, so this page never
+    // hears about it. Opening Add member used to redisplay the list loaded at
+    // page load, which still called the new colleague "Pending" — and the
+    // People table behind it still did not have them at all.
+    const user = userEvent.setup();
+    const invitation = {
+      id: "i1",
+      org_id: "org-1",
+      email: "newjoiner@firm.example",
+      role: "member" as const,
+      invited_by: "me",
+      expires_at: "2026-09-30T00:00:00Z",
+      created_at: "2026-09-01T00:00:00Z",
+      accepted_at: null,
+      declined_at: null,
+      cancelled_at: null,
+    };
+    const joiner = {
+      id: "m3",
+      user_id: "u3",
+      display_name: "New Joiner",
+      email: "newjoiner@firm.example",
+      role: "member",
+      created_at: "2026-09-02T00:00:00Z",
+    };
+    mocks.listOrgInvitations
+      .mockResolvedValueOnce([{ ...invitation, status: "pending" }])
+      .mockResolvedValue([
+        {
+          ...invitation,
+          status: "accepted",
+          accepted_at: "2026-09-02T00:00:00Z",
+        },
+      ]);
+    const initialMembers = [
+      {
+        id: "m1",
+        user_id: "me",
+        display_name: "William Chen",
+        email: "me@firm.example",
+        role: "admin",
+        created_at: "2026-08-30T00:00:00Z",
+      },
+    ];
+    mocks.listOrgMembers
+      .mockResolvedValueOnce(initialMembers)
+      .mockResolvedValue([...initialMembers, joiner]);
+
+    render(<OrganizationWorkspace orgId="org-1" />);
+    await screen.findByText("William Chen");
+    expect(screen.queryByText("New Joiner")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add member" }));
+
+    await waitFor(() =>
+      expect(mocks.listOrgInvitations).toHaveBeenCalledTimes(2),
+    );
+    // The accepted invitation is no longer pending, so its row is gone...
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", {
+          name: "Cancel invitation to newjoiner@firm.example",
+        }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Pending invitations")).not.toBeInTheDocument();
+    // ...and the same person is now on the roster without a reload.
+    expect(screen.getByText("New Joiner")).toBeInTheDocument();
+  });
+
   it("lets members browse resources but does not load administrative invitations", async () => {
     mocks.role = "member";
     const user = userEvent.setup();
