@@ -20,6 +20,52 @@ type QuoteVerificationResult = QuoteVerification & {
   needs_correction: boolean;
 };
 
+// An ellipsis attests "contiguous text with a short omission", so the omitted
+// span between two located segments is bounded. 500 chars ≈ two long legal
+// sentences; beyond that the fragments are being quilted from unrelated parts
+// of the document rather than abbreviated from one passage.
+const MAX_OMITTED_SPAN_CHARS = 500;
+
+// Omissions that swallow a negator or exception word invert the sentence's
+// meaning ("is not permitted" → "is ... permitted"), which a verified badge
+// must never endorse. Word-list heuristic, deliberately conservative: a hit
+// yields "unverified" (no badge), never "wrong", so a false positive only
+// withholds the badge from an abbreviation a human should eyeball anyway.
+const MEANING_INVERTING_OMISSION =
+  /(?:\b(?:not|no|never|neither|nor|none|cannot|without|except|unless|exclud\w*|prohibit\w*|forbid\w*|denie[sd]|deny(?:ing)?|void)\b|n[''’]t\b)/i;
+
+// Backtracking budget for in-order segment matching. Each attempt is one
+// substring search; the cap keeps pathological inputs (many repeated
+// segments) from scanning forever and fails CLOSED — an unmatched chain is
+// reported unverified, never verified.
+const MAX_LOCATE_ATTEMPTS = 64;
+
+// A LEADING or TRAILING ellipsis truncates within a sentence, so the same
+// inversion hazard applies to the text it hides ("not permitted to
+// terminate" quoted as "... permitted to terminate"). Negators bind within
+// their clause, so only the source text between the match and the nearest
+// clause boundary is inspected — a negator in a *previous sentence* must not
+// veto an unrelated quote.
+const CLAUSE_BOUNDARY = /[.;:!?\n]/;
+const MAX_CLAUSE_CONTEXT_CHARS = 200;
+
+function clauseBefore(source: string, index: number): string {
+  const windowStart = Math.max(0, index - MAX_CLAUSE_CONTEXT_CHARS);
+  const window = source.slice(windowStart, index);
+  for (let i = window.length - 1; i >= 0; i -= 1) {
+    if (CLAUSE_BOUNDARY.test(window[i])) return window.slice(i + 1);
+  }
+  return window;
+}
+
+function clauseAfter(source: string, index: number): string {
+  const window = source.slice(index, index + MAX_CLAUSE_CONTEXT_CHARS);
+  for (let i = 0; i < window.length; i += 1) {
+    if (CLAUSE_BOUNDARY.test(window[i])) return window.slice(0, i);
+  }
+  return window;
+}
+
 /**
  * Locate `quote` inside `source`, returning the exact original substring
  * (`excerpt`) plus its char offsets into `source`. Tries progressively more
@@ -46,6 +92,63 @@ export function locateQuote(
     locateNormalized(source, quote, {}) ??
     locateNormalized(source, quote, { stripPunctuation: true })
   );
+}
+
+/**
+ * `locateQuote`, but only considering matches at or after `from` (offsets into
+ * the original source). Implemented by searching the suffix slice; the
+ * normalized tiers therefore renormalize the suffix, which is O(n) per call —
+ * acceptable because callers bound their attempt count.
+ */
+function locateQuoteFrom(
+  source: string,
+  quote: string,
+  from: number,
+): QuoteLocation | null {
+  if (from <= 0) return locateQuote(source, quote);
+  if (from >= source.length) return null;
+  const loc = locateQuote(source.slice(from), quote);
+  return loc
+    ? { start: loc.start + from, end: loc.end + from, excerpt: loc.excerpt }
+    : null;
+}
+
+/**
+ * Locate every segment of an abbreviated quote IN DOCUMENT ORDER, with at most
+ * `maxGap` original chars omitted between consecutive segments. Backtracks
+ * over earlier segments' candidate positions (a segment may recur, and only a
+ * later occurrence may leave room for the rest of the chain). Returns null —
+ * unverifiable — when no ordered, gap-bounded chain exists or the attempt
+ * budget runs out.
+ */
+function locateSegmentsInOrder(
+  source: string,
+  segments: string[],
+  maxGap: number,
+): QuoteLocation[] | null {
+  let attempts = 0;
+  const search = (
+    index: number,
+    from: number,
+    prevEnd: number | null,
+  ): QuoteLocation[] | null => {
+    if (index === segments.length) return [];
+    let cursor = from;
+    while (attempts < MAX_LOCATE_ATTEMPTS) {
+      attempts += 1;
+      const loc = locateQuoteFrom(source, segments[index], cursor);
+      if (!loc) return null;
+      // Every later occurrence of this segment sits even further from the
+      // previous one, so a gap violation ends this branch outright.
+      if (prevEnd !== null && loc.start - prevEnd > maxGap) return null;
+      const rest = search(index + 1, loc.end, loc.end);
+      if (rest) return [loc, ...rest];
+      // This occurrence strands a later segment; try the next one.
+      cursor = loc.start + 1;
+    }
+    return null;
+  };
+  return search(0, 0, null);
 }
 
 function locateNormalized(
@@ -104,8 +207,15 @@ export function verifyQuoteAgainstSource(
 
   // The document viewers treat ASCII and Unicode ellipses as omission
   // separators and highlight each quoted segment independently. Mirror that
-  // behavior here so a legitimate abbreviated quote is not rejected merely
-  // because text was intentionally omitted between its verbatim segments.
+  // tolerance here — but an ellipsis is a claim about the SHAPE of the
+  // omission, so the segments must additionally satisfy what the ellipsis
+  // asserts to the reader:
+  //   1. they appear in document order (no rearranged fragments),
+  //   2. the omitted span is short (no quilting distant parts together),
+  //   3. the omitted span contains no negator/exception word (an omission
+  //      that swallows "not" flips the sentence's meaning).
+  // Any violation returns unverified: in a legal product a green badge on a
+  // meaning-inverting or rearranged quote is worse than no verification.
   if (ELLIPSIS_PATTERN.test(quote)) {
     const segments = quote
       .split(ELLIPSIS_PATTERN)
@@ -114,21 +224,41 @@ export function verifyQuoteAgainstSource(
       // example, the fourth dot in "....") do not form quoted segments.
       .filter((segment) => /[\p{L}\p{N}]/u.test(segment));
     if (!segments.length) return { verified: false, needs_correction: false };
-    const located = segments.map((segment) => ({
-      segment,
-      location: locateQuote(source, segment),
-    }));
-    if (located.some(({ location }) => !location)) {
+    const located = locateSegmentsInOrder(
+      source,
+      segments,
+      MAX_OMITTED_SPAN_CHARS,
+    );
+    if (!located) return { verified: false, needs_correction: false };
+    for (let i = 1; i < located.length; i += 1) {
+      const omitted = source.slice(located[i - 1].end, located[i].start);
+      if (MEANING_INVERTING_OMISSION.test(omitted)) {
+        return { verified: false, needs_correction: false };
+      }
+    }
+    // Edge ellipses hide same-clause context the reader cannot see; refuse
+    // the badge when that hidden context negates or carves out the fragment.
+    const trimmedQuote = quote.trim();
+    if (
+      /^(?:\.{3}|…)/.test(trimmedQuote) &&
+      MEANING_INVERTING_OMISSION.test(clauseBefore(source, located[0].start))
+    ) {
+      return { verified: false, needs_correction: false };
+    }
+    if (
+      /(?:\.{3}|…)$/.test(trimmedQuote) &&
+      MEANING_INVERTING_OMISSION.test(
+        clauseAfter(source, located[located.length - 1].end),
+      )
+    ) {
       return { verified: false, needs_correction: false };
     }
     return {
       verified: true,
       needs_correction: located.some(
-        ({ segment, location }) => location!.excerpt !== segment,
+        (location, index) => location.excerpt !== segments[index],
       ),
-      source_excerpt: located
-        .map(({ location }) => location!.excerpt)
-        .join(" ... "),
+      source_excerpt: located.map((location) => location.excerpt).join(" ... "),
     };
   }
 

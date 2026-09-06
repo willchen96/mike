@@ -137,6 +137,132 @@ describe("verifyQuoteAgainstSource", () => {
     expect(v.verified).toBe(false);
   });
 
+  // ── Adversarial ellipsis abuse ─────────────────────────────────────────
+  // These tests ATTACK the matcher instead of confirming it: each quote is
+  // built from real source words, so a matcher that merely finds every
+  // fragment somewhere would happily verify all of them. The original
+  // implementation did exactly that (each segment located independently),
+  // so every rejection case below verified as true before this fix.
+
+  it("rejects an ellipsis that swallows a negator and inverts meaning", () => {
+    const src =
+      "Under clause 9, the landlord is not permitted to terminate this lease during the fixed term.";
+    // Reads as "the landlord IS permitted to terminate" — the omitted word
+    // is "not". A verified badge here endorses the opposite of the source.
+    const v = verifyQuoteAgainstSource(
+      src,
+      "the landlord is ... permitted to terminate",
+    );
+    expect(v.verified).toBe(false);
+  });
+
+  it("rejects an ellipsis that swallows a negating contraction", () => {
+    const src = "The guarantor isn't liable for the tenant's costs.";
+    const v = verifyQuoteAgainstSource(
+      src,
+      "The guarantor ... liable for the tenant's costs",
+    );
+    expect(v.verified).toBe(false);
+  });
+
+  it("rejects an ellipsis that swallows an exception carve-out", () => {
+    const src =
+      "The deposit shall be returned in full except where the tenant is in breach.";
+    const v = verifyQuoteAgainstSource(
+      src,
+      "The deposit shall be returned in full ... the tenant is in breach",
+    );
+    expect(v.verified).toBe(false);
+  });
+
+  it("rejects fragments stitched together in reverse document order", () => {
+    const src =
+      "The alpha clause applies to assignments. The beta clause applies to subletting.";
+    const v = verifyQuoteAgainstSource(
+      src,
+      "beta clause applies to subletting ... alpha clause applies to assignments",
+    );
+    expect(v.verified).toBe(false);
+  });
+
+  it("rejects fragments quilted from distant parts of the document", () => {
+    const filler = "Unrelated boilerplate filler sentence follows here. ".repeat(
+      15,
+    ); // ~795 chars — far beyond any plausible single omission
+    const src = `The tenant shall maintain the garden. ${filler}The landlord shall insure the building.`;
+    const v = verifyQuoteAgainstSource(
+      src,
+      "The tenant shall maintain the garden ... The landlord shall insure the building",
+    );
+    expect(v.verified).toBe(false);
+  });
+
+  it("rejects a leading ellipsis that truncates away a same-clause negator", () => {
+    const src =
+      "Under clause 9, the landlord is not permitted to terminate this lease.";
+    const v = verifyQuoteAgainstSource(
+      src,
+      "... permitted to terminate this lease",
+    );
+    expect(v.verified).toBe(false);
+  });
+
+  it("rejects a trailing ellipsis that truncates before a same-clause carve-out", () => {
+    const src =
+      "The tenant may assign this lease unless the landlord objects in writing.";
+    const v = verifyQuoteAgainstSource(src, "The tenant may assign this lease ...");
+    expect(v.verified).toBe(false);
+  });
+
+  it("rejects a repeated fragment the source only contains once", () => {
+    const src = "Rent is payable monthly by standing order.";
+    const v = verifyQuoteAgainstSource(src, "standing order ... standing order");
+    expect(v.verified).toBe(false);
+  });
+
+  // ── Guards against over-blocking: legitimate abbreviations still pass ──
+
+  it("verifies an in-order abbreviation with a benign short omission", () => {
+    const src =
+      "The tenant shall, at reasonable times, permit the landlord to inspect the premises.";
+    const v = verifyQuoteAgainstSource(
+      src,
+      "The tenant shall ... permit the landlord to inspect",
+    );
+    expect(v.verified).toBe(true);
+    expect(v.needs_correction).toBe(false);
+    expect(v.source_excerpt).toBe(
+      "The tenant shall ... permit the landlord to inspect",
+    );
+  });
+
+  it("verifies a leading ellipsis whose negator sits in the previous sentence", () => {
+    const src =
+      "No pets are allowed on the premises. The tenant shall keep the garden tidy.";
+    // "No" belongs to the prior sentence — beyond the clause boundary, it
+    // does not bind the quoted fragment and must not veto it.
+    const v = verifyQuoteAgainstSource(
+      src,
+      "... The tenant shall keep the garden tidy",
+    );
+    expect(v.verified).toBe(true);
+  });
+
+  it("backtracks to a later occurrence when the first strands the chain", () => {
+    const filler = "Unrelated boilerplate filler sentence follows here. ".repeat(
+      15,
+    );
+    // "Rent is payable monthly" appears twice; only anchoring on the SECOND
+    // occurrence keeps the omission within bounds.
+    const src = `Rent is payable monthly. ${filler}Rent is payable monthly in advance by standing order.`;
+    const v = verifyQuoteAgainstSource(
+      src,
+      "Rent is payable monthly ... standing order",
+    );
+    expect(v.verified).toBe(true);
+    expect(v.source_excerpt).toBe("Rent is payable monthly ... standing order");
+  });
+
   it("supports ellipsis omissions inside a cross-page quote", () => {
     const quote =
       "The Tenant shall pay...first day of each month[[PAGE_BREAK]]The Landlord may terminate...written notice";
