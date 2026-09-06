@@ -1,0 +1,51 @@
+{
+    "display_information": {
+        "name": "Mike MCP Client",
+        "description": "OAuth client for Mike's Slack MCP connector"
+    },
+    "features": {
+        "bot_user": {
+            "display_name": "mike-mcp",
+            "always_online": false
+        },
+        "assistant_view": {
+            "assistant_description": "OAuth client for Mike's Slack MCP connector",
+            "suggested_prompts": []
+        }
+    },
+    "oauth_config": {
+        "redirect_urls": [
+            "https://REPLACE-WITH-YOUR-MIKE-HOST/api/user/mcp-connectors/oauth/callback"
+        ],
+        "scopes": {
+            "bot": ["users:read"],
+            "user": [
+                "search:read.public",
+                "search:read.private",
+                "search:read.mpim",
+                "search:read.im",
+                "search:read.files",
+                "search:read.users",
+                "files:read",
+                "emoji:read",
+                "chat:write",
+                "channels:history",
+                "groups:history",
+                "mpim:history",
+                "im:history",
+                "channels:read",
+                "groups:read",
+                "mpim:read",
+                "users:read",
+                "reactions:write",
+                "canvases:read",
+                "canvases:write"
+            ]
+        }
+    },
+    "settings": {
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
+    }
+}

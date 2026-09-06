@@ -25,6 +25,11 @@ import {
     startUserMcpConnectorOAuth,
 } from "./oauth";
 import {
+    formatMcpErrorForAgent,
+    mcpToolResultErrorMessage,
+    sanitizeMcpToolErrorResult,
+} from "./errors";
+import {
     CLIENT_INFO,
     MAX_MCP_RESULT_CHARS,
     MCP_REQUEST_TIMEOUT_MS,
@@ -574,6 +579,47 @@ export async function executeMcpToolCall(
                 ),
             db,
         );
+        const toolError = mcpToolResultErrorMessage(result);
+        if (toolError) {
+            console.error("[mcp-connectors] tool call rejected by server", {
+                connectorId: connector.id,
+                connectorName: connector.name,
+                toolName: tool.tool_name,
+                error: toolError,
+                serverResponse: sanitizeMcpToolErrorResult(result),
+            });
+            const content = stringifyMcpResult({
+                ok: false,
+                error: toolError,
+                serverResult: result,
+            });
+            await insertMcpAuditLog(db, {
+                user_id: userId,
+                connector_id: connector.id,
+                tool_id: tool.id,
+                tool_name: tool.tool_name,
+                openai_tool_name: tool.openai_tool_name,
+                status: "error",
+                error_message: toolError,
+                duration_ms: Date.now() - started,
+                // The model-facing payload is the full (truncated) serialized
+                // result, not an empty body — record its real size so audit
+                // rows reflect what was actually returned.
+                result_size_chars: content.length,
+            });
+            return {
+                content,
+                event: {
+                    type: "mcp_tool_call",
+                    connector_id: connector.id,
+                    connector_name: connector.name,
+                    tool_name: tool.tool_name,
+                    openai_tool_name: tool.openai_tool_name,
+                    status: "error",
+                    error: toolError,
+                },
+            };
+        }
         const content = stringifyMcpResult(result);
         await insertMcpAuditLog(db, {
             user_id: userId,
@@ -597,8 +643,33 @@ export async function executeMcpToolCall(
             },
         };
     } catch (err) {
-        const message =
-            err instanceof Error ? err.message : "MCP tool call failed.";
+        const diagnostic = formatMcpErrorForAgent(err);
+        console.error("[mcp-connectors] tool call failed", {
+            connectorId: connector.id,
+            connectorName: connector.name,
+            toolName: tool.tool_name,
+            ...diagnostic,
+        });
+        // This payload can embed remote-server-authored text (diagnostic.message
+        // and diagnostic.serverError originate from the MCP server's error
+        // response). Route it through stringifyMcpResult so it carries the same
+        // "untrusted data, not instructions" wrapper as the success and
+        // tool-error paths — otherwise a hostile server could smuggle prompt
+        // injection into the model-facing content through the transport-error
+        // channel alone.
+        const content = stringifyMcpResult({
+            ok: false,
+            error: diagnostic.message,
+            ...(diagnostic.httpStatus
+                ? { httpStatus: diagnostic.httpStatus }
+                : {}),
+            ...(diagnostic.mcpCode !== undefined
+                ? { mcpCode: diagnostic.mcpCode }
+                : {}),
+            ...(diagnostic.serverError
+                ? { serverError: diagnostic.serverError }
+                : {}),
+        });
         await insertMcpAuditLog(db, {
             user_id: userId,
             connector_id: connector.id,
@@ -606,12 +677,12 @@ export async function executeMcpToolCall(
             tool_name: tool.tool_name,
             openai_tool_name: tool.openai_tool_name,
             status: "error",
-            error_message: message,
+            error_message: diagnostic.message,
             duration_ms: Date.now() - started,
-            result_size_chars: 0,
+            result_size_chars: content.length,
         });
         return {
-            content: JSON.stringify({ ok: false, error: message }),
+            content,
             event: {
                 type: "mcp_tool_call",
                 connector_id: connector.id,
@@ -619,7 +690,7 @@ export async function executeMcpToolCall(
                 tool_name: tool.tool_name,
                 openai_tool_name: tool.openai_tool_name,
                 status: "error",
-                error: message,
+                error: diagnostic.message,
             },
         };
     }

@@ -7,6 +7,7 @@ export type {
     McpTransport,
 } from "./mcp/types";
 export { McpOAuthRequiredError } from "./mcp/oauth";
+export { ConnectorSetupError } from "./mcp/errors";
 export {
     buildUserMcpTools,
     completeUserMcpConnectorOAuth,

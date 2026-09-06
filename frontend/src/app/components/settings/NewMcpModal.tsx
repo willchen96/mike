@@ -21,6 +21,16 @@ export type NewMcpDraft = {
 
 export type NewMcpStep = "form" | "working" | "auth" | "success";
 
+/**
+ * Known hosted MCP servers, offered as one-click prefills. Only the fields
+ * change — the create flow is identical to a hand-typed server, so presets
+ * stay purely presentational.
+ */
+const CONNECTOR_PRESETS: ReadonlyArray<{
+    name: string;
+    serverUrl: string;
+}> = [{ name: "Slack", serverUrl: "https://mcp.slack.com/mcp" }];
+
 interface NewMcpModalProps {
     open: boolean;
     draft: NewMcpDraft;
@@ -95,7 +105,12 @@ export function NewMcpModal({
                       }
             }
             cancelAction={
-                step === "working" || step === "auth"
+                // "working" is a brief synchronous create with nothing to
+                // interrupt, so it stays uncancellable. "auth" now offers a
+                // Cancel button: COOP can sever the popup so the flow may never
+                // report a result on its own, and the user needs a reliable
+                // escape hatch instead of waiting out the five-minute timeout.
+                step === "working"
                     ? false
                     : {
                           label: step === "success" ? "Done" : "Cancel",
@@ -125,6 +140,28 @@ export function NewMcpModal({
                         The assistant will have access to this MCP server and
                         its enabled tools.
                     </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {CONNECTOR_PRESETS.map((preset) => (
+                            <button
+                                key={preset.serverUrl}
+                                type="button"
+                                onClick={() =>
+                                    onDraftChange({
+                                        ...draft,
+                                        name: preset.name,
+                                        serverUrl: preset.serverUrl,
+                                    })
+                                }
+                                disabled={step === "working"}
+                                className="inline-flex h-7 items-center gap-1.5 rounded-full border border-white/70 bg-white/75 px-3 text-xs font-medium text-gray-600 shadow-[0_3px_9px_rgba(15,23,42,0.03),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl transition-colors hover:text-gray-900"
+                            >
+                                {preset.name}{" "}
+                                <span className="font-normal text-gray-400">
+                                    {new URL(preset.serverUrl).hostname}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
                     <NewMcpForm
                         draft={draft}
                         showToken={showToken}
@@ -137,6 +174,27 @@ export function NewMcpModal({
                 </div>
             )}
         </Modal>
+    );
+}
+
+/**
+ * Operator-side setup steps returned by the backend (code
+ * `connector_setup_required`). Rendered as guidance, not as a failure of
+ * anything the user typed. Lives here next to the Add modal but is shown in
+ * the connector details modal, which is where the Add flow hands over when
+ * a just-created connector turns out to need deployment-side setup.
+ */
+export function ConnectorSetupNotice({ text }: { text: string }) {
+    return (
+        <div
+            role="status"
+            className="rounded-xl border border-white/70 bg-white/75 px-3 py-2 text-xs text-gray-700 shadow-[0_3px_9px_rgba(15,23,42,0.03),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl"
+        >
+            <p className="font-medium text-gray-900">
+                This server needs a one-time setup by the administrator
+            </p>
+            <p className="mt-1 whitespace-pre-wrap break-words">{text}</p>
+        </div>
     );
 }
 
