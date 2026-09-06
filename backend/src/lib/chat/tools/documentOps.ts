@@ -70,6 +70,9 @@ export async function extractPdfText(buf: ArrayBuffer): Promise<string> {
               getTextContent: () => Promise<{
                 items: { str?: string }[];
               }>;
+              getAnnotations: () => Promise<
+                { fieldName?: string; fieldValue?: unknown }[]
+              >;
             }>;
           }>;
         };
@@ -82,9 +85,26 @@ export async function extractPdfText(buf: ArrayBuffer): Promise<string> {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
-      parts.push(
-        `[Page ${i}]\n${textContent.items.map((it) => it.str ?? "").join(" ")}`,
-      );
+      let pageText = `[Page ${i}]\n${textContent.items.map((it) => it.str ?? "").join(" ")}`;
+      try {
+        const annotations = await page.getAnnotations();
+        const fields = annotations
+          .filter(
+            (a): a is { fieldName: string; fieldValue: unknown } =>
+              !!a.fieldName &&
+              a.fieldValue !== undefined &&
+              a.fieldValue !== null &&
+              a.fieldValue !== "",
+          )
+          .map((a) => `${a.fieldName}: ${a.fieldValue}`);
+        if (fields.length) {
+          pageText += `\n[Page ${i} form fields]\n${fields.join("\n")}`;
+        }
+      } catch {
+        // Fall back to page text alone; a filled but unflattened form on
+        // this page just won't surface its field values.
+      }
+      parts.push(pageText);
     }
     return parts.join("\n\n");
   } catch {
