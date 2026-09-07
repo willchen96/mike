@@ -365,6 +365,11 @@ export function buildMessages(
       });
       content = `[The user attached the following document(s) to this message:\n${lines.join("\n")}]\n\n${content}`;
     }
+    // Anthropic rejects empty text content blocks with a 400 ("messages: text
+    // content blocks must be non-empty"), and a stored turn can legitimately have
+    // empty content -- e.g. an assistant turn that opened directly with a tool call,
+    // or a turn whose stream failed. Skip those instead of emitting an empty block.
+    if (typeof content === "string" && !content.trim()) continue;
     formatted.push({ role: msg.role, content });
   }
   return formatted;

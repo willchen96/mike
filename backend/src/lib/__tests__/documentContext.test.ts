@@ -318,6 +318,28 @@ describe("null-content assistant reservations", () => {
             rows.find((row) => row.id === "assistant-reservation")?.content,
         ).toBeNull();
     });
+
+    it("omits turns with empty content so no empty text block reaches the model", () => {
+        // An assistant turn that opens directly with a tool call stores empty
+        // content. Forwarding it produces an empty text block, and Anthropic
+        // rejects the whole request with 400 "messages: text content blocks
+        // must be non-empty" — which surfaced as an intermittent
+        // "Sorry, something went wrong" on follow-up turns.
+        const messages = buildMessages(
+            [
+                { role: "user", content: "hi" },
+                { role: "assistant", content: "" },
+                { role: "assistant", content: "   " },
+                { role: "user", content: "still here?" },
+            ],
+            [],
+        ) as { role: string; content: string }[];
+
+        const turns = messages.slice(1);
+        expect(turns).toHaveLength(2);
+        expect(turns.map((m) => m.content)).toEqual(["hi", "still here?"]);
+        expect(turns.every((m) => m.content.trim().length > 0)).toBe(true);
+    });
 });
 
 // ---------------------------------------------------------------------------
