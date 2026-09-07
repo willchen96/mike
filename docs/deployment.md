@@ -218,6 +218,135 @@ HttpOnly cookie. No Supabase access or refresh token enters add-in JavaScript or
 OfficeRuntime storage. The add-in also does not retain Google's provider access
 token or request Google Drive or Gmail access.
 
+## Enterprise SSO (SAML)
+
+Self-hosted Mike can use SAML providers registered in Supabase Auth (GoTrue),
+including Okta, Microsoft Entra ID, and Google Workspace SAML. The login and
+signup pages offer SSO when enabled. The existing email/password and Google
+methods remain available; this feature does not enforce SSO-only access.
+
+### Configure GoTrue
+
+For the Compose GoTrue service, uncomment the SAML environment entries in
+`docker-compose.yml`. Set `GOTRUE_SAML_ENABLED=true`, provide
+`GOTRUE_SAML_PRIVATE_KEY`, and set `GOTRUE_SAML_EXTERNAL_URL` to the public Auth
+base URL, for example `https://auth.example.com/auth/v1`. The `/auth/v1` suffix
+is required behind the Compose gateway: GoTrue appends `/sso/saml/acs` and
+`/sso/saml/metadata` to this base. Keep `SUPABASE_PUBLIC_URL` as the gateway
+origin. Configure these values in the root Compose `.env` or shell environment;
+`backend/.env` is loaded by the backend service, not the Auth service.
+
+The pinned GoTrue version expects a standard base64-encoded **PKCS#1 DER RSA
+private key** (at least 2048 bits), not PEM or PKCS#8. With OpenSSL 3:
+
+```bash
+umask 077
+openssl genrsa -traditional -out saml-private.pem 2048
+openssl rsa -in saml-private.pem -traditional -outform DER -out saml-private.der
+openssl base64 -A -in saml-private.der -out saml-private.base64
+```
+
+Put the base64 file's contents in `GOTRUE_SAML_PRIVATE_KEY` using your deployment
+secret store. Keep the key stable across restarts and replicas; rotating it
+requires updating the IdP's trust configuration. Keep all key files outside the
+repository. Restart the Auth service after configuring SAML.
+
+In GoTrue, set `GOTRUE_SITE_URL` to the deployed frontend origin and restrict
+`GOTRUE_URI_ALLOW_LIST` to the frontend's `/auth/callback` URL (plus existing
+required callbacks). Replace the permissive local Compose allowlist for a
+public deployment. For hosted Supabase, use its SAML provider setup and URL
+configuration instead of configuring GoTrue container variables.
+
+### Register an identity provider
+
+Import the service provider metadata from:
+
+```text
+https://auth.example.com/auth/v1/sso/saml/metadata
+```
+
+Use its entity ID/audience and assertion consumer service (ACS) URL in your
+IdP. The ACS is `https://auth.example.com/auth/v1/sso/saml/acs`, not Mike's
+frontend callback. Configure the IdP to supply an email attribute and assign
+the intended users or groups to the application.
+
+For example, create a SAML 2.0 application in Okta, set its Single sign-on URL
+to the ACS and Audience URI to the metadata entity ID, and add an `email`
+attribute containing the user's email. Obtain the IdP metadata URL. Entra ID
+enterprise applications and Google Workspace custom SAML applications use the
+same service provider metadata; export their IdP metadata XML if they do not
+provide a publicly fetchable HTTPS metadata URL.
+
+Register the provider through GoTrue's admin API from a trusted administrative
+machine. Replace these placeholders; the bearer token must be an administrative
+`service_role` JWT, never a browser credential:
+
+```bash
+curl --fail-with-body --request POST \
+  'https://auth.example.com/auth/v1/admin/sso/providers' \
+  --header 'Authorization: Bearer <SERVICE_ROLE_JWT>' \
+  --header 'apikey: <SERVICE_ROLE_JWT>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "type": "saml",
+    "metadata_url": "https://idp.example.com/app/metadata",
+    "domains": ["example.com"],
+    "attribute_mapping": {"keys": {"email": {"name": "email"}}}
+  }'
+```
+
+Use `metadata_xml` instead of `metadata_url` when importing XML. Match the
+attribute mapping to the IdP's actual attribute name. The `domains` field maps
+an exact domain to this provider; add all domains your users will enter. List
+providers with `GET /auth/v1/admin/sso/providers`; use
+`PUT /auth/v1/admin/sso/providers/<provider-id>` to update an existing provider
+instead of repeating creation. Keep admin access restricted.
+
+### Enable Mike and verify sign-in
+
+Set these in `backend/.env` (or the backend service environment), then restart
+the backend. No frontend rebuild is needed:
+
+```dotenv
+SSO_ENABLED=true
+SSO_DEFAULT_DOMAIN=example.com
+SSO_BUTTON_LABEL=Single sign-on
+SSO_ALLOWED_DOMAINS=example.com
+```
+
+`SSO_ENABLED` defaults to false and enables only with `true` (case-insensitive).
+Omit `SSO_DEFAULT_DOMAIN` to show a domain input. Domains are trimmed and
+normalized to lowercase; use DNS names, or punycode for international domains,
+not email addresses or URLs. `SSO_ALLOWED_DOMAINS` is an optional comma-separated
+list of exact domains; it also applies to the default. Invalid domain settings
+fail closed. Omitting the allowlist permits any domain registered in GoTrue.
+The allowlist controls Mike's sign-in initiation, not account authorization or
+direct access to GoTrue; enforce membership and access policy at the IdP and
+Auth service.
+
+Mike calls GoTrue's `/sso` API using the server-side Supabase SDK, which sends
+`skip_http_redirect: true` and a PKCE challenge. After IdP authentication,
+GoTrue redirects to Mike's existing `/auth/callback`; the backend exchanges
+the code using its HttpOnly verifier cookie and establishes the normal session.
+Start sign-in from Mike in the same browser; IdP-initiated flows are outside
+this integration. The Word add-in's existing authentication remains unchanged.
+
+Before inviting users, verify the metadata contains the public ACS URL, try
+both an assigned and an unassigned IdP user, confirm return to onboarding or
+the app, and confirm logout and an unapproved domain behave as expected. SAML
+identities can be separate accounts from existing email/Google identities; do
+not assume matching emails link accounts or transfer project access.
+
+Cloudflare Access or IAP in front of Mike is complementary perimeter access
+control. It does not establish Mike's Supabase session and is not a substitute
+for this SAML integration. Ensure the IdP/browser can reach the required SAML
+endpoints through any perimeter controls.
+
+References: [Supabase signInWithSSO](https://supabase.com/docs/reference/javascript/auth-signinwithsso),
+[GoTrue SSO API](https://github.com/supabase/auth/blob/v2.189.0/internal/api/sso.go),
+[SAML configuration](https://github.com/supabase/auth/blob/v2.189.0/internal/conf/saml.go),
+and [provider administration](https://github.com/supabase/auth/blob/v2.189.0/internal/api/ssoadmin.go).
+
 ## Install and run
 
 Install dependencies:

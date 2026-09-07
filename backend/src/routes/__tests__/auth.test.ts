@@ -16,6 +16,7 @@ const {
       signInWithPassword: vi.fn(),
       signUp: vi.fn(),
       signInWithOAuth: vi.fn(),
+      signInWithSSO: vi.fn(),
       exchangeCodeForSession: vi.fn(),
       resetPasswordForEmail: vi.fn(),
       signOut: vi.fn(),
@@ -79,6 +80,13 @@ describe("auth routes", () => {
     process.env.FRONTEND_URL = origin;
     process.env.NODE_ENV = "production";
     delete process.env.WORD_ADDIN_URL;
+    for (const key of [
+      "SSO_ENABLED",
+      "SSO_DEFAULT_DOMAIN",
+      "SSO_ALLOWED_DOMAINS",
+      "SSO_BUTTON_LABEL",
+    ])
+      delete process.env[key];
     createRequestSupabase.mockReset().mockReturnValue(authClient);
     clearRequestAuthCookies.mockReset();
     issueAuthHandoff.mockReset();
@@ -150,6 +158,181 @@ describe("auth routes", () => {
         skipBrowserRedirect: true,
       },
     });
+  });
+
+  it("disables SSO by default and exposes only public settings", async () => {
+    const config = await request(app).get("/auth/config");
+    expect(config.body).toEqual({
+      ssoEnabled: false,
+      ssoButtonLabel: "Single sign-on",
+      ssoDomainRequired: false,
+    });
+    expect(config.headers["cache-control"]).toBe("private, no-store");
+    const response = await request(app)
+      .post("/auth/oauth")
+      .set("Origin", origin)
+      .send({ provider: "sso", domain: "example.com" });
+    expect(response.status).toBe(403);
+    expect(createRequestSupabase).not.toHaveBeenCalled();
+  });
+
+  it("uses a normalized default domain and the shared callback", async () => {
+    process.env.SSO_ENABLED = "true";
+    process.env.SSO_DEFAULT_DOMAIN = " Example.COM ";
+    process.env.SSO_ALLOWED_DOMAINS = "example.com, other.example";
+    process.env.SSO_BUTTON_LABEL = "Company login";
+    authClient.auth.signInWithSSO.mockResolvedValue({
+      data: { url: "https://idp.example/saml" },
+      error: null,
+    });
+    const config = await request(app).get("/auth/config");
+    expect(config.body).toEqual({
+      ssoEnabled: true,
+      ssoButtonLabel: "Company login",
+      ssoDomainRequired: false,
+    });
+    const response = await request(app)
+      .post("/auth/oauth")
+      .set("Origin", origin)
+      .send({
+        provider: "sso",
+        next: "//attacker.example",
+        callbackPath: "https://attacker.example",
+      });
+    expect(response.body).toEqual({ url: "https://idp.example/saml" });
+    expect(authClient.auth.signInWithSSO).toHaveBeenCalledWith({
+      domain: "example.com",
+      options: {
+        redirectTo: `${origin}/auth/callback?next=%2Fonboarding%2Fprofile`,
+        skipBrowserRedirect: true,
+      },
+    });
+  });
+
+  it("requests a domain when no default exists and allows a permitted override", async () => {
+    process.env.SSO_ENABLED = "true";
+    expect(
+      (await request(app).get("/auth/config")).body.ssoDomainRequired,
+    ).toBe(true);
+    const missing = await request(app)
+      .post("/auth/oauth")
+      .set("Origin", origin)
+      .send({ provider: "sso" });
+    expect(missing.body.code).toBe("sso_domain_required");
+    process.env.SSO_DEFAULT_DOMAIN = "default.example";
+    process.env.SSO_ALLOWED_DOMAINS = "default.example,other.example";
+    authClient.auth.signInWithSSO.mockResolvedValue({
+      data: { url: "https://idp.example/saml" },
+      error: null,
+    });
+    const response = await request(app)
+      .post("/auth/oauth")
+      .set("Origin", origin)
+      .send({ provider: "sso", domain: " OTHER.EXAMPLE ", next: "/projects" });
+    expect(response.status).toBe(200);
+    expect(authClient.auth.signInWithSSO).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: "other.example",
+        options: expect.objectContaining({
+          redirectTo: `${origin}/auth/callback?next=%2Fprojects`,
+        }),
+      }),
+    );
+  });
+
+  it.each([
+    "",
+    "user@example.com",
+    "https://example.com",
+    "*.example.com",
+    "example.com:443",
+    "-bad.example",
+    "example..com",
+    123,
+    null,
+    "a".repeat(64) + ".com",
+  ])("rejects invalid SSO domain %s", async (domain) => {
+    process.env.SSO_ENABLED = "true";
+    const response = await request(app)
+      .post("/auth/oauth")
+      .set("Origin", origin)
+      .send({ provider: "sso", domain });
+    expect(response.status).toBe(400);
+    expect(createRequestSupabase).not.toHaveBeenCalled();
+  });
+
+  it("enforces exact domain allowlisting and trusted origins", async () => {
+    process.env.SSO_ENABLED = "true";
+    process.env.SSO_ALLOWED_DOMAINS = "example.com";
+    for (const domain of [
+      "other.example",
+      "sub.example.com",
+      "example.com.evil.test",
+    ]) {
+      const response = await request(app)
+        .post("/auth/oauth")
+        .set("Origin", origin)
+        .send({ provider: "sso", domain });
+      expect(response.body.code).toBe("sso_domain_not_allowed");
+    }
+    const response = await request(app)
+      .post("/auth/oauth")
+      .set("Origin", "https://attacker.example")
+      .send({ provider: "sso", domain: "example.com" });
+    expect(response.status).toBe(403);
+    expect(createRequestSupabase).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { SSO_DEFAULT_DOMAIN: "https://bad.example" },
+    { SSO_ALLOWED_DOMAINS: "example.com,,other.example" },
+    { SSO_DEFAULT_DOMAIN: "other.example", SSO_ALLOWED_DOMAINS: "example.com" },
+  ])("fails closed for invalid configuration %s", async (env) => {
+    Object.assign(process.env, env, { SSO_ENABLED: "true" });
+    const response = await request(app)
+      .post("/auth/oauth")
+      .set("Origin", origin)
+      .send({ provider: "sso", domain: "example.com" });
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe("internal_error");
+    expect((await request(app).get("/auth/config")).status).toBe(500);
+    expect(createRequestSupabase).not.toHaveBeenCalled();
+  });
+
+  it.each([400, 404, 429, 500])(
+    "sanitizes provider errors (%s)",
+    async (status) => {
+      process.env.SSO_ENABLED = "true";
+      authClient.auth.signInWithSSO.mockResolvedValue({
+        data: null,
+        error: { status, message: "private provider diagnostics" },
+      });
+      const response = await request(app)
+        .post("/auth/oauth")
+        .set("Origin", origin)
+        .send({ provider: "sso", domain: "example.com" });
+      expect(response.status).toBe(status < 500 ? 400 : 500);
+      expect(response.text).not.toContain("private provider diagnostics");
+    },
+  );
+
+  it("sanitizes thrown failures and missing redirects", async () => {
+    process.env.SSO_ENABLED = "true";
+    authClient.auth.signInWithSSO.mockRejectedValueOnce(
+      new Error("private diagnostics"),
+    );
+    authClient.auth.signInWithSSO.mockResolvedValueOnce({
+      data: {},
+      error: null,
+    });
+    for (let i = 0; i < 2; i++) {
+      const response = await request(app)
+        .post("/auth/oauth")
+        .set("Origin", origin)
+        .send({ provider: "sso", domain: "example.com" });
+      expect(response.status).toBe(500);
+      expect(response.text).not.toContain("private diagnostics");
+    }
   });
 
   it("does not reveal whether a password-reset email exists", async () => {

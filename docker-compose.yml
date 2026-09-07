@@ -58,6 +58,11 @@ services:
       GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID: ${GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID:-}
       GOTRUE_EXTERNAL_GOOGLE_SECRET: ${GOTRUE_EXTERNAL_GOOGLE_SECRET:-}
       GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${SUPABASE_PUBLIC_URL:-http://localhost:54321}/auth/v1/callback
+      # Enterprise SAML is opt-in. Set these in the Compose environment/root
+      # .env (not backend/.env); see docs/deployment.md for provider setup.
+      # GOTRUE_SAML_ENABLED: "true"
+      # GOTRUE_SAML_PRIVATE_KEY: ${GOTRUE_SAML_PRIVATE_KEY:-}
+      # GOTRUE_SAML_EXTERNAL_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:54321}/auth/v1
       # Keep local signup frictionless by default. Set this to false to exercise
       # the confirmation-email flow; the message will be caught by Mailpit.
       GOTRUE_MAILER_AUTOCONFIRM: ${GOTRUE_MAILER_AUTOCONFIRM:-true}

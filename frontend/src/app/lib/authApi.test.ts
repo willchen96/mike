@@ -7,6 +7,7 @@ import {
     enrollMfa,
     exchangeAuthCode,
     getAuthSession,
+    getAuthConfiguration,
     getMfaAssurance,
     listMfaFactors,
     login,
@@ -14,6 +15,7 @@ import {
     requestPasswordReset,
     signup,
     startGoogleOAuth,
+    startSso,
     unenrollMfa,
     updateAuthEmail,
     updateAuthPassword,
@@ -136,7 +138,37 @@ describe("cookie auth client", () => {
         await expect(logout()).resolves.toBeUndefined();
     });
 
+    it("loads public auth configuration without caching", async () => {
+        const config = {
+            ssoEnabled: true,
+            ssoButtonLabel: "Company login",
+            ssoDomainRequired: true,
+        };
+        fetchMock.mockResolvedValue(
+            new Response(JSON.stringify(config), { status: 200 }),
+        );
+        await expect(getAuthConfiguration()).resolves.toEqual(config);
+        expect(fetchMock).toHaveBeenCalledWith(
+            "/api/auth/config",
+            expect.objectContaining({ credentials: "include", cache: "no-store" }),
+        );
+    });
+
     it.each([
+        [
+            "SSO with domain",
+            () => startSso("/onboarding", "example.com"),
+            "/api/auth/oauth",
+            "POST",
+            { provider: "sso", next: "/onboarding", domain: "example.com" },
+        ],
+        [
+            "SSO with deployment default",
+            () => startSso("/onboarding"),
+            "/api/auth/oauth",
+            "POST",
+            { provider: "sso", next: "/onboarding" },
+        ],
         [
             "signup",
             () => signup("new@example.test", "long-password", "/onboarding"),
