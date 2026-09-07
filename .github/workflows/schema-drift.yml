@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history: the baseline schema is read straight out of git
           # (`git show $BASELINE_REF:backend/schema.sql`), and the migration

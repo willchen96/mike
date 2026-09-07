@@ -41,7 +41,7 @@ jobs:
     name: k6 SSE stream load test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Official k6 image — no toolchain to install, runner's docker only.
       # Thresholds live in loadtest/sse-stream.js and are deliberately

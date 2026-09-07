@@ -29,7 +29,7 @@ jobs:
       # gitleaks_8.30.1_checksums.txt on the upstream release.
       GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history — gitleaks scans commits, not the working tree.
           fetch-depth: 0
