@@ -27,6 +27,7 @@ import {
     minimumPasswordMessage,
 } from "@/app/components/auth/passwordPolicy";
 import { AuthDivider } from "@/app/components/auth/AuthDivider";
+import { SsoAuthButton } from "@/app/components/auth/SsoAuthButton";
 import { GoogleAuthButton } from "@/app/components/auth/GoogleAuthButton";
 import { FieldLabel } from "@/app/components/ui/form-field";
 
@@ -231,6 +232,11 @@ function SignupContent() {
                             </PillButton>
                             <AuthDivider />
                             <GoogleAuthButton
+                                onError={setError}
+                                disabled={loading}
+                                onLoadingChange={setLoading}
+                            />
+                            <SsoAuthButton
                                 onError={setError}
                                 disabled={loading}
                                 onLoadingChange={setLoading}

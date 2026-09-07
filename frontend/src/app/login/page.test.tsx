@@ -20,6 +20,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/lib/authApi", () => ({
     login,
     startGoogleOAuth,
+    getAuthConfiguration: vi.fn().mockResolvedValue({ ssoEnabled: false }),
 }));
 
 vi.mock("@/app/contexts/AuthContext", () => ({

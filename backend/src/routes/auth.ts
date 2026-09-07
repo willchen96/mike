@@ -10,6 +10,8 @@ import { consumeAuthHandoff, issueAuthHandoff } from "../lib/authHandoff";
 import { requestOriginIsWordAddin } from "../lib/origins";
 import { requireAuth } from "../middleware/auth";
 import { requireTrustedOrigin } from "../middleware/trustedOrigin";
+import { ssoConfiguration, ssoDomainSchema } from "../lib/ssoConfig";
+import { sendInternalError } from "../lib/httpError";
 
 export const authRouter = Router();
 
@@ -184,7 +186,87 @@ authRouter.post("/signup", async (req, res) => {
   }
 });
 
+// Public presentation settings only; provider administration remains in GoTrue.
+authRouter.get("/config", (_req, res) => {
+  try {
+    const config = ssoConfiguration();
+    res.json({
+      ssoEnabled: config.enabled,
+      ssoButtonLabel: config.buttonLabel,
+      ssoDomainRequired: config.enabled && !config.defaultDomain,
+    });
+  } catch {
+    // Do not pass configuration values or provider diagnostics to the logger.
+    sendInternalError(res, new Error("Invalid SSO configuration"));
+  }
+});
+
+const ssoRequestSchema = z.object({
+  provider: z.literal("sso"),
+  domain: ssoDomainSchema.optional(),
+});
+
+async function startSso(req: Request, res: Response) {
+  try {
+    const config = ssoConfiguration();
+    if (!config.enabled) {
+      return res
+        .status(403)
+        .json({
+          code: "sso_disabled",
+          detail: "Single sign-on is not enabled.",
+        });
+    }
+    const parsed = ssoRequestSchema.safeParse(req.body);
+    if (!parsed.success) return invalidBody(res);
+    const domain = parsed.data.domain ?? config.defaultDomain;
+    if (!domain) {
+      return res
+        .status(400)
+        .json({
+          code: "sso_domain_required",
+          detail: "Enter your organization's domain.",
+        });
+    }
+    if (config.allowedDomains && !config.allowedDomains.includes(domain)) {
+      return res
+        .status(400)
+        .json({
+          code: "sso_domain_not_allowed",
+          detail: "Single sign-on is not available for this domain.",
+        });
+    }
+    const client = createRequestSupabase(req, res);
+    const { data, error } = await client.auth.signInWithSSO({
+      domain,
+      options: {
+        redirectTo: callbackUrl(req, req.body?.next, "/onboarding/profile"),
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) {
+      if (error.status && error.status >= 400 && error.status < 500) {
+        return res
+          .status(400)
+          .json({
+            code: "sso_unavailable",
+            detail: "Unable to start single sign-on for this domain.",
+          });
+      }
+      throw new Error("SSO provider request failed");
+    }
+    if (!data?.url) throw new Error("Missing SSO redirect");
+    return res.json({ url: data.url });
+  } catch {
+    return sendInternalError(
+      res,
+      new Error("SSO sign-in could not be started"),
+    );
+  }
+}
+
 authRouter.post("/oauth", async (req, res) => {
+  if (req.body?.provider === "sso") return startSso(req, res);
   if (req.body?.provider !== "google") return invalidBody(res);
   try {
     const client = createRequestSupabase(req, res);
