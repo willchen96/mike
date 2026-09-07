@@ -300,3 +300,17 @@ describe("normalizeRouterModels", () => {
         ).toEqual(["glm-5.3", "qwen3.8-max", "minimax-m3"]);
     });
 });
+
+
+describe("gateway profile defaults", () => {
+    it("replaces stale native preferences without requiring router selections", async () => {
+        vi.stubEnv("GATEWAY_BASE_URL", "http://localhost:8080/v1");
+        vi.stubEnv("GATEWAY_MODELS", "legal-chat=Legal chat");
+        vi.stubEnv("GATEWAY_DEFAULT_MODEL", "");
+        try {
+            const res = await request(app).get("/user/profile");
+            expect(res.status).toBe(200);
+            expect(res.body).toMatchObject({ titleModel: "gateway/legal-chat", tabularModel: "gateway/legal-chat", lastSelectedChatModel: "gateway/legal-chat" });
+        } finally { vi.unstubAllEnvs(); }
+    });
+});

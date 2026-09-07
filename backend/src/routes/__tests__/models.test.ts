@@ -346,3 +346,30 @@ describe("GET /models/opencode-go", () => {
         consoleError.mockRestore();
     });
 });
+
+
+describe("GET /models/gateway", () => {
+    afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+    it("exposes only the configured catalog without discovery or secrets", async () => {
+        vi.stubEnv("GATEWAY_BASE_URL", "https://gateway.example/v1");
+        vi.stubEnv("GATEWAY_MODELS", "legal-chat=Legal chat,vendor/model=Review");
+        vi.stubEnv("GATEWAY_LABEL", "Legal models");
+        vi.stubEnv("GATEWAY_API_KEY", "deployment-secret");
+        vi.stubEnv("GATEWAY_DEFAULT_MODEL", "vendor/model");
+        const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+        const res = await request(app).get("/models/gateway");
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ provider: "gateway", label: "Legal models", available: true,
+            defaultModel: "gateway/vendor/model", models: [
+                { id: "gateway/legal-chat", label: "Legal chat", group: "Legal models", source: "Legal models", provider: "gateway", available: true },
+                { id: "gateway/vendor/model", label: "Review", group: "Legal models", source: "Legal models", provider: "gateway", available: true },
+            ] });
+        expect(JSON.stringify(res.body)).not.toMatch(/deployment-secret|gateway.example|Authorization/);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+    it("returns an empty catalog when unconfigured", async () => {
+        for (const name of ["BASE_URL", "MODELS", "API_KEY", "LABEL", "DEFAULT_MODEL"]) vi.stubEnv(`GATEWAY_${name}`, "");
+        const res = await request(app).get("/models/gateway");
+        expect(res.body).toEqual({ provider: "gateway", label: "Gateway", available: false, defaultModel: null, models: [] });
+    });
+});

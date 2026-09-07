@@ -1,3 +1,4 @@
+import { gatewayConfig } from "../lib/llm/gateway";
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../middleware/auth";
@@ -487,7 +488,7 @@ tabularRouter.post("/", requireAuth, async (req, res) => {
         model?: string;
     };
 
-    if (typeof model !== "string" || !model.trim()) {
+    if ((typeof model !== "string" || !model.trim()) && !gatewayConfig()) {
         return void res.status(400).json({
             code: "model_required",
             detail: TABULAR_MODEL_REQUIRED_DETAIL,
@@ -1305,6 +1306,7 @@ tabularRouter.post(
             review.model,
             userId,
             db,
+            true,
         );
         if (!selectedModel.ok) {
             return void res

@@ -96,8 +96,10 @@ export default function ModelPreferencesPage() {
                     <div className="px-4 py-5">
                         <FieldLabel>Title generation model</FieldLabel>
                         <p className="text-xs text-gray-400 mb-2">
-                            By default, titles use the cheapest model from the
-                            chat provider. Choose a model here to override that.
+                            {profile?.apiKeys.gateway?.available
+                                ? `By default, titles use the ${profile.apiKeys.gateway.label} deployment default.`
+                                : "By default, titles use the cheapest model from the chat provider."}
+                            {" "}Choose a model here to override that.
                         </p>
                         <ModelPreferenceDropdown
                             value={canonicalModelId(
@@ -107,6 +109,7 @@ export default function ModelPreferencesPage() {
                             )}
                             options={[
                                 ...SETTINGS_MODELS,
+                                ...(profile?.apiKeys.gateway?.models ?? []),
                                 ...selectedOpenRouterOptions,
                                 ...selectedVercelOptions,
                                 ...selectedOpenCodeGoOptions,
@@ -115,7 +118,9 @@ export default function ModelPreferencesPage() {
                             apiKeys={profile?.apiKeys}
                             isSaving={savingField === "titleModel"}
                             isSaved={savedField === "titleModel"}
-                            emptyOptionLabel="Automatic — same provider as chat"
+                            emptyOptionLabel={profile?.apiKeys.gateway?.available
+                                ? "Automatic — deployment default"
+                                : "Automatic — same provider as chat"}
                             onChange={(id) =>
                                 handleModelChange("titleModel", id)
                             }
@@ -135,6 +140,7 @@ export default function ModelPreferencesPage() {
                             )}
                             options={[
                                 ...MODELS,
+                                ...(profile?.apiKeys.gateway?.models ?? []),
                                 ...selectedOpenRouterOptions,
                                 ...selectedVercelOptions,
                                 ...selectedOpenCodeGoOptions,

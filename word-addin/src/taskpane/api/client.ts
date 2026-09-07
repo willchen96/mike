@@ -260,7 +260,20 @@ export async function updateLastSelectedReasoningLevel(
   });
 }
 
+export interface GatewayCatalog {
+  provider: "gateway";
+  label: string;
+  available: boolean;
+  defaultModel: string | null;
+  models: { id: string; label: string; group: string; source: string; available: boolean }[];
+}
+
+export async function getGatewayModels(): Promise<GatewayCatalog> {
+  return apiRequest<GatewayCatalog>("/models/gateway");
+}
+
 export interface ApiKeyStatus {
+  gateway?: GatewayCatalog;
   claude: boolean;
   gemini: boolean;
   openai: boolean;

@@ -246,6 +246,7 @@ export function ModelToggle({
   const ollamaModels = useOllamaModels();
   const models = [
     ...MODELS,
+    ...(apiKeys?.gateway?.models ?? []),
     ...openRouterModelOptions(openRouterModels),
     ...vercelModelOptions(vercelModels),
     ...openCodeGoModelOptions(openCodeGoModels),
@@ -299,7 +300,7 @@ export function ModelToggle({
       onEmptyClick={
         onNoModelsClick ? () => onNoModelsClick(emptyReason) : undefined
       }
-      reasoningLevel={normalizedReasoningLevel}
+      reasoningLevel={value.startsWith("gateway/") ? undefined : normalizedReasoningLevel}
       onReasoningChange={onReasoningChange}
       reasoningLevels={supportedReasoningLevels}
     />

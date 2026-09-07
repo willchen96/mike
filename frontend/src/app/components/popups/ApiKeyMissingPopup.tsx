@@ -11,27 +11,30 @@ interface Props {
     provider: ModelProvider | null;
     /** Optional override for the body sentence. */
     message?: string;
+    gatewayLabel?: string;
 }
 
-export function ApiKeyMissingPopup({ open, onClose, provider, message }: Props) {
+export function ApiKeyMissingPopup({ open, onClose, provider, message, gatewayLabel }: Props) {
     const router = useRouter();
     if (!open) return null;
 
-    const providerName = provider ? providerLabel(provider) : "this provider";
+    const providerName = provider ? providerLabel(provider, gatewayLabel) : "this provider";
     const body =
         message ??
-        `You haven't added a ${providerName} API key yet. Add one in Settings to use this model.`;
+        (provider === "gateway"
+            ? `${providerName} model is unavailable. Select a configured model or contact your deployment administrator.`
+            : `You haven't added a ${providerName} API key yet. Add one in Settings to use this model.`);
 
     const handleGoToSettings = () => {
         onClose();
-        router.push("/settings/byok");
+        router.push(provider === "gateway" ? "/settings/models" : "/settings/byok");
     };
 
     return (
         <WarningPopup
             open={open}
             onClose={onClose}
-            title="API key required"
+            title={provider === "gateway" ? "Model unavailable" : "API key required"}
             message={body}
             icon={
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600" />

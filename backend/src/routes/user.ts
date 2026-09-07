@@ -1,3 +1,6 @@
+import { gatewayAwarePreference } from "../lib/modelSelection";
+import { providerForModel } from "../lib/llm/models";
+import { isGatewayModelAvailable } from "../lib/llm/gateway";
 import crypto from "crypto";
 import { Router } from "express";
 import { requireAuth, requireMfaIfEnrolled } from "../middleware/auth";
@@ -581,6 +584,14 @@ function serializeProfile(
     apiKeyStatus?: ApiKeyStatus,
 ) {
     const creditsUsed = row.message_credits_used ?? 0;
+    const preference = (value: string | null | undefined) => gatewayAwarePreference(
+        normalizeOptionalModelPreference(value, routerModels),
+        (model) => {
+            const provider = providerForModel(model);
+            return provider === "gateway" ? isGatewayModelAvailable(model)
+                : provider === "ollama" || !apiKeyStatus || !!apiKeyStatus[provider];
+        },
+    );
     return {
         displayName: row.display_name,
         organisation: row.organisation,
@@ -605,18 +616,9 @@ function serializeProfile(
         creditsResetDate: row.credits_reset_date,
         creditsRemaining: Math.max(MONTHLY_CREDIT_LIMIT - creditsUsed, 0),
         tier: row.tier || "Free",
-        titleModel: normalizeOptionalModelPreference(
-            row.title_model,
-            routerModels,
-        ),
-        tabularModel: normalizeOptionalModelPreference(
-            row.tabular_model,
-            routerModels,
-        ),
-        lastSelectedChatModel: normalizeOptionalModelPreference(
-            row.last_selected_chat_model,
-            routerModels,
-        ),
+        titleModel: preference(row.title_model),
+        tabularModel: preference(row.tabular_model),
+        lastSelectedChatModel: preference(row.last_selected_chat_model),
         lastSelectedReasoningLevel:
             normalizeReasoningLevel(row.last_selected_reasoning_level) ??
             "high",

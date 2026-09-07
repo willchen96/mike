@@ -140,6 +140,7 @@ function emptyApiKeys(): ApiKeyState {
 function toProfile(data: ApiUserProfile): UserProfile {
     const { apiKeyStatus, ...profile } = data;
     const apiKeys = emptyApiKeys();
+    apiKeys.gateway = apiKeyStatus.gateway;
     for (const provider of API_KEY_PROVIDERS) {
         apiKeys[provider] = {
             configured: !!apiKeyStatus[provider],

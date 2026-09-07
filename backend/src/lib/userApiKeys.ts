@@ -1,3 +1,4 @@
+import { gatewayCatalog } from "./llm/gateway";
 import crypto from "crypto";
 import { createServerSupabase } from "./supabase";
 import type { UserApiKeys } from "./llm";
@@ -13,6 +14,7 @@ export type ApiKeyProvider =
     | "courtlistener";
 export type ApiKeySource = "user" | "env" | null;
 export type ApiKeyStatus = Record<ApiKeyProvider, boolean> & {
+    gateway?: ReturnType<typeof gatewayCatalog>;
     sources: Record<ApiKeyProvider, ApiKeySource>;
 };
 
@@ -162,6 +164,8 @@ export async function getUserApiKeyStatus(
         }
     }
 
+    const gateway = gatewayCatalog();
+    if (gateway.available) status.gateway = gateway;
     return status;
 }
 

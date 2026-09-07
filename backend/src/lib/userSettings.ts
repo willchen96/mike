@@ -7,6 +7,8 @@ import {
 } from "./routerModels";
 import {
     normalizeOptionalModelPreference,
+    gatewayAwarePreference,
+    hasApiKeyForModel,
     normalizeReasoningLevel,
 } from "./modelSelection";
 
@@ -87,19 +89,14 @@ export async function getUserModelSettings(
         }
     }
 
+    const preference = (value: string | null | undefined) => gatewayAwarePreference(
+        normalizeOptionalModelPreference(value, routerModels),
+        (model) => hasApiKeyForModel(model, api_keys),
+    );
     return {
-        title_model: normalizeOptionalModelPreference(
-            data?.title_model,
-            routerModels,
-        ),
-        tabular_model: normalizeOptionalModelPreference(
-            data?.tabular_model,
-            routerModels,
-        ),
-        last_selected_chat_model: normalizeOptionalModelPreference(
-            data?.last_selected_chat_model,
-            routerModels,
-        ),
+        title_model: preference(data?.title_model),
+        tabular_model: preference(data?.tabular_model),
+        last_selected_chat_model: preference(data?.last_selected_chat_model),
         last_selected_reasoning_level: normalizeReasoningLevel(
             data?.last_selected_reasoning_level,
         ),

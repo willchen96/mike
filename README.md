@@ -21,6 +21,7 @@ Website: [mikeoss.com](https://mikeoss.com)
 - Verify citations and research US case law with CourtListener
 - Work from Microsoft Word with the beta task-pane add-in
 - Run supported language models locally through Ollama
+- Configure deployment-managed models through an OpenAI-compatible gateway (LiteLLM, Bifrost, or Portkey); see [gateway setup](docs/deployment.md#openai-compatible-gateway)
 
 ## Quick start
 
@@ -42,7 +43,7 @@ and local email capture without requiring managed infrastructure.
    ```
 
 3. Add an Anthropic, Gemini, or OpenAI API key to `backend/.env`, unless you
-   plan to use Ollama exclusively.
+   plan to use Ollama or an unauthenticated local gateway exclusively.
 
 4. Start the stack:
 

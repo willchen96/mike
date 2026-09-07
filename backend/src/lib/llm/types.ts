@@ -9,6 +9,7 @@ export type Provider =
     | "openrouter"
     | "vercel"
     | "opencode-go"
+    | "gateway"
     | "ollama";
 
 export const REASONING_LEVELS = [

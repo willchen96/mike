@@ -182,6 +182,7 @@ export function isAllowedModelId(id: string): boolean {
   return (
     ALLOWED_MODEL_IDS.has(id) ||
     id.startsWith("ollama/") ||
+    id.startsWith("gateway/") ||
     ROUTER_SLUGS.some((slug) => id.startsWith(`${slug}/`))
   );
 }
@@ -196,6 +197,7 @@ export function isModelAvailable(
   // blocking sends here on a flaky WKWebView request would brick the composer
   // for requests the backend would happily accept.
   if (!status) return true;
+  if (modelId.startsWith("gateway/")) return !!status.gateway?.models.some((model) => model.id === modelId && model.available);
   if (modelId.startsWith("openrouter/")) return !!status.openrouter;
   if (modelId.startsWith("vercel/")) return !!status.vercel;
   if (modelId.startsWith("opencode-go/")) return !!status["opencode-go"];
@@ -206,7 +208,8 @@ export function isModelAvailable(
   return !!status.openai;
 }
 
-export function missingModelProvider(modelId: string): string {
+export function missingModelProvider(modelId: string, gatewayLabel = "Gateway"): string {
+  if (modelId.startsWith("gateway/")) return gatewayLabel;
   const group = STATIC_MODELS.find((item) => item.id === modelId)?.group;
   if (modelId.startsWith("openrouter/") || group === "OpenRouter") {
     return "OpenRouter";

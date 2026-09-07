@@ -11,9 +11,11 @@ export type ModelProvider =
     | "openrouter"
     | "vercel"
     | "opencode-go"
+    | "gateway"
     | "ollama";
 
 export function getModelProvider(modelId: string): ModelProvider | null {
+    if (modelId.startsWith("gateway/")) return "gateway";
     if (modelId.startsWith("ollama/")) return "ollama"; // dynamic, not in the static list
     if (modelId.startsWith("openrouter/")) return "openrouter";
     if (modelId.startsWith("vercel/")) return "vercel";
@@ -27,6 +29,7 @@ export function isModelAvailable(
     modelId: string,
     apiKeys: ApiKeyState,
 ): boolean {
+    if (modelId.startsWith("gateway/")) return !!apiKeys.gateway?.models.some((model) => model.id === modelId && model.available);
     const provider = getModelProvider(modelId);
     if (!provider) return false;
     return isProviderAvailable(provider, apiKeys);
@@ -36,11 +39,13 @@ export function isProviderAvailable(
     provider: ModelProvider,
     apiKeys: ApiKeyState,
 ): boolean {
+    if (provider === "gateway") return !!apiKeys.gateway?.available;
     if (provider === "ollama") return true; // local, no key needed
     return !!apiKeys[provider]?.configured;
 }
 
-export function providerLabel(provider: ModelProvider): string {
+export function providerLabel(provider: ModelProvider, gatewayLabel = "Gateway"): string {
+    if (provider === "gateway") return gatewayLabel;
     if (provider === "claude") return "Anthropic (Claude)";
     if (provider === "openai") return "OpenAI";
     if (provider === "openrouter") return "OpenRouter";
