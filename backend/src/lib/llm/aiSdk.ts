@@ -12,7 +12,42 @@ import type {
 } from "./types";
 import { createRawLlmStreamRecorder, logRawLlmStream } from "./rawStreamLog";
 
-const MAX_OUTPUT_TOKENS = 16_384;
+/**
+ * Conservative output ceiling, used for any model whose real ceiling we do not
+ * know. Kept low because exceeding a model's own limit is a hard provider
+ * error, not a truncation.
+ */
+const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
+
+/**
+ * Gemini's ceiling. Every Gemini 2.5 and 3 model accepts 65,536 output tokens
+ * (the figure @ai-sdk/google uses for its own thinking-budget math).
+ *
+ * This is not a nicety: Gemini counts *thinking* tokens against
+ * maxOutputTokens, so a ceiling sized for the prose alone lets a long
+ * deliberation consume the whole budget. The turn then ends with no text and
+ * no tool call — which surfaces as a silently empty answer, not as an error.
+ */
+const GEMINI_MAX_OUTPUT_TOKENS = 65_536;
+
+/**
+ * Router ids carry the upstream model, so a Gemini reached through OpenRouter
+ * or the Vercel gateway gets the same ceiling as a native one.
+ */
+const GEMINI_MODEL_ID = /(?:^|\/)gemini-/;
+
+/**
+ * A model that ships after this code does still needs a way to raise its own
+ * ceiling. LLM_MAX_OUTPUT_TOKENS overrides every value here.
+ */
+export function maxOutputTokensFor(provider: Provider, modelId: string): number {
+  const override = Number(process.env.LLM_MAX_OUTPUT_TOKENS);
+  if (Number.isSafeInteger(override) && override > 0) return override;
+  if (provider === "gemini" || GEMINI_MODEL_ID.test(modelId)) {
+    return GEMINI_MAX_OUTPUT_TOKENS;
+  }
+  return DEFAULT_MAX_OUTPUT_TOKENS;
+}
 
 /** Ensure a proxy-closed final SSE event is still visible to SDK parsers. */
 export async function aiSdkFetch(
@@ -275,7 +310,7 @@ export async function streamAiSdk(
       system: params.systemPrompt,
       messages: params.messages,
       tools,
-      maxOutputTokens: MAX_OUTPUT_TOKENS,
+      maxOutputTokens: maxOutputTokensFor(config.provider, config.modelId),
       stopWhen: sdk.stepCountIs(params.maxIterations ?? 10),
       abortSignal: params.abortSignal,
       reasoning:
