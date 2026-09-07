@@ -59,7 +59,7 @@ jobs:
       # the other 27 of the 31 specs. Setup: docs/e2e-ci.md, "Enable the LLM specs".
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
