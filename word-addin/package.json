@@ -8,8 +8,9 @@
   "scripts": {
     "dev": "webpack serve --mode development",
     "dev:server": "webpack serve --mode development",
-    "typecheck": "npm run typecheck:app && npm run typecheck:e2e",
+    "typecheck": "npm run typecheck:app && npm run typecheck:e2e && npm run check:tokens",
     "typecheck:app": "tsc --noEmit -p tsconfig.json",
+    "check:tokens": "node scripts/check-token-drift.mjs",
     "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",
     "build": "npm run typecheck && webpack --mode production && node scripts/build-manifest.js",
     "prestart": "node scripts/clear-sideload.js",

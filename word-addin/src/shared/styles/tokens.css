@@ -2,9 +2,13 @@
  * Shared design tokens for the Mike design system.
  *
  * A local subset of the web app's tokens (frontend/src/app/globals.css),
- * adapted for the Word add-in's independently bundled task pane. Keep values
- * in sync with globals.css. Import AFTER `@import "tailwindcss";` so the
- * `@theme` mappings and base layer apply.
+ * adapted for the Word add-in's independently bundled task pane. The web app
+ * is the source of truth: every value here must match globals.css exactly,
+ * and `npm run check:tokens` (scripts/check-token-drift.mjs, part of
+ * `npm run typecheck` and therefore of every build and CI run) fails on any
+ * drift — do not edit values here except to mirror a globals.css change.
+ * Import AFTER `@import "tailwindcss";` so the `@theme` mappings and base
+ * layer apply.
  *
  * Fonts: `--font-inter` / `--font-eb-garamond` are provided by the host app
  * (the web supplies them via next/font; the add-in via a Google Fonts <link>
@@ -66,11 +70,11 @@
 
 :root {
     --radius: 0.625rem;
-    --app-background: #fafafa;
+    --app-background: #f9fafb;
     --app-surface: #fdfdfe;
-    --app-surface-hover: #f5f6f8;
-    --app-surface-active: #eceef2;
-    --app-floating: rgba(253, 253, 254, 0.82);
+    --app-surface-hover: #f9fafb;
+    --app-surface-active: #eff0f3;
+    --app-floating: #fefefe;
     --background: oklch(0.985 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);

@@ -1,6 +1,10 @@
 "use client";
 
 import * as React from "react";
+import {
+    LIQUID_GLASS_HOVER_CLASS,
+    LIQUID_GLASS_SUBTLE_CLASS,
+} from "@mike/liquid-glass-ui";
 import { cn } from "../lib/utils";
 
 type TabPillButtonProps = React.ComponentProps<"button"> & {
@@ -10,7 +14,11 @@ type TabPillButtonProps = React.ComponentProps<"button"> & {
 /**
  * Duplicated from the web app's glass pill tab
  * (frontend/src/app/components/ui/tab-pill-button.tsx) so the pane's tab bar
- * looks exactly like the web's. Only the `cn` import path differs.
+ * looks exactly like the web's. The visuals come from the SAME shared
+ * LiquidGlassUI constants and classes as the web (the add-in imports
+ * LiquidGlassUI.css and lists LiquidGlassUI.ts as a Tailwind source), so
+ * only the import paths may differ from the web file — keep the class
+ * strings below byte-identical to the web's when either side changes.
  */
 export function TabPillButton({
     active,
@@ -22,15 +30,15 @@ export function TabPillButton({
         active === true
             ? "border-white/80 bg-white text-gray-900"
             : active === false
-              ? "border-white/60 bg-white/45 text-gray-400 hover:bg-white/65 hover:text-gray-700"
-              : "border-white/70 bg-white/65 text-gray-700 hover:bg-white hover:text-gray-900";
+              ? `${LIQUID_GLASS_HOVER_CLASS} text-gray-400 hover:text-gray-700`
+              : `${LIQUID_GLASS_HOVER_CLASS} text-gray-700 hover:text-gray-900`;
 
     return (
         <button
             type={type}
             aria-pressed={active}
             className={cn(
-                "inline-flex h-7 items-center justify-center gap-1.5 rounded-full border px-3 text-xs font-medium shadow-[0_3px_9px_rgba(15,23,42,0.05),inset_0_1px_0_rgba(255,255,255,0.86),inset_0_-1px_0_rgba(255,255,255,0.58)] backdrop-blur-xl transition-all active:scale-[0.98] disabled:cursor-default disabled:opacity-40 disabled:active:scale-100",
+                `inline-flex h-7 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium ${LIQUID_GLASS_SUBTLE_CLASS} backdrop-blur-xl transition-all active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-2 disabled:cursor-default disabled:opacity-40 disabled:active:scale-100`,
                 stateClass,
                 className,
             )}

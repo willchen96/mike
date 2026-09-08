@@ -42,6 +42,9 @@
       "@mike/glass-card-ui": [
         "../frontend/src/shared/ui/GlassCardUI.tsx"
       ],
+      "@mike/liquid-glass-ui": [
+        "../frontend/src/shared/ui/LiquidGlassUI.ts"
+      ],
       "@mike/modal-ui": [
         "../frontend/src/shared/ui/ModalUI.tsx"
       ],
