@@ -373,22 +373,76 @@ const guardedAgent = new Agent({
 // connection to a connect-time-validated address, and refuses to auto-follow
 // redirects (`redirect: "manual"`) so a 3xx to an internal host cannot smuggle
 // egress past the guard.
+// Redirects are followed here rather than by the runtime so that every hop is
+// re-checked by validateRemoteMcpUrl — `redirect: "follow"` would let a public
+// URL bounce us to a private address the guard never saw. Refusing outright is
+// not an option either: RFC 8414 well-known discovery paths are commonly served
+// as redirects, and the MCP SDK treats any non-4xx as fatal, so a single 302
+// aborts discovery even when a later candidate URL would have worked.
+const MAX_MCP_REDIRECTS = 5;
+
 export async function guardedFetch(
     input: Parameters<typeof fetch>[0],
     init?: Parameters<typeof fetch>[1],
 ) {
-    const url =
+    const isRequest = typeof input === "object" && input instanceof Request;
+    let url =
         typeof input === "string"
             ? input
             : input instanceof URL
               ? input.toString()
               : input.url;
     await validateRemoteMcpUrl(url);
-    return fetch(input, {
+    let response = await fetch(input, {
         ...init,
         redirect: "manual",
         dispatcher: guardedAgent,
     } as RequestInit);
+
+    const method = (
+        init?.method ??
+        (isRequest ? input.method : null) ??
+        "GET"
+    ).toUpperCase();
+    // Only bodyless methods are followed. Replaying a POST body across a
+    // redirect is not something any MCP flow needs, and skipping it avoids
+    // having to reason about 307/308 body semantics.
+    if (method !== "GET" && method !== "HEAD") return response;
+
+    const baseHeaders = new Headers(
+        (init?.headers as HeadersInit | undefined) ??
+            (isRequest ? input.headers : undefined),
+    );
+
+    for (let hop = 0; hop < MAX_MCP_REDIRECTS; hop++) {
+        if (response.status < 300 || response.status > 399) return response;
+        const location = response.headers.get("location");
+        if (!location) return response;
+
+        let target: string;
+        try {
+            target = new URL(location, url).toString();
+        } catch {
+            return response;
+        }
+        await response.body?.cancel().catch(() => undefined);
+
+        const validated = await validateRemoteMcpUrl(target);
+        const headers = new Headers(baseHeaders);
+        // Never carry credentials to a different origin.
+        if (new URL(validated).origin !== new URL(url).origin) {
+            headers.delete("authorization");
+        }
+        url = validated;
+        response = await fetch(validated, {
+            ...init,
+            method,
+            headers,
+            redirect: "manual",
+            dispatcher: guardedAgent,
+        } as RequestInit);
+    }
+    return response;
 }
 
 export function base64Url(buffer: Buffer) {

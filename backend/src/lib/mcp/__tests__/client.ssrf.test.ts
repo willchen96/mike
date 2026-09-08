@@ -178,3 +178,121 @@ describe("mcpOAuthCallbackUrl", () => {
         );
     });
 });
+
+describe("guardedFetch redirect following", () => {
+    function redirectTo(location: string, status = 302) {
+        return new Response(null, { status, headers: { location } });
+    }
+
+    it("follows a redirect and returns the final response", async () => {
+        resolvesTo("93.184.216.34");
+        const fetchSpy = vi
+            .spyOn(globalThis, "fetch")
+            .mockResolvedValueOnce(
+                redirectTo("https://public.example.com/mcp/.well-known/x"),
+            )
+            .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+        const res = await guardedFetch(
+            "https://public.example.com/.well-known/x/mcp",
+        );
+
+        expect(res.status).toBe(200);
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+        expect(fetchSpy.mock.calls[1][0]).toBe(
+            "https://public.example.com/mcp/.well-known/x",
+        );
+    });
+
+    it("resolves a relative Location against the current URL", async () => {
+        resolvesTo("93.184.216.34");
+        const fetchSpy = vi
+            .spyOn(globalThis, "fetch")
+            .mockResolvedValueOnce(redirectTo("/elsewhere", 307))
+            .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+        await guardedFetch("https://public.example.com/a/b");
+
+        expect(fetchSpy.mock.calls[1][0]).toBe(
+            "https://public.example.com/elsewhere",
+        );
+    });
+
+    it("re-validates each hop and refuses a redirect to a private address", async () => {
+        lookupMock.mockImplementation(async (hostname: string) =>
+            hostname === "public.example.com"
+                ? [{ address: "93.184.216.34", family: 4 }]
+                : [{ address: "169.254.169.254", family: 4 }],
+        );
+        vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+            redirectTo("https://internal.example.com/latest/meta-data/"),
+        );
+
+        await expect(
+            guardedFetch("https://public.example.com/mcp"),
+        ).rejects.toThrow(/blocked network address/);
+    });
+
+    it("drops the Authorization header when the origin changes", async () => {
+        resolvesTo("93.184.216.34");
+        const fetchSpy = vi
+            .spyOn(globalThis, "fetch")
+            .mockResolvedValueOnce(redirectTo("https://other.example.com/x"))
+            .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+        await guardedFetch("https://public.example.com/mcp", {
+            headers: { authorization: "Bearer secret", accept: "application/json" },
+        });
+
+        const headers = new Headers(
+            (fetchSpy.mock.calls[1][1] as RequestInit).headers,
+        );
+        expect(headers.get("authorization")).toBeNull();
+        expect(headers.get("accept")).toBe("application/json");
+    });
+
+    it("keeps the Authorization header on a same-origin redirect", async () => {
+        resolvesTo("93.184.216.34");
+        const fetchSpy = vi
+            .spyOn(globalThis, "fetch")
+            .mockResolvedValueOnce(redirectTo("https://public.example.com/x"))
+            .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+        await guardedFetch("https://public.example.com/mcp", {
+            headers: { authorization: "Bearer secret" },
+        });
+
+        const headers = new Headers(
+            (fetchSpy.mock.calls[1][1] as RequestInit).headers,
+        );
+        expect(headers.get("authorization")).toBe("Bearer secret");
+    });
+
+    it("does not follow redirects for non-GET requests", async () => {
+        resolvesTo("93.184.216.34");
+        const fetchSpy = vi
+            .spyOn(globalThis, "fetch")
+            .mockResolvedValue(redirectTo("https://public.example.com/x"));
+
+        const res = await guardedFetch("https://public.example.com/mcp", {
+            method: "POST",
+            body: "{}",
+        });
+
+        expect(res.status).toBe(302);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops after the redirect cap instead of looping forever", async () => {
+        resolvesTo("93.184.216.34");
+        const fetchSpy = vi
+            .spyOn(globalThis, "fetch")
+            .mockResolvedValue(redirectTo("https://public.example.com/loop"));
+
+        const res = await guardedFetch("https://public.example.com/loop");
+
+        expect(res.status).toBe(302);
+        // 1 initial + MAX_MCP_REDIRECTS follows.
+        expect(fetchSpy).toHaveBeenCalledTimes(6);
+    });
+});
