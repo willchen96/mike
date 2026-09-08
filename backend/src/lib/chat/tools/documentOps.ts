@@ -553,12 +553,7 @@ export async function generateDocx(
       }
     }
     const docId = crypto.randomUUID().replace(/-/g, "");
-    const safeTitle =
-      title
-        .replace(/[^a-zA-Z0-9 -]/g, "")
-        .trim()
-        .slice(0, 64) || "document";
-    const filename = `${safeTitle}.docx`;
+    const filename = safeGeneratedFilename(title, "docx");
     const key = generatedDocKey(userId, docId, filename);
 
     await uploadFile(
@@ -632,14 +627,48 @@ export async function generateDocx(
   }
 }
 
+const GENERATED_FILENAME_MAX_UNITS = 64;
+
+const graphemeSegmenter = new Intl.Segmenter(undefined, {
+  granularity: "grapheme",
+});
+
+/**
+ * Filename stem for a generated document.
+ *
+ * The title is prose the user asked for, so the stem keeps letters, marks and
+ * numbers in any script alongside the spaces and hyphens the ASCII-only
+ * version already allowed, and still drops path separators, control and
+ * formatting characters, and punctuation. Normalization is NFC rather than
+ * NFKC: "e" + U+0301 becomes "é", but fullwidth and circled characters stay
+ * themselves instead of being folded into ASCII.
+ *
+ * The length bound walks whole grapheme clusters, so a truncated stem can
+ * never end in half a character — half of a supplementary-plane letter is an
+ * unpaired surrogate, which the download header's percent-encoding cannot
+ * represent.
+ */
+function generatedFilenameStem(title: string): string {
+  const allowed = title
+    .normalize("NFC")
+    .replace(/[^\p{L}\p{M}\p{N} -]/gu, "")
+    // Filtering can leave a mark next to a base it was not adjacent to.
+    .normalize("NFC")
+    .trim();
+
+  let stem = "";
+  for (const { segment } of graphemeSegmenter.segment(allowed)) {
+    if (stem.length + segment.length > GENERATED_FILENAME_MAX_UNITS) break;
+    stem += segment;
+  }
+
+  // Marks and spaces alone are not a name anyone can read.
+  return /^[\p{M}\s]*$/u.test(stem) ? "" : stem;
+}
+
 export function safeGeneratedFilename(title: string, extension: string) {
   const rawTitle = typeof title === "string" ? title : "document";
-  const safeTitle =
-    rawTitle
-      .replace(/[^a-zA-Z0-9 -]/g, "")
-      .trim()
-      .slice(0, 64) || "document";
-  return `${safeTitle}.${extension}`;
+  return `${generatedFilenameStem(rawTitle) || "document"}.${extension}`;
 }
 
 function xmlEscape(value: unknown) {
