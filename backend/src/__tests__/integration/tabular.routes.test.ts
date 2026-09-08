@@ -251,6 +251,22 @@ describe("tabular.routes", () => {
 
     // ── POST /tabular-review (create) ─────────────────────────────────────
     describe("POST /tabular-review", () => {
+        it("uses a configured gateway default when creation omits the model", async () => {
+            vi.stubEnv("GATEWAY_BASE_URL", "http://localhost:8080/v1");
+            vi.stubEnv("GATEWAY_MODELS", "legal-chat");
+            vi.stubEnv("GATEWAY_DEFAULT_MODEL", "");
+            try {
+                getUserModelSettings.mockResolvedValue({ tabular_model: null, api_keys: {} });
+                supabaseState.tables.tabular_reviews = { data: { id: "r-gateway", document_ids: [] }, error: null };
+                const res = await request(app).post("/tabular-review").set(...AUTH)
+                    .send({ title: "Gateway review", document_ids: [], columns_config: [] });
+                expect(res.status).toBe(201);
+                expect(supabaseState.inserts).toContainEqual(expect.objectContaining({
+                    table: "tabular_reviews", payload: expect.objectContaining({ model: "gateway/legal-chat" }),
+                }));
+            } finally { vi.unstubAllEnvs(); }
+        });
+
         it("rejects creation without an explicit model", async () => {
             const res = await request(app)
                 .post("/tabular-review")

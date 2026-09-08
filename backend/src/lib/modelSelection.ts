@@ -1,3 +1,4 @@
+import { gatewayConfig, isGatewayModelAvailable } from "./llm/gateway";
 import {
     CLAUDE_LOW_MODELS,
     GEMINI_LOW_MODELS,
@@ -76,6 +77,7 @@ export function hasApiKeyForModel(
     apiKeys: UserApiKeys,
 ): boolean {
     const provider = providerForModel(model);
+    if (provider === "gateway") return isGatewayModelAvailable(model);
     return provider === "ollama" || !!apiKeys[provider]?.trim();
 }
 
@@ -83,7 +85,7 @@ type EffectiveChatModelResult =
     | {
           ok: true;
           model: string;
-          source: "request" | "chat" | "last_selected";
+          source: "request" | "chat" | "last_selected" | "gateway";
       }
     | {
           ok: false;
@@ -93,9 +95,9 @@ type EffectiveChatModelResult =
       };
 
 /**
- * Resolve a chat turn without inventing a product default. An explicit
+ * Resolve a chat turn, using a configured deployment gateway as the final fallback. An explicit
  * request is authoritative. Otherwise the chat's saved model wins, with the
- * one profile-level last-selected model as the only fallback.
+ * one profile-level last-selected model before the deployment fallback.
  */
 export async function resolveEffectiveChatModel(args: {
     requested?: string | null;
@@ -113,7 +115,9 @@ export async function resolveEffectiveChatModel(args: {
                 ok: false,
                 status: 400,
                 code: "model_unavailable",
-                detail: `Model "${requestedText}" is not available. Select another model.`,
+                detail: requestedText.startsWith("gateway/")
+                    ? `${gatewayConfig()?.label ?? "Gateway"} model is not available. Select a configured model.`
+                    : `Model "${requestedText}" is not available. Select another model.`,
             };
         }
         try {
@@ -165,6 +169,9 @@ export async function resolveEffectiveChatModel(args: {
         }
     }
 
+    const gateway = gatewayConfig();
+    if (gateway) return { ok: true, model: gateway.defaultModel, source: "gateway" };
+
     return {
         ok: false,
         status: 400,
@@ -178,7 +185,8 @@ export async function resolveEffectiveChatModel(args: {
  *
  * A saved title preference is an explicit override. Otherwise first-party
  * chat models map to that provider's cheapest title-tier model. Routers and
- * local models reuse the exact chat model because Mike cannot safely infer a
+ * local models reuse the exact chat model; deployment gateways use their configured
+ * default. Mike cannot safely infer a
  * cheaper equivalent within an external/dynamic catalog.
  */
 export function titleModelForChat(
@@ -200,10 +208,22 @@ export function titleModelForChat(
             return GEMINI_LOW_MODELS[0];
         case "openai":
             return OPENAI_LOW_MODELS[0];
+        case "gateway":
+            return gatewayConfig()!.defaultModel;
         case "openrouter":
         case "vercel":
         case "opencode-go":
         case "ollama":
             return resolvedChatModel;
     }
+}
+
+/** Only configured deployments introduce a fallback for absent/unusable preferences. */
+export function gatewayAwarePreference(
+    model: string | null,
+    usable: (model: string) => boolean,
+): string | null {
+    const gateway = gatewayConfig();
+    if (!gateway || (model && usable(model))) return model;
+    return gateway.defaultModel;
 }

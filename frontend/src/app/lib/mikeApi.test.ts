@@ -55,6 +55,7 @@ import {
     getLibraryFolderPath,
     getMcpConnector,
     getOllamaModels,
+    getGatewayModels,
     getOpenCodeGoModels,
     getOpenRouterModels,
     getVercelModels,
@@ -2662,6 +2663,13 @@ describe("unwrapping and blob wrappers", () => {
         expect(workflowAddonAssetDisplayUrl("workflow/1", "asset 1")).toBe(
             "/api/workflow-addons/workflow%2F1/assets/asset%201/display",
         );
+    });
+
+    it("loads the deployment-managed gateway catalog", async () => {
+        const catalog = { provider: "gateway", label: "Legal models", available: true, defaultModel: "gateway/legal-chat", models: [] };
+        fetchMock.mockResolvedValue(jsonResponse(catalog));
+        await expect(getGatewayModels()).resolves.toEqual(catalog);
+        expect(lastFetchCall().url).toBe("/api/models/gateway");
     });
 
     it("getOllamaModels unwraps the models envelope", async () => {

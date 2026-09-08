@@ -367,6 +367,36 @@ describe("POST /chat — streaming endpoint", () => {
         );
     });
 
+    it("uses the deployment default for stale native preferences without a key", async () => {
+        vi.stubEnv("GATEWAY_BASE_URL", "http://localhost:8080/v1");
+        vi.stubEnv("GATEWAY_MODELS", "legal-chat,review");
+        vi.stubEnv("GATEWAY_DEFAULT_MODEL", "review");
+        try {
+            const settings = await import("../../lib/userSettings");
+            vi.mocked(settings.getUserModelSettings).mockResolvedValueOnce({
+                legal_research_us: false, title_model: null, tabular_model: null,
+                last_selected_chat_model: "gemini-3.7-flash", api_keys: {},
+            });
+            const res = await request(app).post("/chat").set("Authorization", "Bearer test")
+                .send({ messages: VALID_BODY.messages });
+            expect(res.status).toBe(200);
+            expect(runLLMStream).toHaveBeenCalledWith(expect.objectContaining({ model: "gateway/review" }));
+        } finally { vi.unstubAllEnvs(); }
+    });
+
+    it("rejects an explicit gateway model outside the deployment catalog", async () => {
+        vi.stubEnv("GATEWAY_BASE_URL", "http://localhost:8080/v1");
+        vi.stubEnv("GATEWAY_MODELS", "legal-chat");
+        vi.stubEnv("GATEWAY_DEFAULT_MODEL", "");
+        try {
+            const res = await request(app).post("/chat").set("Authorization", "Bearer test")
+                .send({ ...VALID_BODY, model: "gateway/unlisted" });
+            expect(res.status).toBe(400);
+            expect(res.body).toMatchObject({ code: "model_unavailable", detail: expect.stringContaining("not available") });
+            expect(runLLMStream).not.toHaveBeenCalled();
+        } finally { vi.unstubAllEnvs(); }
+    });
+
     it("rejects a chat without an explicit model before streaming", async () => {
         const res = await request(app)
             .post("/chat")

@@ -693,15 +693,28 @@ export type ApiKeyProvider =
     | "opencode-go"
     | "courtlistener";
 export type ApiKeySource = "user" | "env" | null;
+export interface GatewayCatalog {
+    provider: "gateway";
+    label: string;
+    available: boolean;
+    defaultModel: string | null;
+    models: { id: string; label: string; group: string; source: string; provider: "gateway"; available: boolean }[];
+}
+
+export async function getGatewayModels(): Promise<GatewayCatalog> {
+    return apiRequest<GatewayCatalog>("/models/gateway");
+}
+
 export type ApiKeyState = Record<
     ApiKeyProvider,
     {
         configured: boolean;
         source: ApiKeySource;
     }
->;
+> & { gateway?: GatewayCatalog };
 
 export type ApiKeyStatus = Record<ApiKeyProvider, boolean> & {
+    gateway?: GatewayCatalog;
     sources?: Partial<Record<ApiKeyProvider, ApiKeySource>>;
 };
 

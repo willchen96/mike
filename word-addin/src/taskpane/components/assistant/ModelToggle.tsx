@@ -68,6 +68,7 @@ export function ModelToggle({
     }));
     return [
       ...STATIC_MODELS,
+      ...(keyStatus?.gateway?.models ?? []),
       ...openRouterOptions,
       ...vercelOptions,
       ...openCodeGoOptions,
@@ -116,7 +117,7 @@ export function ModelToggle({
       compact={compact}
       emptyLabel="No Models"
       onEmptyClick={onNoModelsClick}
-      reasoningLevel={normalizedReasoningLevel}
+      reasoningLevel={value.startsWith("gateway/") ? undefined : normalizedReasoningLevel}
       onReasoningChange={onReasoningChange}
       reasoningLevels={supportedReasoningLevels}
     />

@@ -1,3 +1,4 @@
+import { gatewayCatalog } from "../lib/llm/gateway";
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
 import { ollamaAuthHeaders as authHeaders } from "../lib/llm/providers";
@@ -7,6 +8,13 @@ import { getUserApiKeys } from "../lib/userApiKeys";
 import { sendInternalError } from "../lib/httpError";
 
 export const modelsRouter = Router();
+modelsRouter.get("/gateway", requireAuth, (_req, res) => {
+    try {
+        res.json(gatewayCatalog());
+    } catch (error) {
+        sendInternalError(res, error);
+    }
+});
 
 function catalogPrice(value: unknown): string | undefined {
     if (typeof value !== "string" && typeof value !== "number") {

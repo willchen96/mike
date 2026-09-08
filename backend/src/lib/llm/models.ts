@@ -1,3 +1,4 @@
+import { isGatewayModelAvailable } from "./gateway";
 import { REASONING_LEVELS, type Provider, type ReasoningLevel } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -138,6 +139,7 @@ const ALL_MODELS = new Set<string>([
 // ---------------------------------------------------------------------------
 
 export function providerForModel(model: string): Provider {
+    if (model.startsWith("gateway/")) return "gateway";
     if (model.startsWith("ollama")) return "ollama";
     if (model.startsWith("openrouter/")) return "openrouter";
     if (model.startsWith("vercel/")) return "vercel";
@@ -164,6 +166,7 @@ export function resolveModel(
     if (
         canonical &&
         (ALL_MODELS.has(canonical) ||
+            isGatewayModelAvailable(canonical) ||
             canonical.startsWith("ollama/") ||
             /^(?:openrouter|vercel)\/[^\s/]+\/[^\s]+$/.test(canonical) ||
             // OpenCode Go's catalog ids are single-segment ("glm-5"), not the

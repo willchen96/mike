@@ -1,3 +1,4 @@
+import { gatewayModelId, requireGatewayModel } from "./gateway";
 import {
   aiSdkFetch,
   completeAiSdkText,
@@ -212,6 +213,28 @@ async function createProviderAdapter(
   apiKeys?: UserApiKeys,
 ): Promise<AiSdkAdapterConfig> {
   const provider = providerForModel(model);
+
+  if (provider === "gateway") {
+    const config = requireGatewayModel(model);
+    const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
+    const gateway = createOpenAICompatible({
+      name: "gateway",
+      baseURL: config.baseURL,
+      apiKey: config.apiKey,
+      fetch: aiSdkFetch,
+    });
+    return {
+      provider,
+      label: config.label,
+      model: gateway(gatewayModelId(model)),
+      modelId: model,
+      // Reasoning controls stay off until Mike can tell which models behind
+      // an arbitrary gateway accept them: the field is an optional OpenAI
+      // extension that stricter gateways reject outright, and levels are
+      // forwarded verbatim without Vercel's provider-specific translation.
+      supportsReasoning: false,
+    };
+  }
 
   if (provider === "claude") {
     return createAnthropicAdapter({

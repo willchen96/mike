@@ -176,7 +176,7 @@ describe("word add-in catalog parity", () => {
                         source: provider === configured ? "user" : null,
                     },
                 ]),
-            ) as ApiKeyState;
+            ) as unknown as ApiKeyState;
             for (const id of sharedIds) {
                 expect
                     .soft(
@@ -187,4 +187,18 @@ describe("word add-in catalog parity", () => {
             }
         }
     });
+});
+
+
+it("keeps gateway membership and availability identical across clients", () => {
+    const gateway = { provider: "gateway" as const, label: "Legal models", available: true, defaultModel: "gateway/legal-chat", models: [
+        { id: "gateway/legal-chat", label: "Legal chat", group: "Legal models", source: "Legal models", provider: "gateway" as const, available: true },
+        { id: "gateway/offline", label: "Offline", group: "Legal models", source: "Legal models", provider: "gateway" as const, available: false },
+    ] };
+    const web = { gateway } as ApiKeyState;
+    const addin = { gateway } as unknown as ApiKeyStatus;
+    for (const id of ["gateway/legal-chat", "gateway/offline", "gateway/unlisted"]) {
+        expect(addinIsModelAvailable(id, addin)).toBe(webIsModelAvailable(id, web));
+        expect(webIsModelAvailable(id, web)).toBe(id === "gateway/legal-chat");
+    }
 });

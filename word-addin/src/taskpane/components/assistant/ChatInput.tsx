@@ -405,7 +405,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       }
       if (!isModelAvailable(model, keyStatus)) {
         setModelError(
-          `Add a ${missingModelProvider(model)} API key before using this model.`,
+          model.startsWith("gateway/")
+            ? `${keyStatus?.gateway?.label ?? "Gateway"} model is unavailable. Select another model.`
+            : `Add a ${missingModelProvider(model)} API key before using this model.`,
         );
         return;
       }

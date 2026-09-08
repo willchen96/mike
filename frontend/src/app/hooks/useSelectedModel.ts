@@ -20,6 +20,7 @@ export function isAllowedModelId(id: string): boolean {
     return (
         ALLOWED_MODEL_IDS.has(id) ||
         id.startsWith("ollama/") ||
+        id.startsWith("gateway/") ||
         ROUTER_SLUGS.some((slug) => id.startsWith(`${slug}/`))
     );
 }

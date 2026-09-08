@@ -26,7 +26,7 @@ function keys(configured: Partial<Record<keyof ApiKeyState, boolean>>) {
                 source: configured[provider] ? "user" : null,
             },
         ]),
-    ) as ApiKeyState;
+    ) as unknown as ApiKeyState;
 }
 
 describe("ModelToggle responsive trigger", () => {
@@ -331,5 +331,24 @@ describe("ModelToggle provider grouping", () => {
 
         expect(screen.getByText("Direct")).toBeInTheDocument();
         expect(screen.getByText("OpenRouter")).toBeInTheDocument();
+    });
+});
+
+
+describe("deployment gateway models", () => {
+    it("shows configured names and group/source without router selections or reasoning", async () => {
+        const apiKeys = keys({});
+        apiKeys.gateway = { provider: "gateway", label: "Legal models", available: true, defaultModel: "gateway/legal-chat", models: [
+            { id: "gateway/legal-chat", label: "Legal chat", group: "Legal models", source: "Legal models", provider: "gateway", available: true },
+            { id: "gateway/offline", label: "Unavailable model", group: "Legal models", source: "Legal models", provider: "gateway", available: false },
+        ] };
+        const onChange = vi.fn();
+        render(<ModelToggle value="gateway/legal-chat" onChange={onChange} apiKeys={apiKeys} reasoningLevel="high" onReasoningChange={vi.fn()} />);
+        await userEvent.click(screen.getByRole("button", { name: "Choose model" }));
+        expect(screen.getAllByText("Legal models").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("Legal chat").length).toBeGreaterThan(0);
+        expect(screen.queryByText("Unavailable model")).not.toBeInTheDocument();
+        expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+        expect(screen.queryByText("Gemini 3.7 Flash")).not.toBeInTheDocument();
     });
 });

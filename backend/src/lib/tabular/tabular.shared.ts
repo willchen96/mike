@@ -4,6 +4,7 @@
 // (tabular.prompt.ts, tabular.extract.ts, …) and routes/tabular.ts can
 // import them.
 
+import { gatewayConfig } from "../llm/gateway";
 import { createServerSupabase } from "../supabase";
 import {
     providerForModel,
@@ -13,7 +14,11 @@ import {
 } from "../llm";
 import { getUserModelSettings } from "../userSettings";
 import { resolveRequestedModel } from "../routerModels";
-import { TABULAR_MODEL_REQUIRED_DETAIL } from "../modelSelection";
+import {
+    gatewayAwarePreference,
+    hasApiKeyForModel,
+    TABULAR_MODEL_REQUIRED_DETAIL,
+} from "../modelSelection";
 import { UserFacingError } from "../userFacingError";
 
 export type Db = ReturnType<typeof createServerSupabase>;
@@ -26,6 +31,7 @@ export type Log = Pick<Console, "error">;
 // ---------------------------------------------------------------------------
 
 function providerLabel(provider: Provider): string {
+    if (provider === "gateway") return gatewayConfig()?.label ?? "Gateway";
     if (provider === "claude") return "Anthropic";
     if (provider === "openai") return "OpenAI";
     if (provider === "openrouter") return "OpenRouter";
@@ -46,7 +52,7 @@ export function missingModelApiKey(
     apiKeys: UserApiKeys,
 ): MissingApiKey | null {
     const provider = providerForModel(model);
-    if (provider === "ollama") return null; // local, no key
+    if (provider === "ollama" || provider === "gateway") return null; // deployment-managed
     if (apiKeys[provider]?.trim()) return null;
     return {
         provider,
@@ -80,7 +86,20 @@ export async function validateSelectedModel(
     model: unknown,
     userId: string,
     db: Db,
+    stored = false,
 ): Promise<ValidatedModel | ModelValidationFailure> {
+    let settings: Awaited<ReturnType<typeof getUserModelSettings>> | undefined;
+    const text = typeof model === "string" ? model.trim() : "";
+    if (gatewayConfig() && (stored || !text)) {
+        settings = await getUserModelSettings(userId, db);
+        const candidate = stored
+            ? await resolveRequestedModel(text, "", userId, db, "fallback")
+            : settings.tabular_model;
+        model = gatewayAwarePreference(
+            candidate || null,
+            (candidateModel) => hasApiKeyForModel(candidateModel, settings!.api_keys),
+        );
+    }
     const requested = resolveModel(
         typeof model === "string" ? model.trim() : "",
         "",
@@ -122,7 +141,7 @@ export async function validateSelectedModel(
         throw error;
     }
 
-    const { api_keys: apiKeys } = await getUserModelSettings(userId, db);
+    const { api_keys: apiKeys } = settings ?? await getUserModelSettings(userId, db);
     const missingKey = missingModelApiKey(selected, apiKeys);
     if (missingKey) {
         return {

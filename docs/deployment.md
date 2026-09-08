@@ -9,7 +9,7 @@ storage instead of the infrastructure bundled with Docker Compose.
 - npm and Git
 - A Supabase project
 - A Cloudflare R2, MinIO, or other S3-compatible bucket
-- At least one supported model-provider API key, or an accessible Ollama server
+- At least one supported model-provider API key, an accessible Ollama server, or a configured OpenAI-compatible gateway
 - Optional: a CourtListener API token for case-law tools
 - LibreOffice when DOC/DOCX-to-PDF conversion is required
 
@@ -302,3 +302,61 @@ commented `worker` service demonstrating this.
 
 See [Safe local testing](safe-local-testing.md), the [security policy](../SECURITY.md),
 and [Troubleshooting](troubleshooting.md) for related guidance.
+
+
+## OpenAI-compatible gateway
+
+Mike supports one deployment-managed `gateway` provider using OpenAI Chat
+Completions, alongside the existing native providers, routers and Ollama.
+Examples include LiteLLM, Bifrost and Portkey. Vercel configuration and its
+transport are unchanged.
+
+Set these server-only variables in `backend/.env` for a direct backend install,
+or the root `.env` for Docker Compose. Compose already passes both env files to
+the backend; root values take precedence. No frontend environment values or
+schema migration are needed.
+
+```dotenv
+GATEWAY_BASE_URL=http://host.docker.internal:8080/v1
+GATEWAY_MODELS=legal-chat=Legal chat,vendor/model=Review model
+GATEWAY_LABEL=Gateway
+GATEWAY_DEFAULT_MODEL=legal-chat
+GATEWAY_API_KEY=
+```
+
+`GATEWAY_BASE_URL` and `GATEWAY_MODELS` are required together. Supply the full
+HTTP(S) API base, including `/v1` when required by your endpoint. Mike removes
+trailing slashes but does not append `/v1` or fall back to a public endpoint.
+URLs must not contain embedded credentials, query strings or fragments.
+`GATEWAY_API_KEY` is optional and, when present, is sent as a bearer token.
+Leave it empty only when the endpoint does not require authentication.
+
+The ordered catalog accepts comma-separated `id` or `id=Display name` entries.
+Whitespace around entries and names is trimmed; IDs must be non-empty, unique
+and contain no whitespace. Empty names/entries and extra equals signs are
+rejected. Commas and equals signs are reserved and cannot occur inside IDs or
+names. `GATEWAY_DEFAULT_MODEL` is a raw configured ID; omission selects the
+first entry. `GATEWAY_LABEL` defaults to “Gateway”. Restart the backend after
+changing deployment configuration.
+
+Authenticated users receive these models automatically in the web and Word
+pickers and model preferences, grouped and sourced under the configured label.
+The machine provider remains `gateway`. Stored IDs are `gateway/<raw-id>`;
+Mike removes exactly one prefix before forwarding, preserving aliases and
+nested IDs (including raw IDs beginning with `gateway/`). The server checks
+catalog membership for every invocation, independently of user router selections.
+Endpoint credentials are never exposed through catalog or profile responses.
+
+Usable saved preferences and explicit choices take precedence. When none are
+usable, configured gateway defaults cover chat, automatic titles/lightweight
+extractions, and tabular review, including stale native preferences without a
+usable key. Explicit unavailable requests return an error. An installation with
+no gateway configuration retains its existing model-selection behavior. Personal
+native keys remain supported; this feature does not enforce gateway-only use.
+
+There is no `/models` discovery or `GATEWAY_HEADERS` support in this version.
+Gateway models do not advertise reasoning or vision capabilities, and Mike does
+not send reasoning controls. Operators must configure models that support Mike's
+required tools. Validate streaming and a tool-call/result round trip against your
+actual endpoint before rollout; presence in the catalog does not prove tool
+support. Automated transport tests exercise an OpenAI-compatible HTTP fixture.

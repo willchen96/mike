@@ -193,3 +193,19 @@ describe("getUserModelSettings on an un-migrated database", () => {
         expect(settings.tabular_model).toBeNull();
     });
 });
+
+
+it("uses gateway defaults for unavailable saved title and tabular preferences", async () => {
+    vi.stubEnv("GATEWAY_BASE_URL", "http://localhost:8080/v1");
+    vi.stubEnv("GATEWAY_MODELS", "legal-chat,review");
+    vi.stubEnv("GATEWAY_DEFAULT_MODEL", "review");
+    getUserApiKeys.mockResolvedValue({});
+    try {
+        const settings = await getUserModelSettings("user-1", profileDb({
+            title_model: "claude-haiku-4-5", tabular_model: "gemini-3.7-flash",
+        }));
+        expect(settings.title_model).toBe("gateway/review");
+        expect(settings.tabular_model).toBe("gateway/review");
+        expect(settings.last_selected_chat_model).toBe("gateway/review");
+    } finally { vi.unstubAllEnvs(); }
+});

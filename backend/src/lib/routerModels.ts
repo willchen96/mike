@@ -1,3 +1,4 @@
+import { requireGatewayModel } from "./llm/gateway";
 import { createServerSupabase } from "./supabase";
 import { UserFacingError } from "./userFacingError";
 import { resolveModel } from "./llm/models";
@@ -69,6 +70,17 @@ export async function resolveRequestedModel(
     db: Db = createServerSupabase(),
     onOutsideSelection: "throw" | "fallback" = "fallback",
 ): Promise<string> {
+    if (requested?.startsWith("gateway/")) {
+        try {
+            requireGatewayModel(requested);
+            return requested;
+        } catch (error) {
+            if (onOutsideSelection === "throw" || !(error instanceof UserFacingError)) {
+                throw error;
+            }
+            return fallback;
+        }
+    }
     const resolved = resolveModel(requested, fallback);
     const router = routerForModelId(resolved);
     if (!router) return resolved;
