@@ -436,16 +436,40 @@ export async function runToolCalls(
           name: tc.function.name,
         })}\n\n`,
       );
-      const { content, event } = await executeMcpToolCall(
+      const { content, event, legalSource } = await executeMcpToolCall(
         userId,
         tc.function.name,
         args,
         db,
       );
+      let sourceCitation = "";
+      if (legalSource && docIndex) {
+        let handle = Object.entries(docIndex).find(
+          ([, document]) =>
+            document.document_id === legalSource.document.document_id,
+        )?.[0];
+        if (!handle) {
+          let index = Object.keys(docIndex).length;
+          while (docIndex[`doc-${index}`] || docStore.has(`doc-${index}`)) index++;
+          handle = `doc-${index}`;
+        }
+        docIndex[handle] = {
+          document_id: legalSource.document.document_id,
+          filename: legalSource.document.title,
+        };
+        docStore.set(handle, {
+          storage_path: "",
+          file_type: "text/plain",
+          filename: legalSource.document.title,
+          inline_text: legalSource.text,
+          panel_document: legalSource.document,
+        });
+        sourceCitation = `\n\nCanonical legal source: {"doc_id":"${handle}"}. Cite an exact quote from this source with that doc_id.`;
+      }
       toolResults.push({
         role: "tool",
         tool_call_id: tc.id,
-        content,
+        content: `${content}${sourceCitation}`,
       });
       mcpEvents.push(event);
       write(

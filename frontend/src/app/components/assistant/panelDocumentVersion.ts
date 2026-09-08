@@ -14,7 +14,13 @@ export async function resolvePanelDocumentVersion(
     loadVersions: (documentId: string) => Promise<VersionList> =
         listDocumentVersions,
 ): Promise<PanelDocument | null> {
-    if (document.type === "case" || document.version_id) return document;
+    if (
+        document.type === "case" ||
+        document.version_id ||
+        document.subdocuments?.length
+    ) {
+        return document;
+    }
 
     try {
         const result = await loadVersions(document.document_id);

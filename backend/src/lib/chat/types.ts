@@ -1,4 +1,5 @@
 import path from "path";
+import type { SourceDocument } from "../sourceDocuments";
 
 export const STANDARD_FONT_DATA_URL = (() => {
   try {
@@ -32,6 +33,8 @@ export type DocStore = Map<
      * the model when it chooses to read them.
      */
     inline_text?: string;
+    /** Complete request-scoped document for the shared source panel. */
+    panel_document?: SourceDocument;
   }
 >;
 

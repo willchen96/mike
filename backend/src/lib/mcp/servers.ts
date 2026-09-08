@@ -36,6 +36,8 @@ import {
     type OAuthTokenRow,
     type ToolCacheRow,
 } from "./types";
+import { extractLegalDataHunterSource } from "./sourceDocuments";
+import type { LegalDataHunterSource } from "./sourceDocuments";
 
 export { startUserMcpConnectorOAuth, validateRemoteMcpUrl };
 
@@ -535,6 +537,7 @@ export async function executeMcpToolCall(
 ): Promise<{
     content: string;
     event: McpToolEvent;
+    legalSource: LegalDataHunterSource | null;
 }> {
     const resolved = await resolveCallableTool(userId, openaiToolName, db);
     if (!resolved) {
@@ -543,6 +546,7 @@ export async function executeMcpToolCall(
                 ok: false,
                 error: "MCP tool is not available or is disabled.",
             }),
+            legalSource: null,
             event: {
                 type: "mcp_tool_call",
                 connector_id: "",
@@ -575,6 +579,15 @@ export async function executeMcpToolCall(
             db,
         );
         const content = stringifyMcpResult(result);
+        const legalSource = extractLegalDataHunterSource(
+            result,
+            {
+                connectorId: connector.id,
+                serverUrl: connector.server_url,
+                toolName: tool.tool_name,
+                arguments: args,
+            },
+        );
         await insertMcpAuditLog(db, {
             user_id: userId,
             connector_id: connector.id,
@@ -587,6 +600,7 @@ export async function executeMcpToolCall(
         });
         return {
             content,
+            legalSource,
             event: {
                 type: "mcp_tool_call",
                 connector_id: connector.id,
@@ -612,6 +626,7 @@ export async function executeMcpToolCall(
         });
         return {
             content: JSON.stringify({ ok: false, error: message }),
+            legalSource: null,
             event: {
                 type: "mcp_tool_call",
                 connector_id: connector.id,

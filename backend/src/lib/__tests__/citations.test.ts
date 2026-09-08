@@ -435,4 +435,51 @@ describe("createCitation", () => {
             dateFiled: null,
         });
     });
+
+    it("keeps a request-scoped source document body in the citation", () => {
+        const [parsed] = parseCitations(
+            citationsBlock(
+                '[{"ref":1,"doc_id":"doc-0","quote":"Exact text"}]',
+            ),
+        );
+        const panelDocument = {
+            document_id: "source-1",
+            title: "Article 1",
+            type: "legislation" as const,
+            metadata: [],
+            quotes: [],
+            subdocuments: [
+                {
+                    document_id: "source-1:text",
+                    title: "Article 1",
+                    type: "html" as const,
+                    text: "Exact text",
+                },
+            ],
+        };
+        const docStore: DocStore = new Map([
+            [
+                "doc-0",
+                {
+                    storage_path: "",
+                    file_type: "text/plain",
+                    filename: "Article 1",
+                    inline_text: "Exact text",
+                    panel_document: panelDocument,
+                },
+            ],
+        ]);
+
+        const citation = createCitation(parsed, {}, undefined, docStore);
+
+        expect(citation.document).toMatchObject({
+            ...panelDocument,
+            quotes: [
+                {
+                    quote: "Exact text",
+                    target: { subdocument_id: "source-1:text" },
+                },
+            ],
+        });
+    });
 });

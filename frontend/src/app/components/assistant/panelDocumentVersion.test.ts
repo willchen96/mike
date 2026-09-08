@@ -13,6 +13,27 @@ const document: PanelDocument = {
 };
 
 describe("resolvePanelDocumentVersion", () => {
+    it("keeps an inline source without loading project versions", async () => {
+        const loadVersions = vi.fn();
+        const source = {
+            ...document,
+            document_id: "mcp:connector:source:1",
+            subdocuments: [
+                {
+                    document_id: "mcp:connector:source:1:text",
+                    title: "Source",
+                    type: "html" as const,
+                    text: "Source text",
+                },
+            ],
+        };
+
+        await expect(
+            resolvePanelDocumentVersion(source, loadVersions),
+        ).resolves.toBe(source);
+        expect(loadVersions).not.toHaveBeenCalled();
+    });
+
     it("resolves an unversioned panel link to the current version", async () => {
         const loadVersions = vi.fn().mockResolvedValue({
             current_version_id: "version-3",

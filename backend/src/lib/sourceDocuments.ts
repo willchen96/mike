@@ -1,5 +1,5 @@
 export type SourceDocumentType =
-  "docx" | "pdf" | "spreadsheet" | "case" | "legislation";
+  "docx" | "pdf" | "spreadsheet" | "case" | "legislation" | "legal_research";
 
 export type SourceDocumentMetadata = {
   label: string;
