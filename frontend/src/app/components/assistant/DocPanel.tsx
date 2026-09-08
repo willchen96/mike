@@ -92,7 +92,8 @@ export function DocPanel({
 
     const documentId = resolvedDocument.document_id;
     const versionId = resolvedDocument.version_id ?? null;
-    const isCase = resolvedDocument.type === "case";
+    const isLegalSource =
+        resolvedDocument.type === "case" || documentId.startsWith("mcp:");
     const viewType = resolveDocumentViewType({
         filename: resolvedDocument.title,
         fileType: resolvedDocument.type,
@@ -121,7 +122,7 @@ export function DocPanel({
         : undefined;
 
     const { activeViewerQuotes, activeHighlightCells } = useMemo(() => {
-        if (mode.kind !== "citation" || isCase) {
+        if (mode.kind !== "citation" || isLegalSource) {
             return {
                 activeViewerQuotes: undefined,
                 activeHighlightCells: undefined,
@@ -150,7 +151,7 @@ export function DocPanel({
                       ]
                     : [],
         };
-    }, [activeDocumentQuote, isCase, mode.kind]);
+    }, [activeDocumentQuote, isLegalSource, mode.kind]);
 
     useEffect(() => {
         setActiveCitationQuoteId(citationQuoteId);
@@ -202,7 +203,7 @@ export function DocPanel({
                 />
             )}
 
-            {mode.kind === "edit" && !isCase && (
+            {mode.kind === "edit" && !isLegalSource && (
                 <div className="px-2 pb-2">
                     <EditCard
                         annotation={mode.edit}
@@ -219,7 +220,7 @@ export function DocPanel({
             )}
 
             <div className="flex flex-1 min-h-0 flex-col">
-                {isCase ? (
+                {isLegalSource ? (
                     <CaseView
                         document={resolvedDocument}
                         activeQuote={activeDocumentQuote}

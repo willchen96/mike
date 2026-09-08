@@ -312,27 +312,33 @@ export function createCitation(
   const documentId = docInfo?.document_id ?? citation.doc_id;
   const filename =
     docInfo?.filename ?? requestScopedDocument?.filename ?? citation.doc_id;
+  const panelDocument = requestScopedDocument?.panel_document;
+  const subdocumentId = panelDocument?.subdocuments?.[0]?.document_id;
   const quotes: SourceDocumentQuote[] = citation.quotes.map((quote) => ({
     quote: quote.quote,
-    target: {
-      page: quote.page,
-      ...(quote.sheet ? { sheet: quote.sheet } : {}),
-      ...(quote.cell ? { cell: quote.cell } : {}),
-    },
+    target: subdocumentId
+      ? { subdocument_id: subdocumentId }
+      : {
+          page: quote.page,
+          ...(quote.sheet ? { sheet: quote.sheet } : {}),
+          ...(quote.cell ? { cell: quote.cell } : {}),
+        },
   }));
   return {
     type: "citation_data",
     kind: "document",
     ref: citation.ref,
-    document: {
-      document_id: documentId,
-      title: filename,
-      type: sourceDocumentType(filename),
-      metadata: [],
-      quotes,
-      version_id: docInfo?.version_id ?? null,
-      version_number: docInfo?.version_number ?? null,
-    },
+    document: panelDocument
+      ? { ...panelDocument, quotes }
+      : {
+          document_id: documentId,
+          title: filename,
+          type: sourceDocumentType(filename),
+          metadata: [],
+          quotes,
+          version_id: docInfo?.version_id ?? null,
+          version_number: docInfo?.version_number ?? null,
+        },
     doc_id: citation.doc_id,
     document_id: docInfo?.document_id,
     version_id: docInfo?.version_id ?? null,

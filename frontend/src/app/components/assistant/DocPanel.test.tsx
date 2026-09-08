@@ -137,3 +137,30 @@ describe("case document", () => {
         expect(screen.getByText("Opinion text.")).toBeInTheDocument();
     });
 });
+
+describe("external legal source", () => {
+    it("renders the source text in the document panel", () => {
+        render(
+            <DocPanel
+                mode={{ kind: "document" }}
+                document={{
+                    document_id: "mcp:connector:source:1",
+                    title: "Article 1",
+                    type: "legal_research",
+                    metadata: [],
+                    quotes: [],
+                    subdocuments: [
+                        {
+                            document_id: "mcp:connector:source:1:text",
+                            title: "Article 1",
+                            type: "html",
+                            text: "Law text.",
+                        },
+                    ],
+                }}
+            />,
+        );
+
+        expect(screen.getByText("Law text.")).toBeInTheDocument();
+    });
+});

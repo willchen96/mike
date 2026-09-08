@@ -122,7 +122,7 @@ export function isPanelDocument(value: unknown): value is PanelDocument {
   return (
     typeof document.document_id === "string" &&
     typeof document.title === "string" &&
-    ["docx", "pdf", "spreadsheet", "case", "legislation"].includes(
+    ["docx", "pdf", "spreadsheet", "case", "legislation", "legal_research"].includes(
       String(document.type),
     ) &&
     Array.isArray(document.metadata) &&
