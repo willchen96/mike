@@ -61,6 +61,19 @@ and optional bulk-data checks.
 Install LibreOffice and restart the backend so its conversion command is
 available on the process path.
 
+## Sentry receives no events
+
+- The backend logs `[sentry] enabled for api` at boot when `SENTRY_DSN` is
+  set and `[sentry] disabled` otherwise. If it says disabled inside Docker,
+  the variable is not reaching the container: put it in `backend/.env` or the
+  compose-root `.env`, never in the compose `environment:` block.
+- The browser bundle only reports if `NEXT_PUBLIC_SENTRY_DSN` was set when
+  `next build` ran (`FRONTEND_SENTRY_DSN` for the compose image). Rebuild after
+  changing it.
+- Prove the pipeline with `SENTRY_ENABLE_TEST_ROUTE=true` and
+  `curl -i http://localhost:3001/observability/sentry-test`, or run the local
+  sink in `scripts/sentry-sink.mjs`. Details in [observability.md](observability.md).
+
 ## Useful checks
 
 ```bash

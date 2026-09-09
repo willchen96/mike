@@ -164,6 +164,13 @@ Model-provider keys and the CourtListener token can be configured globally in
 `backend/.env` or per user under **Settings > API Keys**. When a key is
 configured globally, its matching field is read-only.
 
+### Error tracking
+
+Set `SENTRY_DSN` (backend) and `FRONTEND_SENTRY_DSN` (web app) to report
+unexpected failures to Sentry; both are optional and nothing is sent without
+them. What is reported, what is scrubbed, and how to verify a DSN are in
+[observability.md](observability.md).
+
 ## Authentication email
 
 Supabase Auth sends signup, email-change, and password-recovery messages.
