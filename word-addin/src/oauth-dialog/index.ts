@@ -3,6 +3,9 @@ import {
   GOOGLE_OAUTH_MESSAGE_TYPE,
   type GoogleOAuthDialogMessage,
 } from "../taskpane/auth/oauthProtocol";
+import { initAddinErrorReporting } from "../taskpane/lib/errorReporting";
+
+initAddinErrorReporting("oauth-dialog");
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "/api").replace(
   /\/+$/,

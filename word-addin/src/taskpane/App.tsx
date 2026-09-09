@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useAuth } from "./auth/useAuth";
 import { LoginPage } from "./auth/LoginPage";
 import { ApiKeyBanner } from "./components/shell/ApiKeyBanner";
@@ -22,10 +22,15 @@ import {
 import { useWordDocumentIdentity } from "./lib/wordDocumentIdentity";
 import { clearLocalWordChats } from "./lib/localWordChats";
 import type { ReasoningLevel } from "./lib/wordChatTypes";
+import { setReportingUser } from "./lib/errorReporting";
 
 export default function App(): React.ReactElement {
   const { user, loading, error, logout } = useAuth();
   const pendingOwnerId = user?.id ?? null;
+  // Error reports carry the user id (never the email); cleared on sign-out.
+  useEffect(() => {
+    setReportingUser(pendingOwnerId ? { id: pendingOwnerId } : null);
+  }, [pendingOwnerId]);
   const wordChatStorage = useWordChatStoragePreference(pendingOwnerId);
   const editApply = useWordEditApplyMode();
   const wordDocument = useWordDocumentIdentity();
