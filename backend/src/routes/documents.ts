@@ -913,12 +913,19 @@ documentsRouter.delete(
     if (!doc)
       return void res.status(404).json({ detail: "Document not found" });
     const access = await ensureDocAccess(doc, userId, userEmail, db);
-    if (
-      !access.ok ||
-      (!creatorScopedAllowed(access, doc.user_id) &&
-        !(doc.workflow_id && can(access.projectRole, "content.edit")))
-    )
+    // Same split as the whole-document DELETE above: a caller with no verdict
+    // is told the row does not exist, and a caller who can open the document
+    // but not delete this version is REFUSED by name. Collapsing both into
+    // 404 told a Viewer their version had vanished.
+    if (!access.ok)
       return void res.status(404).json({ detail: "Document not found" });
+    if (
+      !creatorScopedAllowed(access, doc.user_id) &&
+      !(doc.workflow_id && can(access.projectRole, "content.edit"))
+    )
+      return void res.status(403).json({
+        detail: "You do not have permission to delete this version.",
+      });
 
     const { data: versions, error: versionsErr } = await db
       .from("document_versions")

@@ -125,7 +125,10 @@ describe("buildDocContext access scoping", () => {
     }));
     const db = makeDb([
       { id: "d-mine", user_id: "u1", project_id: null, status: "ready" },
-      { id: "d-walled", user_id: "u2", project_id: "p-walled", status: "ready" },
+      // Uploaded by the CALLER, so nothing but the verdict can exclude it.
+      // With `user_id: "u2"` the old uploader-scoped filter dropped this row
+      // too, and the test passed whether or not the verdict was consulted.
+      { id: "d-walled", user_id: "u1", project_id: "p-walled", status: "ready" },
     ]);
 
     const { docIndex, docStore } = await buildDocContext(
@@ -165,5 +168,72 @@ describe("buildDocContext access scoping", () => {
       "u1@test.local",
       db,
     );
+  });
+
+  it("asks once per container, not once per document", async () => {
+    // ensureDocAccess resolves a document through its project, then its
+    // workflow, then its org — two or three round trips each. A turn citing
+    // five files from one matter used to pay for five identical project
+    // lookups before the model saw a byte. The container's answer does not
+    // depend on which document inside it was asked about.
+    const db = makeDb([
+      { id: "d1", user_id: "u1", project_id: "p1", status: "ready" },
+      { id: "d2", user_id: "u2", project_id: "p1", status: "ready" },
+      { id: "d3", user_id: null, project_id: "p1", status: "ready" },
+      { id: "d4", user_id: "u2", project_id: "p2", status: "ready" },
+      // No container at all: resolved individually, which is an in-memory
+      // `user_id === caller` comparison rather than a round trip.
+      { id: "d5", user_id: "u1", project_id: null, status: "ready" },
+    ]);
+
+    const { docIndex } = await buildDocContext(
+      message(["d1", "d2", "d3", "d4", "d5"]),
+      "u1",
+      db,
+      null,
+      "chat_messages",
+      "u1@test.local",
+    );
+
+    // Every document still reaches the model...
+    expect(
+      Object.values(docIndex)
+        .map((entry) => entry.document_id)
+        .sort(),
+    ).toEqual(["d1", "d2", "d3", "d4", "d5"]);
+    // ...on three verdicts: project p1, project p2, and the container-less
+    // d5. Five would mean the fan-out is back.
+    expect(ensureDocAccess).toHaveBeenCalledTimes(3);
+    const containers = ensureDocAccess.mock.calls.map(
+      (call) => (call[0] as { project_id: string | null }).project_id,
+    );
+    expect(containers.sort()).toEqual([null, "p1", "p2"]);
+  });
+
+  it("refuses a whole container once, without re-asking per document", async () => {
+    // The cache must cut both ways: a denied container denies every document
+    // in it, and still only costs one verdict.
+    ensureDocAccess.mockImplementation(async (doc: unknown) => ({
+      ok: (doc as { project_id: string | null }).project_id === "p-open",
+    }));
+    const db = makeDb([
+      { id: "d1", user_id: "u1", project_id: "p-open", status: "ready" },
+      { id: "d2", user_id: "u1", project_id: "p-walled", status: "ready" },
+      { id: "d3", user_id: "u1", project_id: "p-walled", status: "ready" },
+    ]);
+
+    const { docIndex } = await buildDocContext(
+      message(["d1", "d2", "d3"]),
+      "u1",
+      db,
+      null,
+      "chat_messages",
+      "u1@test.local",
+    );
+
+    expect(Object.values(docIndex).map((entry) => entry.document_id)).toEqual([
+      "d1",
+    ]);
+    expect(ensureDocAccess).toHaveBeenCalledTimes(2);
   });
 });

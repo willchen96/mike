@@ -67,6 +67,27 @@ if (packageEntries.length === 0) {
 const osvBaseUrl = process.env.OSV_API_BASE_URL ?? "https://api.osv.dev/v1";
 
 /**
+ * CANARY. `{}` is a perfectly valid npm bulk response — it is what the
+ * registry sends for a clean tree — which means NO shape check can tell
+ * "we looked and found nothing" apart from "this endpoint does not answer
+ * this question". A proxy, a captive portal, an internal mirror that
+ * implements the route as a stub, or the endpoint's eventual retirement all
+ * produce 200 `{}`, and the gate happily printed "0 advisories, passed".
+ *
+ * So every batch carries a package+version we KNOW carries a high-severity
+ * advisory. If the answer does not mention it, the endpoint is not answering
+ * advisory questions and we fall through to OSV. The canary is stripped
+ * before the report is evaluated, so it never appears as a finding.
+ *
+ * adm-zip 0.5.12 is the choice because it is already a real, allowlisted
+ * dependency of the word-addin workspace: whatever retires it from the
+ * advisory database will also break that allowlist entry, so the two cannot
+ * drift apart unnoticed.
+ */
+const CANARY_PACKAGE = "adm-zip";
+const CANARY_VERSION = "0.5.12";
+
+/**
  * How many advisory batches were actually answered by a service. Checked
  * before the pass line: a run that never got an answer has not audited
  * anything, and must not be allowed to report success.
@@ -105,6 +126,13 @@ async function loadNpmReport() {
   // fallback was the source of the previous five-minute CI failures.
   for (let offset = 0; offset < packageEntries.length; offset += 500) {
     const batch = Object.fromEntries(packageEntries.slice(offset, offset + 500));
+    // Only strip the canary back out if it was not already part of this
+    // workspace's tree. When it IS a real dependency its advisories are a
+    // real finding and must survive.
+    const canaryIsReal = Object.hasOwn(batch, CANARY_PACKAGE);
+    batch[CANARY_PACKAGE] = [
+      ...new Set([...(batch[CANARY_PACKAGE] ?? []), CANARY_VERSION]),
+    ];
     const batchReport = await fetchJson(endpoint, {
       method: "POST",
       headers: {
@@ -138,6 +166,19 @@ async function loadNpmReport() {
         );
       }
     }
+    // The canary must come back. An empty or missing entry means this
+    // endpoint did not answer the question we asked, however well-formed its
+    // 200 was — send the run to OSV rather than pass on silence.
+    if (
+      !Array.isArray(batchReport[CANARY_PACKAGE]) ||
+      batchReport[CANARY_PACKAGE].length === 0
+    ) {
+      throw new Error(
+        `npm returned no advisory for the canary ${CANARY_PACKAGE}@${CANARY_VERSION} — the endpoint is not answering advisory queries`,
+      );
+    }
+    if (!canaryIsReal) delete batchReport[CANARY_PACKAGE];
+
     batchesAnswered += 1;
     for (const [packageName, packageAdvisories] of Object.entries(batchReport)) {
       report[packageName] = [
@@ -174,6 +215,14 @@ async function loadOsvReport() {
     });
     if (!Array.isArray(response?.results)) {
       throw new Error("OSV returned an invalid advisory report");
+    }
+    // OSV answers positionally: one result per query, in order. A short array
+    // means some queries went unanswered, and reading the rest as "clean"
+    // would silently drop packages from the audit.
+    if (response.results.length !== batchQueries.length) {
+      throw new Error(
+        `OSV answered ${response.results.length} of ${batchQueries.length} queries`,
+      );
     }
     batchesAnswered += 1;
     for (const [resultIndex, result] of response.results.entries()) {

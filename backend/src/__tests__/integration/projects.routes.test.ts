@@ -428,13 +428,19 @@ describe("projects.routes", () => {
               return personal;
             });
           if (table === "project_org_access_overrides")
-            return build((filters) =>
-              (
-                (filters["in:project_id"] as string[] | undefined) ?? []
-              )
-                .filter((id) => denied.has(id))
-                .map((id) => ({ project_id: id })),
-            );
+            // The deny read is scoped by the caller's memberships (org_id),
+            // their user_id and role — never by every org project's id.
+            return build((filters) => {
+              const orgIds = (filters["in:org_id"] as string[] | undefined) ?? [];
+              if (filters["in:project_id"]) return [];
+              return orgProjects
+                .filter(
+                  (project) =>
+                    denied.has(project.id as string) &&
+                    orgIds.includes(project.org_id as string),
+                )
+                .map((project) => ({ project_id: project.id }));
+            });
           if (table === "org_members") return build(() => memberships);
           return build(() => []);
         },

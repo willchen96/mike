@@ -31,6 +31,12 @@ function makeDb(
                     rows = rows.slice(0, n);
                     return query;
                 },
+                // Paged reads: `.range(from, to)` is inclusive at both ends,
+                // and returning a short page is what stops the caller's loop.
+                range: (from: number, to: number) => {
+                    rows = rows.slice(from, to + 1);
+                    return query;
+                },
                 eq: (column: string, value: unknown) => {
                     rows = rows.filter((row) => row[column] === value);
                     return query;
@@ -826,5 +832,188 @@ describe("ensureChatAccess", () => {
                 db,
             ),
         ).resolves.toEqual({ ok: false });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// listAccessibleProjectIds — completeness and cost
+//
+// This helper scopes chat lists and similar collection reads, so a project it
+// silently omits is a project the caller cannot find at all. The previous
+// shape had two faults that only appear at a real firm's size: an unpaged
+// `.in("org_id", …)` that PostgREST truncates at its db-max-rows cap, and a
+// per-row `checkProjectAccess` fan-out of two or three round trips EACH.
+// ---------------------------------------------------------------------------
+
+/**
+ * Wraps the fake above so every query it is handed is recorded — which table,
+ * which filters, and every `.range()` page. Counting queries is the only way
+ * to state "one batched read, not one per project" as an assertion.
+ */
+function makeRecordingDb(tables: Record<string, Row[]>) {
+    const queries: {
+        table: string;
+        filters: string[];
+        ranges: [number, number][];
+    }[] = [];
+    const base = makeDb(tables);
+    const db = {
+        from(table: string) {
+            const record = {
+                table,
+                filters: [] as string[],
+                ranges: [] as [number, number][],
+            };
+            queries.push(record);
+            const inner = base.from(table);
+            const proxy: unknown = new Proxy(inner, {
+                get(target, prop, receiver) {
+                    const value = Reflect.get(target, prop, receiver);
+                    if (typeof value !== "function") return value;
+                    return (...args: unknown[]) => {
+                        if (prop === "range")
+                            record.ranges.push([
+                                args[0] as number,
+                                args[1] as number,
+                            ]);
+                        if (prop === "eq" || prop === "in" || prop === "is")
+                            record.filters.push(`${String(prop)}:${args[0]}`);
+                        const out = (value as (...a: unknown[]) => unknown).apply(
+                            target,
+                            args,
+                        );
+                        return out === target ? proxy : out;
+                    };
+                },
+            });
+            return proxy;
+        },
+    } as any;
+    return { db, queries };
+}
+
+describe("listAccessibleProjectIds", () => {
+    const orgProjects = (count: number) =>
+        Array.from({ length: count }, (_, index) => ({
+            id: `p${String(index).padStart(4, "0")}`,
+            user_id: "founder",
+            org_id: "org-1",
+        }));
+
+    it("pages through an org with more projects than one read returns", async () => {
+        // 1500 matters, a 1000-row page. The unpaged read came back with the
+        // first 1000 and no error, so the remaining 500 simply were not there
+        // — and nothing in the response said so.
+        const { db, queries } = makeRecordingDb({
+            org_members: [{ org_id: "org-1", user_id: "u1", role: "member" }],
+            projects: orgProjects(1500),
+            project_access_grants: [],
+            project_org_access_overrides: [],
+        });
+
+        const ids = await listAccessibleProjectIds("u1", "u1@example.com", db);
+
+        expect(ids).toHaveLength(1500);
+        expect(ids).toContain("p1499");
+        // Each page is its own query, so collect the ranges across them.
+        const orgReads = queries.filter(
+            (query) =>
+                query.table === "projects" &&
+                query.filters.includes("in:org_id"),
+        );
+        // Two pages: a full one, then a short one that ends the loop.
+        expect(orgReads.flatMap((query) => query.ranges)).toEqual([
+            [0, 999],
+            [1000, 1999],
+        ]);
+    });
+
+    it("reads the deny overrides once for the whole org, not once per project", async () => {
+        const { db, queries } = makeRecordingDb({
+            org_members: [{ org_id: "org-1", user_id: "u1", role: "member" }],
+            projects: orgProjects(40),
+            project_access_grants: [],
+            project_org_access_overrides: [],
+        });
+
+        await listAccessibleProjectIds("u1", "u1@example.com", db);
+
+        const overrideReads = queries.filter(
+            (query) => query.table === "project_org_access_overrides",
+        );
+        // One. The fan-out issued forty, plus a project row read and an
+        // org-role read apiece.
+        expect(overrideReads).toHaveLength(1);
+        // Scoped by ORG, not by an `.in()` over every candidate project id —
+        // that list is spliced into the PostgREST query string and grows with
+        // the firm's matters until the request line is refused.
+        expect(overrideReads[0].filters).toEqual([
+            "in:org_id",
+            "eq:user_id",
+            "eq:role",
+        ]);
+    });
+
+    it("hides a denied org project but keeps the creator's and the admin's", async () => {
+        // The two exemptions checkProjectAccess applies, re-derived inline:
+        // the creator and an org admin keep Owner and cannot be denied. Get
+        // this wrong in the batched shape and a partner loses their own
+        // matter to a deny row somebody else's role should never have.
+        const tables = {
+            org_members: [
+                { org_id: "org-1", user_id: "member", role: "member" },
+                { org_id: "org-1", user_id: "boss", role: "admin" },
+                { org_id: "org-1", user_id: "author", role: "member" },
+            ],
+            projects: [
+                { id: "walled", user_id: "author", org_id: "org-1" },
+                { id: "open", user_id: "author", org_id: "org-1" },
+            ],
+            project_access_grants: [],
+            project_org_access_overrides: [
+                {
+                    project_id: "walled",
+                    org_id: "org-1",
+                    user_id: "member",
+                    role: "deny",
+                },
+                {
+                    project_id: "walled",
+                    org_id: "org-1",
+                    user_id: "boss",
+                    role: "deny",
+                },
+                {
+                    project_id: "walled",
+                    org_id: "org-1",
+                    user_id: "author",
+                    role: "deny",
+                },
+            ],
+        };
+
+        await expect(
+            listAccessibleProjectIds(
+                "member",
+                "member@example.com",
+                makeRecordingDb(tables).db,
+            ),
+        ).resolves.toEqual(["open"]);
+        // An org admin cannot be denied.
+        await expect(
+            listAccessibleProjectIds(
+                "boss",
+                "boss@example.com",
+                makeRecordingDb(tables).db,
+            ),
+        ).resolves.toEqual(["walled", "open"]);
+        // Neither can the project's own creator.
+        await expect(
+            listAccessibleProjectIds(
+                "author",
+                "author@example.com",
+                makeRecordingDb(tables).db,
+            ),
+        ).resolves.toEqual(["walled", "open"]);
     });
 });

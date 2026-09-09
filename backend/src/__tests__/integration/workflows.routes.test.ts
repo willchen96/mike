@@ -129,6 +129,7 @@ vi.mock("../../lib/documentVersions", () => ({
 }));
 
 import { app } from "../../app";
+import { ensureDocAccess } from "../../lib/access";
 import { createServerSupabase } from "../../lib/supabase";
 import { resetEnsuredDefaultUsersForTests } from "../../lib/workflowCatalog";
 
@@ -679,82 +680,161 @@ describe("workflows.routes", () => {
       });
     });
 
-    // A rejected batch must leave nothing behind: the loop used to validate
-    // and write one email at a time, so a bad third address returned 400
-    // with the first two overrides already persisted.
-    it("writes no org override when a later email in the batch is invalid", async () => {
+    // ── organization overrides are written as ONE statement ─────────────
+    // The loop used to validate and write one email at a time, so a bad
+    // third address returned 400 with the first two overrides already
+    // persisted: the caller read "nothing happened" while access had
+    // silently changed for two people. Validation now completes first, and
+    // the write is a single bulk upsert so a trigger refusal rolls the whole
+    // batch back rather than stopping half way.
+    function orgShareDb(options: { upsertError?: string } = {}) {
+      const upserts: { payload: unknown; options: unknown }[] = [];
+      const build = (resolve: (filters: Record<string, unknown>) => unknown) => {
+        const filters: Record<string, unknown> = {};
+        const b: Record<string, unknown> = {};
+        for (const method of ["select", "order", "limit", "in", "is"])
+          b[method] = () => b;
+        b.eq = (column: string, value: unknown) => {
+          filters[column] = value;
+          return b;
+        };
+        b.upsert = (payload: unknown, upsertOptions?: unknown) => {
+          upserts.push({ payload, options: upsertOptions });
+          return b;
+        };
+        const settle = () => ({
+          data: resolve(filters),
+          error:
+            upserts.length && options.upsertError
+              ? { message: options.upsertError }
+              : null,
+        });
+        b.single = () => Promise.resolve(settle());
+        b.maybeSingle = b.single;
+        b.then = (onResolve: (v: unknown) => unknown) =>
+          Promise.resolve(settle()).then(onResolve);
+        return b;
+      };
+      const db = {
+        from: (table: string) => {
+          if (table === "workflows")
+            return build(() => ({
+              id: "w-org",
+              user_id: "u1",
+              org_id: "org-1",
+            }));
+          if (table === "user_profiles")
+            return build((filters) => {
+              const email = String(filters.email ?? "");
+              return email
+                ? { user_id: `u-${email.split("@")[0]}`, email }
+                : null;
+            });
+          if (table === "org_members")
+            return build((filters) =>
+              // The third address belongs to a real user who is not in this
+              // organization.
+              filters.user_id === "u-third"
+                ? null
+                : { user_id: filters.user_id, role: "member" },
+            );
+          return build(() => null);
+        },
+        rpc: () => Promise.resolve({ data: null, error: null }),
+        auth: {
+          getUser: () =>
+            Promise.resolve({ data: { user: { id: "u1" } }, error: null }),
+        },
+      } as unknown as ReturnType<typeof createServerSupabase>;
+      return { db, upserts };
+    }
+
+    function shareOrgWorkflow(emails: string[]) {
       supabaseState.tables.workflows = {
         data: { id: "w-org", user_id: "u1", org_id: "org-1" },
         error: null,
       };
-      const upserts: unknown[] = [];
-      vi.mocked(createServerSupabase).mockImplementationOnce(() => {
-        const build = (
-          resolve: (filters: Record<string, unknown>) => unknown,
-        ) => {
-          const filters: Record<string, unknown> = {};
-          const b: Record<string, unknown> = {};
-          for (const method of ["select", "order", "limit", "in", "is"])
-            b[method] = () => b;
-          b.eq = (column: string, value: unknown) => {
-            filters[column] = value;
-            return b;
-          };
-          b.upsert = (payload: unknown) => {
-            upserts.push(payload);
-            return b;
-          };
-          b.single = () => Promise.resolve({ data: resolve(filters), error: null });
-          b.maybeSingle = b.single;
-          b.then = (onResolve: (v: unknown) => unknown) =>
-            Promise.resolve({ data: resolve(filters), error: null }).then(
-              onResolve,
-            );
-          return b;
-        };
-        return {
-          from: (table: string) => {
-            if (table === "workflows")
-              return build(() => ({
-                id: "w-org",
-                user_id: "u1",
-                org_id: "org-1",
-              }));
-            if (table === "user_profiles")
-              return build((filters) => {
-                const email = String(filters.email ?? "");
-                return email
-                  ? { user_id: `u-${email.split("@")[0]}`, email }
-                  : null;
-              });
-            if (table === "org_members")
-              return build((filters) =>
-                // The third address belongs to a real user who is not in
-                // this organization.
-                filters.user_id === "u-third"
-                  ? null
-                  : { user_id: filters.user_id, role: "member" },
-              );
-            return build(() => null);
-          },
-          rpc: () => Promise.resolve({ data: null, error: null }),
-          auth: {
-            getUser: () =>
-              Promise.resolve({ data: { user: { id: "u1" } }, error: null }),
-          },
-        } as unknown as ReturnType<typeof createServerSupabase>;
-      });
-
-      const res = await request(app)
+      return request(app)
         .post("/workflows/w-org/share")
         .set(...AUTH)
-        .send({
-          emails: ["first@firm.test", "second@firm.test", "third@firm.test"],
-          role: "viewer",
-        });
+        .send({ emails, role: "viewer" });
+    }
 
-      expect(res.status).toBe(400);
-      expect(upserts).toEqual([]);
+    it("writes no org override when a later email in the batch is invalid", async () => {
+      const { db, upserts } = orgShareDb();
+      vi.mocked(createServerSupabase).mockImplementationOnce(() => db);
+
+      const res = await shareOrgWorkflow([
+        "first@firm.test",
+        "second@firm.test",
+        "third@firm.test",
+      ]);
+
+      // SOFT, both of them: "nothing was written" is the claim that matters,
+      // and a plain assertion on the status would abandon the run before it
+      // was ever checked — so a regression that wrote the first two rows AND
+      // changed the status code would have been reported as a status bug.
+      expect.soft(res.status).toBe(400);
+      expect.soft(upserts).toEqual([]);
+    });
+
+    it("writes the whole batch in exactly one upsert", async () => {
+      // One statement, so a trigger refusal on any row rolls back the rest.
+      // Three separate upserts would be three separate transactions.
+      const { db, upserts } = orgShareDb();
+      vi.mocked(createServerSupabase).mockImplementationOnce(() => db);
+
+      const res = await shareOrgWorkflow([
+        "first@firm.test",
+        "second@firm.test",
+      ]);
+
+      expect(res.status).toBe(204);
+      expect(upserts).toHaveLength(1);
+      expect(upserts[0].payload).toEqual([
+        expect.objectContaining({
+          workflow_id: "w-org",
+          org_id: "org-1",
+          user_id: "u-first",
+          role: "viewer",
+          assigned_by: "u1",
+        }),
+        expect.objectContaining({
+          workflow_id: "w-org",
+          org_id: "org-1",
+          user_id: "u-second",
+          role: "viewer",
+          assigned_by: "u1",
+        }),
+      ]);
+      // Upsert, not insert: re-sharing with somebody who already has an
+      // override must change their role rather than fail on the key.
+      expect(upserts[0].options).toEqual({
+        onConflict: "workflow_id,user_id",
+      });
+    });
+
+    it("answers 500 and writes nothing when the bulk upsert is refused", async () => {
+      // The org-membership triggers can still refuse a row after validation
+      // passed. That is a database failure, not a bad request, and the whole
+      // statement rolls back.
+      const { db, upserts } = orgShareDb({
+        upsertError: "org_members_protect_last_admin",
+      });
+      vi.mocked(createServerSupabase).mockImplementationOnce(() => db);
+
+      const res = await shareOrgWorkflow([
+        "first@firm.test",
+        "second@firm.test",
+      ]);
+
+      expect.soft(res.status).toBe(500);
+      expect.soft(res.body.detail).toBe(
+        "Something went wrong. Please try again.",
+      );
+      // One attempt, all-or-nothing — not two rows written and a third
+      // refused.
+      expect.soft(upserts).toHaveLength(1);
     });
   });
 
@@ -853,6 +933,118 @@ describe("workflows.routes", () => {
         .set(...AUTH);
 
       expect(res.status).toBe(404);
+    });
+  });
+  // ── POST /workflows/:workflowId/assets/from-documents ─────────────────
+  // ensureDocAccess resolves a document through its project, then its
+  // workflow, then its ORG. A row selected without org_id therefore looks
+  // container-less and is refused — so every organization-library file was
+  // unattachable, answering "One or more files could not be found" for a
+  // file the caller is looking straight at.
+  describe("POST /workflows/:workflowId/assets/from-documents", () => {
+    const DOC_ID = "55555555-5555-4555-8555-555555555555";
+
+    /**
+     * PROJECTS the row to the columns the caller selected, which is what
+     * makes a missing column in the select string observable at all. The
+     * shared stub hands back whole rows regardless of `.select()`, so under
+     * it this bug is invisible.
+     */
+    function projectingDb(row: Record<string, unknown>) {
+      const selects: Record<string, string> = {};
+      const build = (table: string, resolve: () => unknown) => {
+        let columns = "*";
+        const b: Record<string, unknown> = {};
+        for (const method of ["eq", "in", "is", "order", "limit"])
+          b[method] = () => b;
+        b.select = (value?: string) => {
+          columns = value ?? "*";
+          selects[table] = columns;
+          return b;
+        };
+        const project = (value: unknown) => {
+          if (columns === "*" || !value || typeof value !== "object")
+            return value;
+          const wanted = columns.split(",").map((column) => column.trim());
+          return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).filter(
+              ([column]) => wanted.includes(column),
+            ),
+          );
+        };
+        const settle = () => {
+          const value = resolve();
+          return {
+            data: Array.isArray(value) ? value.map(project) : project(value),
+            error: null,
+          };
+        };
+        b.single = () => Promise.resolve(settle());
+        b.maybeSingle = b.single;
+        b.then = (onResolve: (v: unknown) => unknown) =>
+          Promise.resolve(settle()).then(onResolve);
+        return b;
+      };
+      const db = {
+        from: (table: string) => {
+          if (table === "workflows")
+            return build(table, () => ({
+              id: "w-org",
+              user_id: "u1",
+              org_id: "org-1",
+              type: "assistant",
+            }));
+          if (table === "documents") return build(table, () => [row]);
+          return build(table, () => []);
+        },
+        rpc: () => Promise.resolve({ data: null, error: null }),
+        auth: {
+          getUser: () =>
+            Promise.resolve({ data: { user: { id: "u1" } }, error: null }),
+        },
+      } as unknown as ReturnType<typeof createServerSupabase>;
+      return { db, selects };
+    }
+
+    it("selects org_id, so an org-library file attaches", async () => {
+      supabaseState.tables.workflows = {
+        data: { id: "w-org", user_id: "u1", org_id: "org-1", type: "assistant" },
+        error: null,
+      };
+      // Mirrors the real fall-through: a row with no project, no workflow and
+      // no org has no container to grant access, so it is refused.
+      vi.mocked(ensureDocAccess).mockImplementation(
+        async (document: unknown) => ({
+          ok: Boolean(
+            (document as Record<string, unknown>).project_id ??
+              (document as Record<string, unknown>).workflow_id ??
+              (document as Record<string, unknown>).org_id,
+          ),
+        }),
+      );
+      const { db, selects } = projectingDb({
+        id: DOC_ID,
+        user_id: "u2",
+        project_id: null,
+        workflow_id: null,
+        // Filed straight in the organization's library.
+        org_id: "org-1",
+        current_version_id: null,
+      });
+      vi.mocked(createServerSupabase).mockImplementationOnce(() => db);
+
+      const res = await request(app)
+        .post("/workflows/w-org/assets/from-documents")
+        .set(...AUTH)
+        .send({ document_ids: [DOC_ID] });
+
+      // Past the access gate. (409 because the fixture has no ready version,
+      // which is a later guard entirely — the point is that it is no longer
+      // "could not be found".)
+      expect(res.status).toBe(409);
+      expect(res.body.detail).toBe("One or more files are not ready");
+      expect(selects.documents).toContain("org_id");
+      expect(selects.documents).toContain("workflow_id");
     });
   });
 });

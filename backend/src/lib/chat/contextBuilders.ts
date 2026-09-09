@@ -630,12 +630,47 @@ export async function buildDocContext(
       org_id?: string | null;
       workflow_id?: string | null;
     }[];
-    const verdicts = await Promise.all(
-      candidates.map((doc) =>
-        ensureDocAccess(doc, userId, userEmail ?? null, db),
-      ),
-    );
-    const docList = candidates.filter((_, index) => verdicts[index]?.ok);
+    // ONE VERDICT PER CONTAINER, not per document. ensureDocAccess resolves
+    // a document through its project, then its workflow, then its org — and
+    // each of those is two or three round trips. A turn that cites fifteen
+    // files from the same matter used to pay for fifteen identical project
+    // lookups before the model saw a single byte. Whether the container
+    // admits the caller does not depend on which document inside it is
+    // asked about, so ask once per container and reuse the answer; a
+    // document with no container at all still resolves individually, which
+    // costs nothing (it is a `user_id === caller` comparison in memory).
+    const containerKey = (doc: {
+      project_id: string | null;
+      workflow_id?: string | null;
+      org_id?: string | null;
+    }) =>
+      doc.project_id
+        ? `project:${doc.project_id}`
+        : doc.workflow_id
+          ? `workflow:${doc.workflow_id}`
+          : doc.org_id
+            ? `org:${doc.org_id}`
+            : null;
+
+    const verdictByContainer = new Map<string, boolean>();
+    for (const doc of candidates) {
+      const key = containerKey(doc);
+      if (!key || verdictByContainer.has(key)) continue;
+      // The representative carries the container this verdict is about; its
+      // `user_id` only ever decides the ROLE, never `ok`, so reusing one
+      // document's answer for its siblings cannot widen access.
+      const verdict = await ensureDocAccess(doc, userId, userEmail ?? null, db);
+      verdictByContainer.set(key, verdict.ok);
+    }
+
+    const docList: typeof candidates = [];
+    for (const doc of candidates) {
+      const key = containerKey(doc);
+      const ok = key
+        ? (verdictByContainer.get(key) ?? false)
+        : (await ensureDocAccess(doc, userId, userEmail ?? null, db)).ok;
+      if (ok) docList.push(doc);
+    }
     await attachActiveVersionPaths(db, docList);
     for (let i = 0; i < docList.length; i++) {
       const doc = docList[i];

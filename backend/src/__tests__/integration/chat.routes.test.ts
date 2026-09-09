@@ -1838,6 +1838,122 @@ describe("chat grants, deletion and roster", () => {
         );
     });
 
+    it("500s when the creator's profile read fails, without writing a grant", async () => {
+        // A FAILED READ IS NOT "the creator has no email". Swallowing the
+        // error sent `creatorEmail: null` into upsertContentGrant — and that
+        // email is the only thing standing between the creator and a guest
+        // grant on their own chat. So a transient database fault quietly
+        // created exactly the row the check exists to prevent.
+        const grantWrites: string[] = [];
+        mockedCreate.mockImplementation(() => {
+            const db = makeRbacDb(null, "colleague-1", {
+                chat: { project_id: null, org_id: null },
+                chatGrantRole: "owner",
+                profiles: [
+                    {
+                        user_id: "colleague-1",
+                        email: "colleague@example.com",
+                        display_name: "Creator",
+                    },
+                ],
+            });
+            const originalFrom = db.from;
+            db.from = vi.fn((table: string) => {
+                if (table === "user_profiles") {
+                    // ONLY the creator lookup fails — it is the read keyed by
+                    // `user_id`. Every other profile read (the one that
+                    // resolves the RECIPIENT's account) still works, so the
+                    // request cannot fall into a 500 for some other reason.
+                    const profiles = [
+                        {
+                            user_id: "colleague-1",
+                            email: "colleague@example.com",
+                            display_name: "Creator",
+                        },
+                        {
+                            user_id: "mate",
+                            email: "mate@example.com",
+                            display_name: "Mate",
+                        },
+                    ];
+                    const filters: Record<string, unknown> = {};
+                    const q: Record<string, unknown> = {};
+                    for (const method of ["select", "is", "order", "limit"])
+                        q[method] = () => q;
+                    q.eq = (column: string, value: unknown) => {
+                        filters[column] = value;
+                        return q;
+                    };
+                    q.in = (column: string, values: unknown[]) => {
+                        filters[column] = values;
+                        return q;
+                    };
+                    const settle = () =>
+                        "user_id" in filters
+                            ? {
+                                  data: null,
+                                  error: { message: "connection reset" },
+                              }
+                            : {
+                                  data: profiles.filter((row) =>
+                                      Object.entries(filters).every(
+                                          ([column, value]) =>
+                                              Array.isArray(value)
+                                                  ? value.includes(
+                                                        row[
+                                                            column as keyof typeof row
+                                                        ],
+                                                    )
+                                                  : row[
+                                                        column as keyof typeof row
+                                                    ] === value,
+                                      ),
+                                  ),
+                                  error: null,
+                              };
+                    q.maybeSingle = () => {
+                        const { data, error } = settle();
+                        return Promise.resolve({
+                            data: data?.[0] ?? null,
+                            error,
+                        });
+                    };
+                    q.single = q.maybeSingle;
+                    q.then = (resolve: (v: unknown) => unknown) =>
+                        Promise.resolve(settle()).then(resolve);
+                    return q;
+                }
+                const query = originalFrom(table) as Record<string, unknown>;
+                if (table === "chat_access_grants")
+                    for (const method of ["upsert", "insert"] as const) {
+                        const original = query[method] as (
+                            ...args: unknown[]
+                        ) => unknown;
+                        query[method] = (...args: unknown[]) => {
+                            grantWrites.push(method);
+                            return original(...args);
+                        };
+                    }
+                return query;
+            }) as never;
+            return db as never;
+        });
+
+        const res = await request(app)
+            .post("/chat/chat-1/access")
+            .set("Authorization", "Bearer test")
+            .send({ email: "mate@example.com", role: "viewer" });
+
+        expect.soft(res.status).toBe(500);
+        expect.soft(res.body.detail).toBe(
+            "Something went wrong. Please try again.",
+        );
+        // The internal message never reaches the client...
+        expect.soft(JSON.stringify(res.body)).not.toContain("connection reset");
+        // ...and nothing was written.
+        expect.soft(grantWrites).toEqual([]);
+    });
+
     it("403s a directly granted member trying to manage grants", async () => {
         mockedCreate.mockImplementation(
             () =>

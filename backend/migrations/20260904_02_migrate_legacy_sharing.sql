@@ -15,8 +15,14 @@ begin;
 -- for why they are neither converted nor discarded.
 create table if not exists public.tabular_review_legacy_shares (
   id uuid primary key default gen_random_uuid(),
-  tabular_review_id uuid not null
-    references public.tabular_reviews(id) on delete cascade,
+  -- NO foreign key, deliberately, and for the same reason project_id has
+  -- none: this is a historical record of who lost access at upgrade, and it
+  -- has to outlive the rows it describes. An ON DELETE CASCADE here meant
+  -- deleting the review -- or the project, which cascades to its reviews --
+  -- silently destroyed the only record of the recipients an operator was
+  -- supposed to re-grant, which is exactly the outcome the table exists to
+  -- prevent.
+  tabular_review_id uuid not null,
   project_id uuid,
   email text not null,
   archived_at timestamptz not null default now(),
@@ -24,6 +30,12 @@ create table if not exists public.tabular_review_legacy_shares (
   constraint tabular_review_legacy_shares_email_lowercase
     check (email = lower(email))
 );
+
+-- Replay-safe: `create table if not exists` above leaves an EXISTING table
+-- untouched, so a deployment that applied the first cut of this migration
+-- still carries the cascade. Drop it explicitly.
+alter table public.tabular_review_legacy_shares
+  drop constraint if exists tabular_review_legacy_shares_tabular_review_id_fkey;
 
 create index if not exists idx_tabular_review_legacy_shares_review
   on public.tabular_review_legacy_shares(tabular_review_id);
@@ -63,6 +75,14 @@ begin
       from public.projects project
       left join public.user_profiles creator
         on creator.user_id = project.user_id
+      -- user_profiles is populated by a trigger and can be missing (a row
+      -- deleted by hand, an account created before the trigger existed). With
+      -- only that join, coalesce(creator.email,'') was '' for such a creator,
+      -- the exclusion never matched, and they were handed an EDITOR grant on
+      -- their own project -- the exact state this exclusion exists to
+      -- prevent. auth.users is the authoritative address.
+      left join auth.users creator_auth
+        on creator_auth.id = project.user_id
       cross join lateral jsonb_array_elements_text(
         case
           when jsonb_typeof(project.shared_with) = 'array'
@@ -73,7 +93,8 @@ begin
       where trim(recipient.email) <> ''
         and position('@' in trim(recipient.email)) > 1
         and lower(trim(recipient.email))
-          is distinct from lower(trim(coalesce(creator.email, '')))
+          is distinct from lower(trim(coalesce(
+            creator.email, creator_auth.email, '')))
       on conflict (project_id, email) do nothing
     $sql$;
   end if;
@@ -99,6 +120,8 @@ begin
       from public.tabular_reviews review
       left join public.user_profiles creator
         on creator.user_id = review.user_id
+      left join auth.users creator_auth
+        on creator_auth.id = review.user_id
       cross join lateral jsonb_array_elements_text(
         case
           when jsonb_typeof(review.shared_with) = 'array'
@@ -110,7 +133,8 @@ begin
         and trim(recipient.email) <> ''
         and position('@' in trim(recipient.email)) > 1
         and lower(trim(recipient.email))
-          is distinct from lower(trim(coalesce(creator.email, '')))
+          is distinct from lower(trim(coalesce(
+            creator.email, creator_auth.email, '')))
       on conflict (tabular_review_id, email) do nothing
     $sql$;
   end if;
@@ -142,6 +166,10 @@ begin
         review.project_id,
         lower(trim(recipient.email))
       from public.tabular_reviews review
+      left join public.user_profiles creator
+        on creator.user_id = review.user_id
+      left join auth.users creator_auth
+        on creator_auth.id = review.user_id
       cross join lateral jsonb_array_elements_text(
         case
           when jsonb_typeof(review.shared_with) = 'array'
@@ -152,6 +180,13 @@ begin
       where review.project_id is not null
         and trim(recipient.email) <> ''
         and position('@' in trim(recipient.email)) > 1
+        -- Same creator exclusion as the two backfills above. Without it the
+        -- archive lists the review's own creator as somebody who lost
+        -- access, and an operator "restoring" it grants the owner a guest
+        -- role on their own review.
+        and lower(trim(recipient.email))
+          is distinct from lower(trim(coalesce(
+            creator.email, creator_auth.email, '')))
       on conflict (tabular_review_id, email) do nothing
     $sql$;
   end if;

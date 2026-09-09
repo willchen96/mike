@@ -31,6 +31,33 @@ not evidence that an older database has completed every upgrade step. The
 repository's schema-drift CI separately checks that its pinned historical
 baseline converges with the fresh schema after all later migrations run.
 
+### After the organization-access upgrade: `tabular_review_legacy_shares`
+
+`20260904_02_migrate_legacy_sharing.sql` converts the old roleless
+`shared_with` arrays into real access grants. One shape has nowhere to go: a
+tabular review that lives INSIDE a project now inherits access from that
+project, so a share on the review alone cannot be reproduced without handing
+the recipient the whole matter. Rather than widen access silently or discard
+it, the migration copies those `(review, project, email)` triples into
+`public.tabular_review_legacy_shares` and drops nothing else.
+
+It is populated once, by that migration, on an upgraded deployment only —
+fresh installs create it empty and it is never written again at runtime. The
+table carries no foreign keys, so the record survives the review or project
+being deleted. It is `service_role`-only; read it with the service key:
+
+```sql
+select l.email, l.project_id, l.tabular_review_id, l.archived_at
+from public.tabular_review_legacy_shares l
+order by l.archived_at desc;
+```
+
+Each row is a person who could see that review before the upgrade and cannot
+now. For each one, decide deliberately: grant them access to the project (or
+add them to the organization) if they should still have it, and otherwise do
+nothing. The table is a record, not a queue — nothing reads it, and rows may
+be deleted once every recipient has been dealt with.
+
 Apply the workflow catalog migration before deploying the matching backend
 release, then run the dedicated ingestion job from the built backend artifact:
 

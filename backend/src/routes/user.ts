@@ -48,6 +48,7 @@ import {
     deleteUserAccountData,
     deleteUserProjects,
     listOrgsBlockingAccountDeletion,
+    type AccountDeletionOrgBlocker,
 } from "../lib/userDataCleanup";
 import {
     acceptInvitation,
@@ -1763,6 +1764,36 @@ userRouter.patch(
     },
 );
 
+/**
+ * Turn the sole-admin blockers into instructions the user can actually act
+ * on. The two reasons need DIFFERENT actions — appointing a successor fixes
+ * an org that still has members, and does nothing for an org whose only
+ * problem is that it still owns matters — so a single "make another member
+ * an admin" sentence sent the second group off to look for members who do
+ * not exist. A mixed batch gets both sentences, each naming its own orgs.
+ */
+export function describeAccountDeletionBlockers(
+    blockers: AccountDeletionOrgBlocker[],
+): string {
+    const named = (reason: AccountDeletionOrgBlocker["reason"]) =>
+        blockers
+            .filter((blocker) => blocker.reason === reason)
+            .map((blocker) => blocker.name)
+            .join(", ");
+    const sentences: string[] = [];
+    const withMembers = named("members");
+    if (withMembers)
+        sentences.push(
+            `You are the only admin of ${withMembers}. Make another member an admin, or delete the organization, before deleting your account.`,
+        );
+    const withContent = named("content");
+    if (withContent)
+        sentences.push(
+            `You are the only admin of ${withContent}, which still owns content. Delete or move the organization's projects, workflows, documents and reviews, or delete the organization, before deleting your account.`,
+        );
+    return sentences.join(" ");
+}
+
 // DELETE /user/account
 userRouter.delete(
     "/account",
@@ -1788,10 +1819,9 @@ userRouter.delete(
                 userId,
             );
             if (blockingOrgs.length > 0) {
-                const names = blockingOrgs.map((org) => org.name).join(", ");
                 return void res.status(409).json({
                     code: "org_successor_required",
-                    detail: `You are the only admin of ${names}. Make another member an admin, or delete the organization, before deleting your account.`,
+                    detail: describeAccountDeletionBlockers(blockingOrgs),
                     organizations: blockingOrgs,
                 });
             }

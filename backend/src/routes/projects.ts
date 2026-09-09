@@ -459,9 +459,8 @@ async function handleProjectDirectorySearch(req: Request, res: Response) {
   const db = createServerSupabase();
   const normalizedUserEmail = userEmail?.trim().toLowerCase();
 
-  const projectQueries = [
-    db.from("projects").select("*").eq("user_id", userId),
-  ];
+  const createdQuery = db.from("projects").select("*").eq("user_id", userId);
+  const projectQueries = [createdQuery];
   if (normalizedUserEmail) {
     // Direct access now lives in project_access_grants (one row per
     // recipient, with a role) rather than the roleless shared_with array, so
@@ -518,7 +517,20 @@ async function handleProjectDirectorySearch(req: Request, res: Response) {
   if (projectError)
     return void sendInternalError(res, projectError);
   const projectsById = new Map<string, Record<string, unknown>>();
-  for (const result of projectResults) {
+  const [createdResult, ...grantResults] = projectResults;
+  // The "I created it" branch is NOT a verdict on its own. A creator who has
+  // since LEFT the organization keeps the projects.user_id row, but
+  // checkProjectAccess — which every other read path uses — answers "no
+  // access" for them, so the picker was the one surface still offering an
+  // org matter that 404s the moment it is opened. An org project is only
+  // theirs to see while they are still in that org; the org branch below
+  // re-admits it (with the deny override applied) when they are.
+  for (const project of createdResult?.data ?? []) {
+    const orgId = project.org_id as string | null | undefined;
+    if (orgId && !orgRoleByOrgId.has(orgId)) continue;
+    projectsById.set(project.id as string, project);
+  }
+  for (const result of grantResults) {
     for (const project of result.data ?? []) {
       projectsById.set(project.id as string, project);
     }
@@ -532,13 +544,16 @@ async function handleProjectDirectorySearch(req: Request, res: Response) {
     // filter over a result set and must not become an N+1. Mirrors
     // listOrgResources, including its exemptions — the creator and org
     // admins keep Owner and cannot be denied.
-    const candidateIds = orgProjects
-      .map((project) => project.id)
-      .filter((id): id is string => typeof id === "string");
+    // Scoped by ORG, not by an .in() over every candidate project id: that
+    // list grows with the firm's matters and is spliced verbatim into the
+    // PostgREST query string, so a large tenant sent a URL past the server's
+    // request-line limit and the read failed (fail-closed, so the picker went
+    // blank). org_id is bounded by the caller's memberships, which is the
+    // same shape listOrgResources uses.
     const { data: denialRows, error: denialError } = await db
       .from("project_org_access_overrides")
       .select("project_id")
-      .in("project_id", candidateIds)
+      .in("org_id", orgIds)
       .eq("user_id", userId)
       .eq("role", "deny");
     // Fail closed: an unreadable override table must hide rows, never reveal

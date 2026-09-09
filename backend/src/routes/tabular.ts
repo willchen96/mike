@@ -92,6 +92,14 @@ import { normalizeSearchTerm } from "../lib/search";
 import { parseTabularReviewSort } from "../lib/sort";
 
 export const tabularRouter = Router();
+
+/**
+ * "Not found" is for reviews the caller cannot see at all. A Viewer who can
+ * open a review but not change it gets a refusal that names the reason, so
+ * the UI stops telling people their review disappeared.
+ */
+export const REVIEW_EDIT_FORBIDDEN =
+    "You do not have permission to edit content in this review.";
 const TABULAR_GENERATION_CONCURRENCY = 3;
 // The lease timings live in lib/tabular/tabular.shared.ts because the queue
 // workers hold the same lease on the async path and must agree on them.
@@ -1576,6 +1584,8 @@ tabularRouter.post("/:reviewId/generate", requireAuth, async (req, res) => {
     if (!prepared.ok) {
         if (prepared.kind === "not_found")
             return void res.status(404).json({ detail: "Review not found" });
+        if (prepared.kind === "forbidden")
+            return void res.status(403).json({ detail: REVIEW_EDIT_FORBIDDEN });
         if (prepared.kind === "no_columns")
             return void res
                 .status(400)
@@ -1903,6 +1913,14 @@ tabularRouter.get(
                 return void res
                     .status(404)
                     .json({ detail: "Review not found" });
+            // Same gate as the POST it resumes: the reconnect stream exists
+            // to rejoin a run this caller was entitled to start, and a Viewer
+            // never was. They read the finished cells through the review
+            // itself, not through the generation channel.
+            if (prepared.kind === "forbidden")
+                return void res
+                    .status(403)
+                    .json({ detail: REVIEW_EDIT_FORBIDDEN });
             if (prepared.kind === "no_columns")
                 return void res
                     .status(400)
@@ -2378,8 +2396,12 @@ tabularRouter.post("/:reviewId/chat", requireAuth, async (req, res) => {
         userEmail,
         db,
     );
-    if (!reviewAccess.ok || !can(reviewAccess.projectRole, "content.edit"))
+    // A viewer can open this review — saying it does not exist is a lie the
+    // UI then repeats. Only a caller with no verdict at all gets the 404.
+    if (!reviewAccess.ok)
         return void res.status(404).json({ detail: "Review not found" });
+    if (!can(reviewAccess.projectRole, "content.edit"))
+        return void res.status(403).json({ detail: REVIEW_EDIT_FORBIDDEN });
 
     // Fetch all cells and logical review rows for this review.
     const { data: cells } = await db

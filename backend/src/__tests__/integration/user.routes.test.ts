@@ -1094,7 +1094,7 @@ describe("user.routes", () => {
             expect(res.status).toBe(409);
             expect(res.body.code).toBe("org_successor_required");
             expect(res.body.detail).toBe(
-                "You are the only admin of Org A, Org B. Make another member an admin, or delete the organization, before deleting your account.",
+                "You are the only admin of Org A. Make another member an admin, or delete the organization, before deleting your account. You are the only admin of Org B, which still owns content. Delete or move the organization's projects, workflows, documents and reviews, or delete the organization, before deleting your account.",
             );
             expect(res.body.organizations).toEqual([
                 { org_id: "o1", name: "Org A", reason: "members" },

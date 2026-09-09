@@ -151,12 +151,13 @@ function makeDb(
 ) {
     const calls: {
         or?: string;
+        in: [string, unknown][];
         eq: [string, unknown][];
         order?: [string, { ascending: boolean; nullsFirst: boolean }];
         ilike?: [string, string];
         profileUserIds?: string[];
         grantEmail?: unknown;
-    } = { eq: [] };
+    } = { eq: [], in: [] };
 
     const memberships = org.memberships ?? [];
     const orgProjects = org.projects ?? [];
@@ -180,6 +181,9 @@ function makeDb(
                 return b;
             },
             order: () => b,
+            // listAccessibleProjectIds pages its scans; one page is enough here.
+            range: () =>
+                Promise.resolve({ data: resolve(filters), error: null }),
             maybeSingle: () =>
                 Promise.resolve({
                     data: resolve(filters)[0] ?? null,
@@ -216,6 +220,10 @@ function makeDb(
             select: () => b,
             or: (expr: string) => {
                 calls.or = expr;
+                return b;
+            },
+            in: (col: string, val: unknown) => {
+                calls.in.push([col, val]);
                 return b;
             },
             eq: (col: string, val: unknown) => {
@@ -272,11 +280,26 @@ function makeDb(
                     ),
                 );
             if (table === "project_org_access_overrides")
-                return filterBuilder((filters) =>
-                    denied.has(filters.eq.project_id as string)
-                        ? [{ role: "deny" }]
-                        : [],
-                );
+                // Two readers: the per-project verdict (eq project_id) and
+                // the batched scan keyed by the caller's org memberships
+                // (in org_id + eq user_id + eq role).
+                return filterBuilder((filters) => {
+                    if (filters.eq.project_id)
+                        return denied.has(filters.eq.project_id as string)
+                            ? [{ role: "deny" }]
+                            : [];
+                    const orgIds = (filters.in.org_id as string[]) ?? [];
+                    return orgProjects
+                        .filter(
+                            (project) =>
+                                denied.has(project.id) &&
+                                orgIds.includes(project.org_id),
+                        )
+                        .map((project) => ({
+                            project_id: project.id,
+                            role: "deny",
+                        }));
+                });
             if (table === "user_profiles") return profilesBuilder();
             return auditBuilder();
         },
@@ -295,8 +318,18 @@ describe("queryEvents visibility scoping", () => {
     it("scopes to own events OR accessible project events (owned + shared)", async () => {
         const { db, calls } = makeDb(["p-own"], ["p-shared"]);
         await queryEvents(db, "u1", "u1@example.com", query);
-        expect(calls.or).toBe("user_id.eq.u1,project_id.in.(p-own,p-shared)");
-        expect(calls.eq).toEqual([]);
+        // Two disjoint reads: the caller's own rows, and rows written by
+        // OTHER people inside projects the caller can reach. Disjoint is what
+        // makes the exact counts summable and keeps the project-id filter out
+        // of the URL's `or=` clause, which overflowed past a few hundred ids.
+        expect(calls.eq).toContainEqual(["user_id", "u1"]);
+        const projectFilter = calls.in.find(([col]) => col === "project_id");
+        expect(projectFilter).toBeDefined();
+        expect([...(projectFilter![1] as string[])].sort()).toEqual([
+            "p-own",
+            "p-shared",
+        ]);
+        expect(calls.or).toBe("user_id.is.null,user_id.neq.u1");
     });
 
     it("falls back to own-events-only when no projects are accessible", async () => {

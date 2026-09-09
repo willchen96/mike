@@ -2128,11 +2128,13 @@ alter table public.tabular_review_access_grants enable row level security;
 -- context to judge it. Fresh installs create it empty.
 create table if not exists public.tabular_review_legacy_shares (
   id uuid primary key default gen_random_uuid(),
-  tabular_review_id uuid not null
-    references public.tabular_reviews(id) on delete cascade,
-  -- The project the review sat in when the share was archived. Deliberately
-  -- not a foreign key: this is a historical record, and it must survive the
-  -- project being reorganized or deleted.
+  -- NEITHER id is a foreign key. This is a historical record of who lost
+  -- access at upgrade, and it must survive the rows it describes: an ON
+  -- DELETE CASCADE to tabular_reviews meant deleting the review -- or the
+  -- project, which cascades to its reviews -- destroyed the only record of
+  -- the recipients an operator was supposed to re-grant.
+  tabular_review_id uuid not null,
+  -- The project the review sat in when the share was archived.
   project_id uuid,
   email text not null,
   archived_at timestamptz not null default now(),
