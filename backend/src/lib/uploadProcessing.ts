@@ -10,6 +10,7 @@ import { pathToFileURL } from "node:url";
 import { resolveContentOrgId } from "./access";
 import { recordAudit } from "./audit";
 import { convertedPdfKey, officeFileToPdf } from "./convert";
+import { reportError } from "./observability/sentry";
 import { shouldConvertToPdf } from "./documentTypes";
 import { uploadJobWallClockMs } from "./runtimeConfig";
 import {
@@ -130,6 +131,20 @@ async function buildPdfRendition(args: {
     await uploadFileFromPath(key, pdfPath, "application/pdf");
     return key;
   } catch (error) {
+    // Non-fatal for the upload (the original stays usable) but a conversion
+    // that fails is either a LibreOffice regression or a malformed file we
+    // should know about — grouped by file type so a format-wide break is one
+    // issue with a count, not noise.
+    reportError(error, {
+      level: "warning",
+      tags: {
+        component: "upload-worker",
+        stage: "conversion",
+        file_type: args.fileType,
+      },
+      extra: { document_id: args.documentId },
+      fingerprint: ["upload-conversion-failed", args.fileType],
+    });
     console.error("[upload-worker] document conversion failed", {
       documentId: args.documentId,
       fileType: args.fileType,
@@ -691,6 +706,11 @@ export async function processUploadJob(
       return;
     }
     void heartbeatJob(db, jobId, workerId).catch((error) => {
+      reportError(error, {
+        level: "warning",
+        tags: { component: "upload-worker", stage: "heartbeat" },
+        extra: { job_id: jobId, worker_id: workerId },
+      });
       console.error("[upload-worker] heartbeat failed", { jobId, error });
     });
   }, UPLOAD_WORKER_HEARTBEAT_MS);
@@ -719,6 +739,18 @@ export async function processUploadJob(
         // lease before recording even a failure result.
         await heartbeatJob(db, jobId, workerId);
         failed = true;
+        reportError(error, {
+          tags: {
+            component: "upload-worker",
+            stage: "process-file",
+            purpose: typedSession.purpose,
+          },
+          extra: {
+            job_id: jobId,
+            session_id: typedSession.id,
+            file_id: file.id,
+          },
+        });
         console.error("[upload-worker] file processing failed", {
           jobId,
           sessionId: typedSession.id,
@@ -1009,6 +1041,12 @@ function startUploadProcessingWorker(options: {
       await processUploadJob(db, jobId, workerId);
       schedule(0);
     } catch (error) {
+      // Nothing above this loop: an error here means claiming or the job
+      // wrapper itself broke, and without a report the worker just polls on.
+      reportError(error, {
+        tags: { component: "upload-worker", stage: "iteration" },
+        extra: { worker_id: workerId },
+      });
       console.error("[upload-worker] iteration failed", { workerId, error });
       schedule(UPLOAD_WORKER_POLL_MS);
     }

@@ -21,6 +21,7 @@
     "@aws-sdk/s3-request-presigner": "^3.787.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openrouter/ai-sdk-provider": "^3.0.0",
+    "@sentry/node": "10.73.0",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "ai": "^7.0.74",

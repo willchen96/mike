@@ -1,5 +1,6 @@
 import { Worker, type Job } from "bullmq";
 import { getRedisConnection } from "../lib/queue/connection";
+import { reportError } from "../lib/observability/sentry";
 import {
     CONVERSION_QUEUE,
     type ConversionJobData,
@@ -50,6 +51,12 @@ export async function runConversionJob(
         // Conversion failure is non-fatal (mirrors the sync path): the version
         // stays usable without a PDF rendition. Retrying LibreOffice on the
         // same bytes just fails the same way.
+        reportError(err, {
+            level: "warning",
+            tags: { component: "conversion-worker", stage: "docx-to-pdf" },
+            extra: { document_id: documentId, version_id: versionId },
+            fingerprint: ["conversion-worker-docx-to-pdf"],
+        });
         console.error(
             "[conversion-worker] DOCX→PDF failed; finalizing without a PDF rendition",
             { err, documentId, versionId },
@@ -149,11 +156,25 @@ export function createConversionWorker(): Worker<ConversionJobData> {
         );
     });
     worker.on("failed", async (job, err) => {
+        const permanent = !!job && isPermanentFailure(job);
+        reportError(err, {
+            level: permanent ? "error" : "warning",
+            tags: {
+                component: "conversion-worker",
+                terminal: permanent,
+                attempt: job?.attemptsMade,
+            },
+            extra: {
+                job_id: job?.id,
+                document_id: job?.data.documentId,
+                version_id: job?.data.versionId,
+            },
+        });
         if (!job) {
             console.error("[conversion-worker] job failed (no job)", { err });
             return;
         }
-        if (!isPermanentFailure(job)) {
+        if (!permanent) {
             console.error(
                 "[conversion-worker] job failed (will retry, attempts remain)",
                 { jobId: job.id, err },

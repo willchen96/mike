@@ -146,6 +146,12 @@ review where the model may run across many cells.
 Use synthetic or public documents until you have reviewed the deployment and
 data flows. See [Safe local testing](safe-local-testing.md) for guidance.
 
+## Error tracking locally
+
+Sentry is off by default. To watch what the app would report without an
+account, run `node scripts/sentry-sink.mjs` and point a DSN at it; see
+[observability.md](observability.md).
+
 ## Running application code without Docker
 
 To run the frontend and backend processes directly while using separately

@@ -22,7 +22,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@mike/upload-session-client": ["./src/shared/api/uploadSessionClient.ts"],
-      "@mike/secure-uuid": ["./src/shared/lib/secureUuid.ts"]
+      "@mike/secure-uuid": ["./src/shared/lib/secureUuid.ts"],
+      "@mike/sentry-event": ["./src/shared/lib/sentryEvent.ts"]
     }
   },
   "include": [

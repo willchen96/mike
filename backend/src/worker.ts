@@ -15,9 +15,11 @@
 // container's environment block — dies at boot on the Supabase client's
 // "SUPABASE_URL and SUPABASE_SECRET_KEY must be set" check. Compose deployments
 // never noticed because compose injects real environment variables.
-import "dotenv/config";
-
+// instrument.ts loads dotenv itself and must precede every other import so
+// Sentry can hook the HTTP client and queue libraries this process uses.
+import "./instrument";
 import { startAllWorkers, stopAllWorkers } from "./workerRuntime";
+import { flushSentry, reportError } from "./lib/observability/sentry";
 
 startAllWorkers();
 
@@ -46,9 +48,12 @@ async function shutdown(signal: string) {
     forceExit.unref();
     try {
         await stopAllWorkers();
+        await flushSentry();
         process.exit(0);
     } catch (err) {
+        reportError(err, { tags: { component: "worker-shutdown" } });
         console.error("Error during worker shutdown", err);
+        await flushSentry();
         process.exit(1);
     }
 }

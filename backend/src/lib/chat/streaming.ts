@@ -6,6 +6,7 @@ import {
 } from "../llm";
 import { resolveRequestedModel } from "../routerModels";
 import { UserFacingError } from "../userFacingError";
+import { reportError } from "../observability/sentry";
 import { createServerSupabase } from "../supabase";
 import { buildUserMcpTools, type McpToolEvent } from "../mcpConnectors";
 import type { SourceDocument } from "../sourceDocuments";
@@ -710,8 +711,17 @@ export async function runLLMStream(params: {
       );
     } else {
       flushPartialTurn();
-      console.error("[chat/stream] model stream failed", err);
       const safeToDisplay = err instanceof UserFacingError;
+      // A UserFacingError is a deliberate, explained refusal (missing API
+      // key, model not allowed) — the user's configuration, not our bug.
+      // Everything else mid-stream is: the response already started, so the
+      // HTTP 500 path never sees it and this is the only report.
+      if (!safeToDisplay) {
+        reportError(err, {
+          tags: { component: "chat-stream" },
+        });
+      }
+      console.error("[chat/stream] model stream failed", err);
       const message = safeToDisplay ? err.message : ASSISTANT_ERROR_MESSAGE;
       events.push({
         type: "error",

@@ -1,5 +1,6 @@
 import type { Document, LibraryFolder, Project, Workflow } from "../types";
 import { describeNetworkFailure } from "../lib/networkError";
+import { reportApiFailure, reportNetworkFailure } from "../lib/errorReporting";
 import type { ReasoningLevel } from "../lib/wordChatTypes";
 import {
   createControlRequestRetryPolicy,
@@ -84,6 +85,7 @@ async function sendRequest(
   try {
     return await clientConfig.fetchImpl(url, init);
   } catch (error) {
+    reportNetworkFailure(error, { method: init.method ?? "GET", url });
     throw new Error(
       describeNetworkFailure(error, {
         method: init.method ?? "GET",
@@ -97,12 +99,14 @@ async function sendRequest(
 async function toApiError(
   response: Response,
   path: string,
+  method = "GET",
 ): Promise<MikeApiError> {
   const text = await response.text();
   try {
     const parsed = JSON.parse(text) as {
       detail?: unknown;
       code?: unknown;
+      request_id?: unknown;
       error?: { code?: unknown; message?: unknown };
     };
     const code =
@@ -123,21 +127,45 @@ async function toApiError(
       code,
       detail: parsed.detail,
     });
-    return new MikeApiError({
+    const apiError = new MikeApiError({
       status: response.status,
       code,
       message,
     });
+    if (response.status >= 500) {
+      reportApiFailure({
+        path,
+        method,
+        status: response.status,
+        code,
+        requestId:
+          typeof parsed.request_id === "string"
+            ? parsed.request_id
+            : response.headers.get("x-request-id"),
+        error: apiError,
+      });
+    }
+    return apiError;
   } catch {
     devLog("[mike-api] non-ok non-json response", {
       path,
       status: response.status,
       bodyPreview: text.slice(0, 200),
     });
-    return new MikeApiError({
+    const apiError = new MikeApiError({
       status: response.status,
       message: text || `API error: ${response.status}`,
     });
+    if (response.status >= 500) {
+      reportApiFailure({
+        path,
+        method,
+        status: response.status,
+        requestId: response.headers.get("x-request-id"),
+        error: apiError,
+      });
+    }
+    return apiError;
   }
 }
 
@@ -154,7 +182,9 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
 
-  if (!response.ok) throw await toApiError(response, path);
+  if (!response.ok) {
+    throw await toApiError(response, path, restInit.method ?? "GET");
+  }
   if (
     response.status === 204 ||
     response.headers.get("content-length") === "0"

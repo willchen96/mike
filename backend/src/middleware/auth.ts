@@ -4,6 +4,7 @@ import { syncProfileEmail } from "../lib/userLookup";
 import { sendInternalError } from "../lib/httpError";
 import { createRequestSupabase } from "../lib/authSession";
 import { requestOriginIsTrusted } from "../lib/origins";
+import { setCurrentUser } from "../lib/observability/sentry";
 
 const isDev = process.env.NODE_ENV !== "production";
 const devLog = (...args: Parameters<typeof console.log>) => {
@@ -165,6 +166,8 @@ export async function requireAuth(
   res.locals.userId = user.id;
   res.locals.userEmail = user.email?.toLowerCase() ?? "";
   res.locals.token = token;
+  // Id only — enough for "how many users are affected", never the email.
+  setCurrentUser(user.id);
   const syncError = await syncProfileEmail(
     admin,
     user.id,

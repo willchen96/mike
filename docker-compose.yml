@@ -365,8 +365,18 @@ services:
       # definitions from backend/src (see frontend/Dockerfile).
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        # The browser-side Sentry DSN is inlined by `next build`, so it is a
+        # build argument, not a runtime variable (docs/observability.md).
+        NEXT_PUBLIC_SENTRY_DSN: ${FRONTEND_SENTRY_DSN:-}
+        NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+        NEXT_PUBLIC_SENTRY_RELEASE: ${SENTRY_RELEASE:-}
     environment:
       - API_BASE_URL=${API_BASE_URL:-http://backend:3001}
+      # Next server side (the /api gateway); same project as the browser.
+      - SENTRY_DSN=${FRONTEND_SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-}
+      - SENTRY_RELEASE=${SENTRY_RELEASE:-}
     ports:
       # Dokploy's own dashboard occupies 3000 — set FRONTEND_PORT there.
       - "${FRONTEND_PORT:-3000}:3000"

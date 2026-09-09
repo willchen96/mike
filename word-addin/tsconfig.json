@@ -80,6 +80,9 @@
       ],
       "@mike/secure-uuid": [
         "../frontend/src/shared/lib/secureUuid.ts"
+      ],
+      "@mike/sentry-event": [
+        "../frontend/src/shared/lib/sentryEvent.ts"
       ]
     },
     "jsx": "react-jsx",

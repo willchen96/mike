@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { PillButton } from "@/app/components/ui/pill-button";
+import { reportError } from "@/app/lib/errorReporting";
 
 export default function Error({
     error,
@@ -10,6 +11,11 @@ export default function Error({
     error: Error & { digest?: string };
 }) {
     useEffect(() => {
+        // A render error that escaped every component boundary. The digest
+        // is what Next prints for server-side render errors, so keep it.
+        reportError(error, {
+            tags: { component: "route-error-boundary", digest: error.digest },
+        });
         console.error("App error:", error);
     }, [error]);
 

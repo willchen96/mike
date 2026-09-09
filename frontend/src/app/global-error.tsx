@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { PillButton } from "@/app/components/ui/pill-button";
+import { reportError } from "@/app/lib/errorReporting";
 
 export default function GlobalError({
     error,
@@ -9,6 +10,11 @@ export default function GlobalError({
     error: Error & { digest?: string };
 }) {
     useEffect(() => {
+        // The root layout itself failed: nothing else can report this one.
+        reportError(error, {
+            level: "fatal",
+            tags: { component: "global-error-boundary", digest: error.digest },
+        });
         console.error("Global error:", error);
     }, [error]);
 
