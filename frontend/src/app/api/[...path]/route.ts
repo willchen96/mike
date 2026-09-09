@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +60,13 @@ async function proxy(request: NextRequest, context: RouteContext) {
             headers: responseHeaders,
         });
     } catch (error) {
+        // The backend was unreachable from the Next server: a deployment or
+        // network fault rather than an application bug, but the browser only
+        // sees a bare 502, so this is the one place it can be diagnosed.
+        Sentry.captureException(error, {
+            tags: { component: "api-gateway", http_method: request.method },
+            extra: { path: requestPath },
+        });
         console.error("[api-gateway] upstream request failed", {
             path: requestPath,
             error: error instanceof Error ? error.message : String(error),

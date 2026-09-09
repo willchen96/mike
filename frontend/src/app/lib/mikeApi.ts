@@ -5,6 +5,7 @@
 
 import { isPanelDocument } from "@/app/components/shared/types";
 import { authenticatedFetch } from "@/app/lib/authEvents";
+import { reportApiFailure } from "@/app/lib/errorReporting";
 import {
     UploadBatchError,
     createControlRequestRetryPolicy,
@@ -133,7 +134,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     });
 
     if (!response.ok) {
-        throw await toApiError(response, path);
+        throw await toApiError(response, path, restInit.method ?? "GET");
     }
 
     if (
@@ -201,7 +202,11 @@ async function apiBlobRequest(path: string): Promise<{
     };
 }
 
-async function toApiError(response: Response, path: string) {
+async function toApiError(
+    response: Response,
+    path: string,
+    method = "GET",
+) {
     const text = await response.text();
     try {
         const parsed = JSON.parse(text) as {
@@ -219,7 +224,7 @@ async function toApiError(response: Response, path: string) {
             code: parsed.code,
             requestId,
         });
-        return new MikeApiError({
+        const apiError = new MikeApiError({
             status: response.status,
             code: typeof parsed.code === "string" ? parsed.code : null,
             requestId,
@@ -230,13 +235,27 @@ async function toApiError(response: Response, path: string) {
                       ? parsed.detail
                       : `API error: ${response.status}`,
         });
+        // 4xx are intentional answers (validation, permissions) and are
+        // shown to the user; 5xx are failures worth an alert, correlated to
+        // the backend's own event by request id.
+        if (response.status >= 500) {
+            reportApiFailure({
+                path,
+                method,
+                status: response.status,
+                code: apiError.code,
+                requestId,
+                error: apiError,
+            });
+        }
+        return apiError;
     } catch {
         devLog("[mike-api] non-ok non-json response", {
             path,
             status: response.status,
             requestId: response.headers.get("x-request-id"),
         });
-        return new MikeApiError({
+        const apiError = new MikeApiError({
             status: response.status,
             requestId: response.headers.get("x-request-id"),
             message:
@@ -244,6 +263,16 @@ async function toApiError(response: Response, path: string) {
                     ? INTERNAL_ERROR_MESSAGE
                     : MALFORMED_ERROR_RESPONSE_MESSAGE,
         });
+        if (response.status >= 500) {
+            reportApiFailure({
+                path,
+                method,
+                status: response.status,
+                requestId: apiError.requestId,
+                error: apiError,
+            });
+        }
+        return apiError;
     }
 }
 

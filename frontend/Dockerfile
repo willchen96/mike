@@ -12,6 +12,15 @@ RUN npm ci
 COPY frontend/ ./
 COPY backend/src /backend/src
 
+# Browser-side Sentry DSN (optional). Inlined by next build, so it must be
+# present here rather than at container start. See docs/observability.md.
+ARG NEXT_PUBLIC_SENTRY_DSN=
+ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT=
+ARG NEXT_PUBLIC_SENTRY_RELEASE=
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
+    NEXT_PUBLIC_SENTRY_ENVIRONMENT=$NEXT_PUBLIC_SENTRY_ENVIRONMENT \
+    NEXT_PUBLIC_SENTRY_RELEASE=$NEXT_PUBLIC_SENTRY_RELEASE
+
 RUN npm run build
 
 ENV NODE_ENV=production

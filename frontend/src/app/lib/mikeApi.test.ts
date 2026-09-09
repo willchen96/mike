@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistantEvent, Chat } from "@/app/components/shared/types";
 
+// Backend 5xx responses are reported to Sentry from the client with the
+// request id; the reporter is mocked so these tests assert the call, and
+// the reporter's own suite covers what it does with it.
+const reportApiFailure = vi.hoisted(() => vi.fn());
+vi.mock("@/app/lib/errorReporting", () => ({ reportApiFailure }));
+
 import {
     MikeApiError,
     addDocumentToProject,
@@ -400,6 +406,33 @@ describe("apiRequest plumbing (via thin wrappers)", () => {
             requestId: "req-public-123",
             message: "Something went wrong. Please try again.",
         });
+        expect(reportApiFailure).toHaveBeenCalledWith({
+            path: "/user/profile",
+            method: "GET",
+            status: 500,
+            code: "internal_error",
+            requestId: "req-public-123",
+            // The thrown error itself travels along so a later
+            // console.error(..., error) is not reported twice.
+            error: expect.any(MikeApiError),
+        });
+    });
+
+    it("reports a 5xx without a code and never reports a 4xx", async () => {
+        fetchMock.mockResolvedValueOnce(
+            jsonResponse({ detail: { nested: true } }, { status: 500 }),
+        );
+        await expect(getUserProfile()).rejects.toMatchObject({ status: 500 });
+        expect(reportApiFailure).toHaveBeenCalledWith(
+            expect.objectContaining({ status: 500, code: null }),
+        );
+
+        reportApiFailure.mockClear();
+        fetchMock.mockResolvedValueOnce(
+            jsonResponse({ detail: "nope" }, { status: 403 }),
+        );
+        await expect(getUserProfile()).rejects.toMatchObject({ status: 403 });
+        expect(reportApiFailure).not.toHaveBeenCalled();
     });
 
     it("does not expose non-JSON server error responses", async () => {
@@ -411,6 +444,29 @@ describe("apiRequest plumbing (via thin wrappers)", () => {
             status: 502,
             message: "Something went wrong. Please try again.",
         });
+        expect(reportApiFailure).toHaveBeenCalledWith({
+            path: "/user/profile",
+            method: "GET",
+            status: 502,
+            requestId: null,
+            error: expect.any(MikeApiError),
+        });
+    });
+
+    it("reports the real HTTP method of a failed mutation", async () => {
+        fetchMock.mockResolvedValueOnce(
+            jsonResponse({ code: "internal_error", detail: "x" }, { status: 500 }),
+        );
+        await expect(createProject("Acme")).rejects.toMatchObject({ status: 500 });
+        expect(reportApiFailure).toHaveBeenCalledWith(
+            expect.objectContaining({ method: "POST", status: 500 }),
+        );
+    });
+
+    it("does not report a non-JSON 4xx", async () => {
+        fetchMock.mockResolvedValue(new Response("nope", { status: 404 }));
+        await expect(getUserProfile()).rejects.toMatchObject({ status: 404 });
+        expect(reportApiFailure).not.toHaveBeenCalled();
     });
 
     it("synthesizes a message when the error body is empty", async () => {
