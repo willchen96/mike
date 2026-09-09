@@ -35,10 +35,7 @@ import { useSidebar } from "@/app/contexts/SidebarContext";
 import { useChatHistoryContext } from "@/app/contexts/ChatHistoryContext";
 import { usePageChrome } from "@/app/contexts/PageChromeContext";
 import { invalidateDocxBytes } from "@/app/hooks/useFetchDocxBytes";
-import {
-    resolvePanelDocumentVersion,
-    resolvePanelDocumentVersionResult,
-} from "./panelDocumentVersion";
+import { resolvePanelDocumentVersionResult } from "./panelDocumentVersion";
 import { LIQUID_GLASS_TRANSLUCENT_ACTION_CLASS } from "@/app/components/ui/liquid-surface";
 import { HeaderButtonUI, HeaderButtonsUI } from "@/shared/ui/HeaderButtonsUI";
 import { HeaderActionsMenu } from "@/app/components/shared/HeaderActionsMenu";
@@ -289,6 +286,45 @@ export function ChatView({
     );
 
     /**
+     * Say why a document behind this chat would not open.
+     *
+     * A chat can be shared without its documents, and that is the common case
+     * for a standalone chat: the recipient's version lookup answers 403/404.
+     * Silently returning made every citation pill a dead control with no hint
+     * why. But 404 has a second reading, and the sharing sentence is a lie in
+     * it: the chat's OWNER sees the same status when the document they cited
+     * has since been deleted, and telling them somebody withheld their own
+     * file explains nothing and points at nobody. Role decides which of the
+     * two the reader is looking at.
+     *
+     * Everything else — network, 5xx, a document with no versions at all —
+     * is not about access and gets the plain failure notice rather than a
+     * permission popup.
+     */
+    const reportUnresolvedDocument = useCallback(
+        (status: "denied" | "unavailable") => {
+            if (status === "denied" && activeChatRole !== "owner") {
+                setActionGate({
+                    action: "open this document",
+                    requiredRole: "editor",
+                    title: "Document not shared",
+                    message:
+                        "The person who shared this chat has not shared its documents.",
+                });
+                return;
+            }
+            setActionError({
+                title: "Document unavailable",
+                message:
+                    status === "denied"
+                        ? "This document is no longer available."
+                        : "This document could not be opened. Please try again.",
+            });
+        },
+        [activeChatRole],
+    );
+
+    /**
      * Open a tab showing a single citation quote. Called from
      * AssistantMessage when the user clicks a numbered citation pill.
      */
@@ -299,21 +335,7 @@ export function ChatView({
                 panelDocumentFromCitation(citation, showQuotes),
             );
             if (resolution.status !== "resolved") {
-                // A chat can be shared without its documents, and that is the
-                // common case for a standalone chat: the recipient's version
-                // lookup 404s. Silently returning made every citation pill a
-                // dead control with no hint why. Widening the document grant
-                // is the server's business, not this click's; saying so is
-                // the whole fix.
-                if (resolution.status === "denied") {
-                    setActionGate({
-                        action: "open this document",
-                        requiredRole: "editor",
-                        title: "Document not shared",
-                        message:
-                            "The person who shared this chat has not shared its documents.",
-                    });
-                }
+                reportUnresolvedDocument(resolution.status);
                 return;
             }
             const document = resolution.document;
@@ -332,7 +354,7 @@ export function ChatView({
                 citation,
             });
         },
-        [upsertTab],
+        [reportUnresolvedDocument, upsertTab],
     );
 
     const openCase = useCallback(
@@ -385,7 +407,11 @@ export function ChatView({
             versionId: string | null;
             versionNumber: number | null;
         }) => {
-            const document = await resolvePanelDocumentVersion({
+            // The download card's click is the same question the citation
+            // pill asks, and it was answered with a bare `return`: a card
+            // whose document was deleted, or never shared, did nothing at all
+            // when clicked. Same resolution, same words.
+            const resolution = await resolvePanelDocumentVersionResult({
                 document_id: args.documentId,
                 title: args.filename,
                 type: panelDocumentType(args.filename),
@@ -394,14 +420,18 @@ export function ChatView({
                 version_id: args.versionId,
                 version_number: args.versionNumber,
             });
-            if (!document) return;
+            if (resolution.status !== "resolved") {
+                reportUnresolvedDocument(resolution.status);
+                return;
+            }
+            const document = resolution.document;
             upsertTab({
                 kind: "document",
                 id: assistantSidePanelTabId(document),
                 document,
             });
         },
-        [upsertTab],
+        [reportUnresolvedDocument, upsertTab],
     );
 
     const [resolvedEditStatuses, setResolvedEditStatuses] = useState<

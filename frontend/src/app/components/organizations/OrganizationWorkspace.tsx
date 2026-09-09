@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -130,9 +131,39 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
     role: OrgRole;
   } | null>(null);
 
+  /**
+   * Which read of each list is the current one.
+   *
+   * Two independent readers write these lists — the full `load` and the
+   * `refreshPeople` that runs whenever the Add-member modal opens or closes —
+   * and nothing ordered them. Opening the modal on a still-loading page fires
+   * both, and whichever response arrives LAST wins regardless of which was
+   * asked first: a three-person roster was seen collapsing to one, because
+   * the older answer landed second. Every read takes a ticket and applies its
+   * result only while that ticket is still the newest, so a slow answer to an
+   * old question is discarded instead of overwriting a newer one.
+   */
+  const membersRequestRef = useRef(0);
+  const invitationsRequestRef = useRef(0);
+
+  /**
+   * `member_count` is derived from the roster, so it moves with it or not at
+   * all — writing the count from a read whose rows were discarded would put
+   * the header and the table into two different truths.
+   */
+  const applyMembers = useCallback((ticket: number, next: OrgMember[]) => {
+    if (ticket !== membersRequestRef.current) return;
+    setMembers(next);
+    setOrg((current) =>
+      current ? { ...current, member_count: next.length } : current,
+    );
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    const membersTicket = ++membersRequestRef.current;
+    const invitationsTicket = ++invitationsRequestRef.current;
     try {
       const nextOrg = await getOrg(orgId);
       const [nextMembers, nextResources, nextInvitations] = await Promise.all([
@@ -142,10 +173,11 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
           ? listOrgInvitations(orgId)
           : Promise.resolve([] as OrgInvitation[]),
       ]);
-      setOrg({ ...nextOrg, member_count: nextMembers.length });
-      setMembers(nextMembers);
+      setOrg(nextOrg);
+      applyMembers(membersTicket, nextMembers);
       setResources(nextResources);
-      setInvitations(nextInvitations);
+      if (invitationsTicket === invitationsRequestRef.current)
+        setInvitations(nextInvitations);
     } catch (error) {
       console.error("Failed to load organization", error);
       setLoadError(
@@ -154,20 +186,20 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [orgId]);
+  }, [applyMembers, orgId]);
 
   const refreshInvitations = useCallback(async () => {
     if (org?.role !== "admin") return;
-    setInvitations(await listOrgInvitations(orgId));
+    const ticket = ++invitationsRequestRef.current;
+    const nextInvitations = await listOrgInvitations(orgId);
+    if (ticket !== invitationsRequestRef.current) return;
+    setInvitations(nextInvitations);
   }, [org?.role, orgId]);
 
   const refreshMembers = useCallback(async () => {
-    const nextMembers = await listOrgMembers(orgId);
-    setMembers(nextMembers);
-    setOrg((current) =>
-      current ? { ...current, member_count: nextMembers.length } : current,
-    );
-  }, [orgId]);
+    const ticket = ++membersRequestRef.current;
+    applyMembers(ticket, await listOrgMembers(orgId));
+  }, [applyMembers, orgId]);
 
   /**
    * An invitation is accepted somewhere else entirely — in the recipient's
@@ -177,18 +209,28 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
    * People roster. Reading only the invitations, which is what the Add member
    * modal used to do, left the roster a reload behind.
    *
-   * Neither refresh is the user's action, so a failure is logged rather than
-   * reported, and one failing does not cancel the other.
+   * One failing does not cancel the other — but neither is it swallowed. A
+   * console line is not a user interface: the admin was left reading a roster
+   * that had silently stopped tracking the server, with the page looking
+   * exactly as it does when the refresh worked. It says so now, in the same
+   * place every other failed action on this page speaks.
    */
   const refreshPeople = useCallback(async () => {
     const results = await Promise.allSettled([
       refreshInvitations(),
       refreshMembers(),
     ]);
-    for (const result of results) {
-      if (result.status === "rejected")
-        console.error("Failed to refresh organization people", result.reason);
-    }
+    const failure = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (!failure) return;
+    console.error("Failed to refresh organization people", failure.reason);
+    setActionError(
+      userFacingApiError(
+        failure.reason,
+        "This organization's people could not be refreshed. Reload to see the current list.",
+      ),
+    );
   }, [refreshInvitations, refreshMembers]);
 
   useEffect(() => {
@@ -447,12 +489,12 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
             invitations={invitations}
             onClose={() => {
               setInviteOpen(false);
-              // An invitation accepted while the modal was open changes the
-              // roster behind it, so the table the admin returns to is re-read
-              // rather than left as it was at page load.
-              void refreshMembers().catch((error) => {
-                console.error("Failed to refresh organization members", error);
-              });
+              // An invitation sent or accepted while the modal was open
+              // changes BOTH lists behind it — a new invitation is pending, an
+              // accepted one is gone and its sender is now on the roster — so
+              // the admin returns to a re-read of both, not of the roster
+              // alone with a stale "Pending invitations" beside it.
+              void refreshPeople();
             }}
             onChanged={refreshPeople}
           />

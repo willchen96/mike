@@ -409,6 +409,8 @@ export function OrganizationAccessEditor({
     loading = false,
     disabled = false,
     error,
+    currentUserId,
+    currentUserEmail,
     onAssign,
     onRemove,
 }: {
@@ -419,6 +421,14 @@ export function OrganizationAccessEditor({
     loading?: boolean;
     disabled?: boolean;
     error?: string | null;
+    /**
+     * Who is looking. Both identifiers, because a roster row can arrive with
+     * one and not the other — and the server refuses either override aimed at
+     * the caller ("You cannot share a project with yourself"), so offering
+     * their own name in these pickers only ever produced that error.
+     */
+    currentUserId?: string | null;
+    currentUserEmail?: string | null;
     onAssign: (
         member: AccessRow,
         role: "owner" | "deny",
@@ -436,8 +446,16 @@ export function OrganizationAccessEditor({
                 "",
         ),
     );
+    const selfEmail = currentUserEmail?.trim().toLowerCase() ?? null;
+    const isSelf = (member: AccessRow) =>
+        (!!currentUserId && member.user_id === currentUserId) ||
+        (!!selfEmail && member.email?.trim().toLowerCase() === selfEmail);
     const availableMembers = members.filter((member) => {
         if (member.isCreator || !member.email) return false;
+        // Neither override can be aimed at the caller: the server answers
+        // "You cannot share a project with yourself", so their own row in
+        // these pickers was an action that could only fail.
+        if (isSelf(member)) return false;
         return !assignedKeys.has(
             member.user_id ?? member.email.toLowerCase(),
         );
@@ -460,16 +478,26 @@ export function OrganizationAccessEditor({
     // An existing deny list is a security decision somebody needs to see, so
     // the section opens itself when there is anything in it. The assignments
     // arrive with the roster, after mount, so the mount-time initialiser is
-    // not enough on its own — re-derive it whenever a load finishes, the
-    // render-phase form of "adjust state when a prop changes".
+    // not enough on its own — re-derive it when the load finishes.
+    //
+    // Once only, though. Every grant and revoke re-reads the roster, and each
+    // of those re-runs this: a deny list the user had deliberately collapsed
+    // sprang open again after their next change, and again after the one
+    // after that. Opening it the first time is the point being made; after
+    // that the section is theirs.
     const [denyState, setDenyState] = useState({
         loading,
         expanded: denyCount > 0,
+        autoExpanded: denyCount > 0,
     });
     if (denyState.loading !== loading) {
+        const settled = !loading;
+        const shouldAutoExpand =
+            settled && !denyState.autoExpanded && denyCount > 0;
         setDenyState({
             loading,
-            expanded: loading ? denyState.expanded : denyCount > 0,
+            expanded: shouldAutoExpand ? true : denyState.expanded,
+            autoExpanded: denyState.autoExpanded || (settled && denyCount > 0),
         });
     }
     const denyExpanded = denyState.expanded;

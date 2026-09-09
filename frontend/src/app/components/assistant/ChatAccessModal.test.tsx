@@ -15,7 +15,7 @@ const { getChatAccess, getChatPeople, grantChatAccess, revokeChatAccess } =
     }));
 
 vi.mock("@/app/contexts/AuthContext", () => ({
-    useAuth: () => ({ user: { email: "me@example.com" } }),
+    useAuth: () => ({ user: { id: "user-1", email: "me@example.com" } }),
 }));
 
 // importOriginal so MikeApiError stays the real class — userFacingApiError
@@ -28,39 +28,51 @@ vi.mock("@/app/lib/mikeApi", async (importOriginal) => ({
     revokeChatAccess: (...args: unknown[]) => revokeChatAccess(...args),
 }));
 
-// A faithful miniature of AccessModal: it CALLS fetchAccess and renders the
-// rejection through userFacingApiError, exactly as the real one does. That
-// call is the modal's error channel, and ChatAccessModal now routes the
-// owner-only grants request through it — a stub that never called
-// fetchAccess would test nothing about either.
+// A faithful miniature of AccessModal: it CALLS fetchAccess, renders the
+// roster it resolves with, and renders a rejection through userFacingApiError
+// exactly as the real one does — plus the `access.error` line the real modal
+// shows beside the roster. Both channels matter here: the roster and the
+// owner-only grants are separate permissions, and a stub that collapsed them
+// would test neither.
 vi.mock("@/app/components/modals/AccessModal", () => ({
     AccessModal: (props: {
         breadcrumb: string[];
         currentUserEmail?: string | null;
+        currentUserId?: string | null;
         resource: { id: string } | null;
         fetchAccess: (id: string) => Promise<unknown>;
         access: {
             canManage: boolean;
+            error?: string | null;
             onGrant: (email: string, role: "editor") => Promise<void>;
             onRevoke: (email: string) => Promise<void>;
         };
     }) => {
         const [error, setError] = useState<string | null>(null);
+        const [members, setMembers] = useState<string | null>(null);
         const resourceId = props.resource?.id ?? null;
         const fetchAccess = props.fetchAccess;
         useEffect(() => {
             if (!resourceId) return;
             let cancelled = false;
-            void fetchAccess(resourceId).catch((cause: unknown) => {
-                if (!cancelled) {
-                    setError(
-                        userFacingApiError(
-                            cause,
-                            "Could not load access details.",
-                        ),
-                    );
-                }
-            });
+            void fetchAccess(resourceId)
+                .then((people) => {
+                    if (cancelled) return;
+                    const roster = people as {
+                        members?: { email: string }[];
+                    } | null;
+                    setMembers(String(roster?.members?.length ?? 0));
+                })
+                .catch((cause: unknown) => {
+                    if (!cancelled) {
+                        setError(
+                            userFacingApiError(
+                                cause,
+                                "Could not load access details.",
+                            ),
+                        );
+                    }
+                });
             return () => {
                 cancelled = true;
             };
@@ -69,10 +81,18 @@ vi.mock("@/app/components/modals/AccessModal", () => ({
             <div>
                 <span>{props.breadcrumb.join(" / ")}</span>
                 <span data-testid="current-email">{props.currentUserEmail}</span>
+                <span data-testid="current-id">
+                    {String(props.currentUserId)}
+                </span>
                 <span data-testid="can-manage">
                     {String(props.access.canManage)}
                 </span>
-                <span data-testid="access-error">{error}</span>
+                <span data-testid="member-count">
+                    {members ?? "unresolved"}
+                </span>
+                <span data-testid="access-error">
+                    {error ?? props.access.error}
+                </span>
                 <button
                     type="button"
                     onClick={() =>
@@ -193,6 +213,80 @@ describe("ChatAccessModal", () => {
         expect(screen.getByTestId("can-manage")).toHaveTextContent("false");
     });
 
+    it("passes the signed-in user's id so their own row stays read-only", async () => {
+        // The editor identifies "you" by id first and email second; this was
+        // the one caller that sent no id, so a roster row with a null email
+        // let the owner aim Remove at themselves.
+        render(
+            <ChatAccessModal
+                open
+                chat={chat({ is_owner: true })}
+                onClose={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByTestId("current-id")).toHaveTextContent("user-1");
+    });
+
+    it("keeps the roster when the owner-only grants fetch is refused", async () => {
+        // The two requests answer to different permissions. Chained, a 403 on
+        // the grants call rejected the roster with it and the modal claimed
+        // "No one has access yet" about a chat that plainly has people on it.
+        getChatPeople.mockResolvedValue({
+            owner: { user_id: "user-1", email: "me@example.com" },
+            members: [
+                { user_id: "user-2", email: "a@example.com", role: "editor" },
+                { user_id: "user-3", email: "b@example.com", role: "viewer" },
+            ],
+        });
+        getChatAccess.mockRejectedValue(
+            new MikeApiError({
+                message: "You do not have access to manage this chat",
+                status: 403,
+            }),
+        );
+
+        render(
+            <ChatAccessModal
+                open
+                chat={chat({ is_owner: true })}
+                onClose={vi.fn()}
+            />,
+        );
+
+        await waitFor(() =>
+            expect(screen.getByTestId("member-count")).toHaveTextContent("2"),
+        );
+        expect(screen.getByTestId("access-error")).toHaveTextContent(
+            "You do not have access to manage this chat",
+        );
+        // Fail closed on management, without lying about the roster.
+        expect(screen.getByTestId("can-manage")).toHaveTextContent("false");
+    });
+
+    it("still reports a roster failure through the modal's error channel", async () => {
+        getChatPeople.mockRejectedValue(
+            new MikeApiError({ message: "Chat not found", status: 404 }),
+        );
+
+        render(
+            <ChatAccessModal
+                open
+                chat={chat({ is_owner: true })}
+                onClose={vi.fn()}
+            />,
+        );
+
+        await waitFor(() =>
+            expect(screen.getByTestId("access-error")).toHaveTextContent(
+                "Chat not found",
+            ),
+        );
+        expect(screen.getByTestId("member-count")).toHaveTextContent(
+            "unresolved",
+        );
+    });
+
     it("falls back to generic wording for a non-4xx access failure", async () => {
         getChatAccess.mockRejectedValue(new Error("network"));
 
@@ -206,7 +300,7 @@ describe("ChatAccessModal", () => {
 
         await waitFor(() =>
             expect(screen.getByTestId("access-error")).toHaveTextContent(
-                "Could not load access details.",
+                "Sharing details could not be loaded, so access cannot be changed here.",
             ),
         );
     });

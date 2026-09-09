@@ -141,6 +141,30 @@ describe("WorkflowDetailPage access mutations", () => {
         ).not.toBeInTheDocument();
     });
 
+    it("says the list is stale when the re-read fails", async () => {
+        // `.catch(() => {})` left the roster showing the roles as they were
+        // BEFORE a change the server accepted, with nothing saying the screen
+        // had stopped tracking the server.
+        const user = userEvent.setup();
+        vi.mocked(listWorkflowShares).mockRejectedValue(
+            new MikeApiError({ message: "Shares unavailable.", status: 500 }),
+        );
+
+        const rolePill = await openAccess(user);
+        await user.click(rolePill);
+        await user.click(screen.getByRole("menuitem", { name: "Owner" }));
+
+        expect(
+            await screen.findByText(
+                "The change was saved, but this list could not be reloaded. Reopen Access to see the current one.",
+            ),
+        ).toBeVisible();
+        // Still not reported as a failed change.
+        expect(
+            screen.queryByText("Could not change that role."),
+        ).not.toBeInTheDocument();
+    });
+
     it("does not report a revoke as failed when only the re-read fails", async () => {
         const user = userEvent.setup();
         vi.mocked(listWorkflowShares).mockRejectedValue(

@@ -56,16 +56,38 @@ vi.mock("./AssistantMessage", () => ({
     AssistantMessage: ({
         citations,
         onCitationClick,
+        onOpenDocument,
     }: {
         citations?: Citation[];
         onCitationClick?: (citation: Citation) => void;
+        onOpenDocument?: (args: {
+            documentId: string;
+            filename: string;
+            versionId: string | null;
+            versionNumber: number | null;
+        }) => void;
     }) => (
-        <button
-            type="button"
-            onClick={() => citations?.[0] && onCitationClick?.(citations[0])}
-        >
-            citation pill
-        </button>
+        <>
+            <button
+                type="button"
+                onClick={() => citations?.[0] && onCitationClick?.(citations[0])}
+            >
+                citation pill
+            </button>
+            <button
+                type="button"
+                onClick={() =>
+                    onOpenDocument?.({
+                        documentId: "doc-1",
+                        filename: "agreement.docx",
+                        versionId: null,
+                        versionNumber: null,
+                    })
+                }
+            >
+                download card
+            </button>
+        </>
     ),
 }));
 
@@ -109,12 +131,12 @@ const messages: Message[] = [
     { id: "m1", role: "assistant", content: "answer", citations: [citation] },
 ];
 
-function renderView() {
+function renderView(overrides: Partial<Chat> = {}) {
     render(
         <PageChromeContext.Provider value={{ mobileActionsContainer: null }}>
             <ChatView
                 chatId="chat-1"
-                chat={chat}
+                chat={{ ...chat, ...overrides }}
                 messages={messages}
                 isResponseLoading={false}
                 handleChat={vi.fn().mockResolvedValue("chat-1")}
@@ -153,9 +175,10 @@ describe("ChatView citation on a chat shared without its documents", () => {
         ).toBeInTheDocument();
     });
 
-    it("stays quiet when the lookup merely failed", async () => {
+    it("does not call a failed lookup a refusal", async () => {
         // A transport failure says nothing about the caller's access, so it
-        // must not be reported as one.
+        // must not be reported as one — but it is still worth saying, or the
+        // pill looks broken.
         listDocumentVersions.mockRejectedValue(new Error("network"));
         renderView();
 
@@ -163,6 +186,58 @@ describe("ChatView citation on a chat shared without its documents", () => {
 
         await waitFor(() => expect(listDocumentVersions).toHaveBeenCalled());
         expect(screen.queryByText("Document not shared")).not.toBeInTheDocument();
+        expect(
+            await screen.findByText(
+                "This document could not be opened. Please try again.",
+            ),
+        ).toBeInTheDocument();
+    });
+
+    // 404 has two readers. The chat's OWNER gets it when the document they
+    // cited has since been deleted, and telling them somebody withheld their
+    // own file names a culprit who does not exist.
+    it("tells the chat's owner the document is gone, not withheld", async () => {
+        listDocumentVersions.mockRejectedValue(
+            new MikeApiError({ message: "Not found", status: 404 }),
+        );
+        renderView({ is_owner: true, access_role: "owner" });
+
+        fireEvent.click(screen.getByRole("button", { name: "citation pill" }));
+
+        expect(
+            await screen.findByText("This document is no longer available."),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByText("Document not shared"),
+        ).not.toBeInTheDocument();
+    });
+
+    // The download card asked the same question and threw the answer away:
+    // clicking a card for a missing document did nothing whatsoever.
+    it("explains a refused document from the download card too", async () => {
+        listDocumentVersions.mockRejectedValue(
+            new MikeApiError({ message: "Not found", status: 404 }),
+        );
+        renderView();
+
+        fireEvent.click(screen.getByRole("button", { name: "download card" }));
+
+        expect(
+            await screen.findByText("Document not shared"),
+        ).toBeInTheDocument();
+    });
+
+    it("tells the owner a download card's document is gone", async () => {
+        listDocumentVersions.mockRejectedValue(
+            new MikeApiError({ message: "Not found", status: 404 }),
+        );
+        renderView({ is_owner: true, access_role: "owner" });
+
+        fireEvent.click(screen.getByRole("button", { name: "download card" }));
+
+        expect(
+            await screen.findByText("This document is no longer available."),
+        ).toBeInTheDocument();
     });
 
     it("opens the citation normally when the versions are readable", async () => {

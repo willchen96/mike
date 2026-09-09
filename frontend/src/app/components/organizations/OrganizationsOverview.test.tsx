@@ -197,7 +197,12 @@ describe("OrganizationsOverview", () => {
     render(<OrganizationsOverview />);
     await screen.findByText("Elite Law LLP");
 
-    await user.click(screen.getByRole("button", { name: "Invites" }));
+    // The tab itself has to say so: an unopened "Invites" looked identical
+    // whether the inbox was empty or the fetch had failed, and only one of
+    // those is worth a click.
+    await user.click(
+      screen.getByRole("button", { name: "Invites (unavailable)" }),
+    );
     expect(
       screen.getByText("Could not load your invitations."),
     ).toBeInTheDocument();
@@ -209,6 +214,51 @@ describe("OrganizationsOverview", () => {
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Inviting Chambers")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Invites (1)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the server's own wording when the organizations fetch is refused", async () => {
+    // The invitations half of the same load already did this; the orgs half
+    // threw the server's sentence away for a hardcoded one.
+    mocks.listOrgs.mockRejectedValue(
+      new MikeApiError({
+        status: 403,
+        message: "Your account is not permitted to list organizations",
+      }),
+    );
+    render(<OrganizationsOverview />);
+
+    expect(
+      await screen.findByText(
+        "Your account is not permitted to list organizations",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a failing reload from being reported as a failed answer", async () => {
+    // The re-read is bookkeeping that runs after the server has already
+    // accepted, so it sits outside the try: a failure there must not become
+    // "Could not answer that invitation" about an invitation that was taken.
+    const user = userEvent.setup();
+    mocks.listMyOrgInvitations.mockResolvedValueOnce([INVITATION]);
+    mocks.acceptOrgInvitation.mockResolvedValue(undefined);
+    render(<OrganizationsOverview />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Invites (1)" }),
+    );
+    mocks.listOrgs.mockRejectedValue(new Error("network"));
+    mocks.listMyOrgInvitations.mockRejectedValue(new Error("network"));
+    await user.click(screen.getByRole("button", { name: "Accept" }));
+
+    await waitFor(() =>
+      expect(mocks.acceptOrgInvitation).toHaveBeenCalledWith("invite-1"),
+    );
+    expect(
+      screen.queryByText("Could not answer that invitation."),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps a partly failed creation from vanishing when the modal is closed", async () => {

@@ -85,7 +85,14 @@ export function OrganizationsOverview() {
       setLoadError(null);
     } else {
       console.error("Failed to load organizations", orgsResult.reason);
-      setLoadError("Could not load organizations.");
+      // The invitations half of this same function already routes its
+      // failure through userFacingApiError, which shows the server's own
+      // wording for a 4xx. A hardcoded sentence here threw that away, so the
+      // two halves of one screen answered the same kind of failure
+      // differently — and the more useful answer was the one discarded.
+      setLoadError(
+        userFacingApiError(orgsResult.reason, "Could not load organizations."),
+      );
       setOrgs([]);
     }
     if (invitationsResult.status === "fulfilled") {
@@ -113,15 +120,20 @@ export function OrganizationsOverview() {
     try {
       if (accept) await acceptOrgInvitation(invitation.id);
       else await declineOrgInvitation(invitation.id);
-      await load();
     } catch (error) {
       setInvitationError(
         userFacingApiError(error, "Could not answer that invitation."),
       );
-      await load();
     } finally {
       setAnsweringId(null);
     }
+    // Outside the try, and on both paths. Inside it, a re-read that failed
+    // would have been reported as "Could not answer that invitation" about an
+    // invitation the server had just accepted — the reload is bookkeeping,
+    // not the user's action. Both paths need it: an accepted invitation moves
+    // to the organizations list, and a refusal is often a refusal because
+    // somebody answered it somewhere else already.
+    await load();
   }
 
   const loading = orgs === null;
@@ -133,13 +145,18 @@ export function OrganizationsOverview() {
       { id: "joined", label: "Joined" },
       {
         id: "invites",
-        label:
-          invitations.length > 0
+        // A failed fetch and an empty inbox both left this reading plain
+        // "Invites", so the one state worth opening the tab for looked
+        // exactly like the one that is not. Plain text in the label, not a
+        // badge: this is a status, not a control.
+        label: invitationsError
+          ? "Invites (unavailable)"
+          : invitations.length > 0
             ? `Invites (${invitations.length})`
             : "Invites",
       },
     ],
-    [invitations.length],
+    [invitations.length, invitationsError],
   );
   const visibleOrgs = useMemo(() => {
     if (activeFilter === "invites") return [];

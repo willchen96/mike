@@ -476,17 +476,6 @@ export function NewWorkflowModal({
                     createdWorkflowRef.current ??
                     (await createWorkflow(createPayload));
                 createdWorkflowRef.current = workflow;
-                const pendingAssetIds = selectedAssets
-                    .map((document) => document.id)
-                    .filter((id) => !copiedAssetIdsRef.current.has(id));
-                if (type === "assistant" && pendingAssetIds.length > 0) {
-                    await copyDocumentsToWorkflowAssets(
-                        workflow.id,
-                        pendingAssetIds,
-                    );
-                    for (const id of pendingAssetIds)
-                        copiedAssetIdsRef.current.add(id);
-                }
                 const assignments = applyAccess
                     ? orgId === PERSONAL_WORKSPACE
                         ? directGrants
@@ -518,6 +507,9 @@ export function NewWorkflowModal({
                         });
                     }
                 }
+                const pendingAssetIds = selectedAssets
+                    .map((document) => document.id)
+                    .filter((id) => !copiedAssetIdsRef.current.has(id));
                 if (grantFailures.length > 0) {
                     // Stay open on THIS dialog: createdWorkflowRef holds the
                     // workflow, so pressing Create again retries only the
@@ -525,9 +517,49 @@ export function NewWorkflowModal({
                     setError(
                         `Workflow created, but access was not granted to ${grantFailures
                             .map((failure) => failure.email)
-                            .join(", ")}: ${grantFailures[0]!.detail}`,
+                            .join(", ")}: ${grantFailures[0]!.detail}${
+                            pendingAssetIds.length > 0
+                                ? ` The ${pendingAssetIds.length} selected ${
+                                      pendingAssetIds.length === 1
+                                          ? "file is"
+                                          : "files are"
+                                  } still pending and will be copied when you try again.`
+                                : ""
+                        }`,
                     );
                     return;
+                }
+
+                // The asset copy used to run BEFORE the grants and outside any
+                // try of its own. A failed copy therefore threw out of the
+                // whole submit and was reported as "Failed to create workflow"
+                // — about a workflow that exists — and because nothing
+                // recorded what had been copied, the retry sent every asset
+                // again and duplicated the ones that had worked. It runs last
+                // now, one asset at a time, and each id is recorded as it
+                // lands, so a retry sends only what is still missing.
+                if (type === "assistant" && pendingAssetIds.length > 0) {
+                    let copyFailures = 0;
+                    for (const id of pendingAssetIds) {
+                        try {
+                            await copyDocumentsToWorkflowAssets(workflow.id, [
+                                id,
+                            ]);
+                            copiedAssetIdsRef.current.add(id);
+                        } catch {
+                            copyFailures += 1;
+                        }
+                    }
+                    if (copyFailures > 0) {
+                        setError(
+                            `Workflow created, but ${copyFailures} ${
+                                copyFailures === 1 ? "asset" : "assets"
+                            } could not be copied. Press Create again to retry the ${
+                                copyFailures === 1 ? "copy" : "copies"
+                            }.`,
+                        );
+                        return;
+                    }
                 }
                 onCreated({
                     ...workflow,

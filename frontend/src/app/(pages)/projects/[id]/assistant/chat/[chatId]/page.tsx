@@ -319,8 +319,22 @@ export default function ProjectAssistantChatPage({ params }: Props) {
     // directions — an editor who created the chat was offered a Delete that
     // came back 403, and a viewer demoted after starting a thread kept a live
     // composer on it. The ladder is the only answer this page asks for.
-    const canSendChat = canEditContent;
+    //
+    // Three answers, not two — the same tri-state the standalone chat page
+    // adopted. `can(null, …)` is false, and false here is a SENTENCE: the
+    // composer reads "Viewing only — sending needs edit access". A project
+    // owner opening their own chat cold saw that accusation for the length of
+    // GET /projects/:id. `null` keeps the composer closed while we wait
+    // without asserting anything about who the reader is.
+    const canSendChat = projectRole === null ? null : canEditContent;
     const canDeleteChat = can(projectRole, "container.delete");
+    // Rename and Delete are offered by the header menu, whose handlers return
+    // in silence while the role is unknown — deliberately, since accusing
+    // somebody before the payload lands is a guess, but a menu item that
+    // quietly does nothing when clicked is indistinguishable from a broken
+    // one. Disable them for that window, the way the upload button already
+    // does with `!canEditContent`.
+    const roleKnown = projectRole !== null;
     const pendingInitialUserMessageRef = useRef<Message | null>(
         initialMessages.length === 1 && initialMessages[0].role === "user"
             ? initialMessages[0]
@@ -664,7 +678,10 @@ export default function ProjectAssistantChatPage({ params }: Props) {
     async function handleNewChat() {
         setCreatingChat(true);
         try {
-            const id = await saveChat(projectId);
+            // A project chat's role comes from the project, so the sidebar's
+            // optimistic row has to carry the caller's project role rather
+            // than assume owner.
+            const id = await saveChat(projectId, projectRole);
             if (id) router.push(`/projects/${projectId}/assistant/chat/${id}`);
         } finally {
             setCreatingChat(false);
@@ -1049,6 +1066,7 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                                         label: "Rename",
                                         icon: Pencil,
                                         onSelect: () => void handleRenameChat(),
+                                        disabled: !roleKnown,
                                     },
                                     {
                                         label: deletingChat
@@ -1056,7 +1074,7 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                                             : "Delete",
                                         icon: Trash2,
                                         onSelect: () => void handleDeleteChat(),
-                                        disabled: deletingChat,
+                                        disabled: deletingChat || !roleKnown,
                                         variant: "danger",
                                     },
                                 ]}

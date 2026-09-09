@@ -23,6 +23,11 @@ type VersionList = {
  * "denied" is that case and only that case; "unavailable" is every other
  * failure (network, 5xx, a document with no versions at all), which is not
  * something to tell the reader about their access.
+ *
+ * "denied" is a status, not a sentence. 404 is also what the chat's own OWNER
+ * gets once the document they cited has been deleted, and only the caller
+ * knows which of the two readers it is holding — so the caller decides the
+ * wording from the role it already has, and this module stays out of it.
  */
 export type PanelDocumentResolution =
     | { status: "resolved"; document: PanelDocument }
@@ -74,19 +79,8 @@ export async function resolvePanelDocumentVersionResult(
     };
 }
 
-/**
- * The document, or null when it could not be resolved for any reason.
- * Callers that need to tell a refusal apart from a failure should use
- * `resolvePanelDocumentVersionResult` directly.
- */
-export async function resolvePanelDocumentVersion(
-    document: PanelDocument,
-    loadVersions: (documentId: string) => Promise<VersionList> =
-        listDocumentVersions,
-): Promise<PanelDocument | null> {
-    const resolution = await resolvePanelDocumentVersionResult(
-        document,
-        loadVersions,
-    );
-    return resolution.status === "resolved" ? resolution.document : null;
-}
+// There used to be a `resolvePanelDocumentVersion` wrapper here that threw
+// the reason away and returned `PanelDocument | null`. Its last caller was
+// the download-card click, and "null" is precisely why that click did nothing
+// visible when a document was missing. Every caller now has a reason to give,
+// so the lossy wrapper is gone rather than left as the easier option.

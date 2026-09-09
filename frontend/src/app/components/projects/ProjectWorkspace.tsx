@@ -379,7 +379,10 @@ export function ProjectWorkspaceProvider({
         }
         setCreatingChat(true);
         try {
-            const id = await saveChat(projectId);
+            // The sidebar row the context prepends needs the same project
+            // role this list stamps below; without it the sidebar offered an
+            // editor a Delete the server refuses.
+            const id = await saveChat(projectId, accessRole);
             if (id) {
                 const now = new Date().toISOString();
                 setProjectChats((prev) =>

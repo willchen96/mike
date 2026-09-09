@@ -29,6 +29,14 @@ export interface AccessControls {
     inheritedFromProjectId?: string | null;
     canManage: boolean;
     ownerLabel?: string;
+    /**
+     * A failure the owner of this modal wants shown beside the roster rather
+     * than in place of it — a refused grants fetch, say, which leaves the
+     * people list perfectly loadable but management impossible. It shares the
+     * editor's error line with the modal's own action failures; an in-flight
+     * action's message wins, because it is the newer answer.
+     */
+    error?: string | null;
     onGrant: (email: string, role: AccessAssignmentRole) => Promise<void>;
     onRevoke: (email: string) => Promise<void>;
 }
@@ -335,11 +343,13 @@ export function AccessModal({
                                 : null
                         }
                         ownerLabel={access.ownerLabel}
+                        currentUserId={currentUserId}
+                        currentUserEmail={currentUserEmail}
                         loading={
                             accessLoading || loadedRosterKey !== rosterKey
                         }
                         disabled={!canManage || busy}
-                        error={error}
+                        error={error ?? access.error ?? null}
                         onAssign={(member, role) =>
                             changeRole(member, role)
                         }
@@ -372,7 +382,7 @@ export function AccessModal({
                     validateEmail={validateEmail}
                     onRoleChange={changeRole}
                     onRemove={scope === "direct" ? remove : undefined}
-                    error={error}
+                    error={error ?? access.error ?? null}
                 />
             </div>
         </Modal>

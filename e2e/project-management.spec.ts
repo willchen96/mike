@@ -112,7 +112,11 @@ test("delete a project", async ({ page }) => {
      * The "Actions" button is conditionally rendered only when selectedIds.length > 0.
      * It opens a small dropdown containing a "Delete" option.
      */
-    const actionsBtn = page.getByRole("button", { name: /^Actions/ });
+    /* Exact name, not a /^Actions/ prefix: the sidebar's chat rows carry
+       "Actions for <title>" buttons, so the prefix matched more than one
+       element and Playwright's strict mode failed the click outright. The
+       toolbar's own button is named exactly "Actions". */
+    const actionsBtn = page.getByRole("button", { name: "Actions", exact: true });
     await expect(actionsBtn).toBeVisible({ timeout: 3_000 });
     await actionsBtn.click();
 

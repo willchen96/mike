@@ -261,6 +261,39 @@ describe("project chat page — the project ladder, not the creator", () => {
         await waitFor(() => expect(deleteChat).not.toHaveBeenCalled());
         expect(screen.queryByText("Owner-only action")).not.toBeInTheDocument();
     });
+
+    it("disables Rename and Delete while the project role is unknown", async () => {
+        // Silence was the right answer to "should we accuse them?" and the
+        // wrong one to "what does this menu item do?": clicking did nothing,
+        // with no refusal and no disabled state, which reads as broken.
+        getProject.mockReturnValue(new Promise(() => {}));
+        await renderPage();
+
+        expect(screen.getByRole("button", { name: "Rename" })).toBeDisabled();
+        expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+    });
+
+    it("re-enables them once the role arrives", async () => {
+        getProject.mockResolvedValue(project("owner"));
+        await renderPage();
+
+        await waitFor(() =>
+            expect(
+                screen.getByRole("button", { name: "Rename" }),
+            ).toBeEnabled(),
+        );
+        expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
+    });
+
+    it("says nothing about sending until the project role is known", async () => {
+        // `false` here is an accusation — the composer reads "Viewing only".
+        // A project owner opening their own chat cold was told that for the
+        // length of the project fetch.
+        getProject.mockReturnValue(new Promise(() => {}));
+        await renderPage();
+
+        expect(screen.getByTestId("can-send")).toHaveTextContent("null");
+    });
 });
 
 describe("project chat page — refused mutations are surfaced", () => {

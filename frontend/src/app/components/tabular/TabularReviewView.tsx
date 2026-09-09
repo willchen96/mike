@@ -1664,7 +1664,7 @@ export function TRView({ reviewId, projectId }: Props) {
                             }}
                             initialChatId={selectedChatId}
                             onChatIdChange={setSelectedChatId}
-                            canSend={canEditContent}
+                            canSend={roleKnown ? canEditContent : null}
                         />
                     )}
                 </div>

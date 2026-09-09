@@ -123,8 +123,15 @@ interface Props {
     onClose: () => void;
     initialChatId?: string | null;
     onChatIdChange?: (chatId: string | null) => void;
-    /** Sending is member-tier server-side; false renders a read-only composer. */
-    canSend?: boolean;
+    /**
+     * Sending is member-tier server-side; false renders a read-only composer.
+     *
+     * `null` is the third answer — the review's role has not arrived yet. It
+     * closes the composer like `false`, but ChatInput's placeholder stays
+     * neutral instead of telling an owner they are "viewing only" for the
+     * length of a fetch.
+     */
+    canSend?: boolean | null;
 }
 
 // ---------------------------------------------------------------------------

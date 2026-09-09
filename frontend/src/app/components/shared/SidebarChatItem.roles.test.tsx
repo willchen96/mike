@@ -199,13 +199,17 @@ describe("SidebarChatItem role gates", () => {
             />,
         );
 
-        expect(screen.getByText("Shared")).toBeInTheDocument();
         // Plain text, not a pill badge (AGENTS.md: informational labels are
-        // text) — and outside the title button, so the row is still found by
-        // its exact title.
+        // text), at a size and colour that meets the contrast baseline —
+        // text-[10px] text-gray-400 measured about 2.6:1.
+        const marker = screen.getByText("Shared");
+        expect(marker).toHaveClass("text-xs", "text-gray-500");
+        // The marker renders in a sibling element, so it reached neither the
+        // row's tooltip nor its accessible name: a screen-reader user heard
+        // exactly what the thread's owner hears.
         expect(
-            screen.getByRole("button", { name: "Quarterly filing" }),
-        ).toBeInTheDocument();
+            screen.getByRole("button", { name: "Quarterly filing (Shared)" }),
+        ).toHaveAttribute("title", "Quarterly filing (Shared)");
     });
 
     it("does not mark the caller's own chat", () => {

@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PanelDocument } from "../shared/types";
 import { MikeApiError } from "@/app/lib/mikeApi";
-import {
-    resolvePanelDocumentVersion,
-    resolvePanelDocumentVersionResult,
-} from "./panelDocumentVersion";
+import { resolvePanelDocumentVersionResult } from "./panelDocumentVersion";
 
 const document: PanelDocument = {
     document_id: "document-1",
@@ -16,7 +13,7 @@ const document: PanelDocument = {
     version_number: null,
 };
 
-describe("resolvePanelDocumentVersion", () => {
+describe("resolvePanelDocumentVersionResult version selection", () => {
     it("resolves an unversioned panel link to the current version", async () => {
         const loadVersions = vi.fn().mockResolvedValue({
             current_version_id: "version-3",
@@ -32,10 +29,10 @@ describe("resolvePanelDocumentVersion", () => {
         });
 
         await expect(
-            resolvePanelDocumentVersion(document, loadVersions),
+            resolvePanelDocumentVersionResult(document, loadVersions),
         ).resolves.toMatchObject({
-            version_id: "version-3",
-            version_number: 3,
+            status: "resolved",
+            document: { version_id: "version-3", version_number: 3 },
         });
     });
 
@@ -61,13 +58,13 @@ describe("resolvePanelDocumentVersion", () => {
         });
 
         await expect(
-            resolvePanelDocumentVersion(
+            resolvePanelDocumentVersionResult(
                 { ...document, version_number: 2 },
                 loadVersions,
             ),
         ).resolves.toMatchObject({
-            version_id: "version-2",
-            version_number: 2,
+            status: "resolved",
+            document: { version_id: "version-2", version_number: 2 },
         });
     });
 });
@@ -147,15 +144,4 @@ describe("resolvePanelDocumentVersionResult", () => {
         expect(loadVersions).not.toHaveBeenCalled();
     });
 
-    it("keeps the null-returning wrapper for callers that cannot act on the reason", async () => {
-        const loadVersions = vi
-            .fn()
-            .mockRejectedValue(
-                new MikeApiError({ message: "Not found", status: 404 }),
-            );
-
-        await expect(
-            resolvePanelDocumentVersion(document, loadVersions),
-        ).resolves.toBeNull();
-    });
 });

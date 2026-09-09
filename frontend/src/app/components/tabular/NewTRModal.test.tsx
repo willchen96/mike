@@ -205,6 +205,31 @@ describe("NewTRModal", () => {
         expect(onAdd).toHaveBeenCalledTimes(2);
     });
 
+    it("retires Back once the review exists", async () => {
+        // The retry reuses the created review, so the earlier steps no longer
+        // describe anything that can still change: a Personal → project switch
+        // between attempts left the review where it was first created while
+        // applying the new scope's assignments to it.
+        const onAdd = vi
+            .fn()
+            .mockResolvedValue(
+                "Review created, but access was not granted to colleague@firm.test: That address is not in your organization.",
+            );
+        render(<NewTRModal open onClose={vi.fn()} onAdd={onAdd} />);
+
+        fireEvent.change(screen.getByLabelText("Review name"), {
+            target: { value: "Shared review" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Next" }));
+        fireEvent.click(screen.getByRole("button", { name: "Next" }));
+        expect(screen.getByRole("button", { name: "Back" })).toBeEnabled();
+
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+        await screen.findByRole("alert");
+
+        expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
+    });
+
     it("stores uploads from a project review in that project", async () => {
         const uploadedDocument = {
             id: "uploaded-document",

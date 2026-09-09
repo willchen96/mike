@@ -37,8 +37,16 @@ export async function createProject(
        here would cut that flow short. `timeout: 0` means "no timeout" and is
        left alone. */
     const budget = filePath ? 90_000 : 60_000;
-    const current = test.info().timeout;
-    if (current !== 0 && current < budget) test.setTimeout(budget);
+    /* `test.info()` throws outside a running test — a fixture, a global
+       setup, or any helper reused from a plain script — and this helper's
+       whole point is being callable from anywhere. A missing timeout budget
+       is not worth taking the caller down for. */
+    try {
+        const current = test.info().timeout;
+        if (current !== 0 && current < budget) test.setTimeout(budget);
+    } catch {
+        // Not inside a test: the caller owns its own timeout.
+    }
 
     await page.goto("/projects");
     await expect(page).toHaveURL(/\/projects/, { timeout: 10_000 });

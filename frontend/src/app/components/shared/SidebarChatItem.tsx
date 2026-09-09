@@ -55,6 +55,15 @@ export function SidebarChatItem({ chat, isActive, onSelect, projectName }: Props
     const canRename = can(role, "content.edit");
     const canShare = can(role, "access.manage");
     const canDelete = can(role, "container.delete");
+    // One label for the row's tooltip and its accessible name, so the
+    // "Shared" marker rendered beside the title is part of both.
+    const chatTitle = chat.title ?? "Untitled chat";
+    const rowLabel = [
+        projectName ? `${projectName}: ${chatTitle}` : chatTitle,
+        chat.is_owner === false ? "(Shared)" : null,
+    ]
+        .filter(Boolean)
+        .join(" ");
 
     useEffect(() => {
         if (isRenaming) editInputRef.current?.focus();
@@ -139,7 +148,13 @@ export function SidebarChatItem({ chat, isActive, onSelect, projectName }: Props
                                 ? "pr-3 text-gray-900"
                                 : "pr-0 text-gray-700 group-hover:pr-3",
                         )}
-                        title={projectName ? `${projectName}: ${chat.title ?? "Untitled chat"}` : (chat.title ?? "Untitled chat")}
+                        // The "Shared" marker sits in a SIBLING element, so
+                        // neither the tooltip nor the accessible name of this
+                        // row carried it: a screen-reader user heard exactly
+                        // what the owner of the thread hears. It belongs in
+                        // both.
+                        title={rowLabel}
+                        aria-label={rowLabel}
                     >
                         {projectName && (
                             <span className="text-gray-400 font-normal">{projectName}: </span>
@@ -159,7 +174,11 @@ export function SidebarChatItem({ chat, isActive, onSelect, projectName }: Props
                         at all has told us nothing, and marking it "Shared"
                         would be a claim we cannot make. */}
                     {chat.is_owner === false && (
-                        <span className="mr-1 shrink-0 text-[10px] text-gray-400">
+                        // `text-[10px] text-gray-400` measured about 2.6:1 —
+                        // below the 4.5:1 the accessibility baseline requires,
+                        // on the one word in the row that says whose work this
+                        // is. text-xs on the muted gray that does meet it.
+                        <span className="mr-1 shrink-0 text-xs text-gray-500">
                             Shared
                         </span>
                     )}

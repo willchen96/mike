@@ -245,6 +245,82 @@ describe("NewWorkflowModal editing", () => {
         ).toBeLessThan(onCreated.mock.invocationCallOrder[0]);
     });
 
+    it("reports a failed asset copy against the workflow that exists", async () => {
+        // The copy ran before the grants and outside any try of its own, so a
+        // failure came back as "Failed to create workflow" — about a workflow
+        // the server had already made — and the retry re-copied everything
+        // that had worked.
+        const user = userEvent.setup({ delay: null });
+        const onCreated = vi.fn();
+        vi.mocked(copyDocumentsToWorkflowAssets).mockRejectedValueOnce(
+            new Error("copy failed"),
+        );
+        render(
+            <NewWorkflowModal open onClose={vi.fn()} onCreated={onCreated} />,
+        );
+
+        await user.type(screen.getByLabelText("Title"), "New workflow");
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        await user.click(screen.getByRole("button", { name: "Select asset" }));
+        await user.click(
+            screen.getByRole("button", { name: "Create workflow" }),
+        );
+
+        expect(
+            await screen.findByText(
+                "Workflow created, but 1 asset could not be copied. Press Create again to retry the copy.",
+            ),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByText("Failed to create workflow"),
+        ).not.toBeInTheDocument();
+        // Held open on the only screen that knows: the row never reached the
+        // caller's list.
+        expect(onCreated).not.toHaveBeenCalled();
+
+        // The retry reuses the workflow and re-sends only the missing asset.
+        await user.click(
+            screen.getByRole("button", { name: "Create workflow" }),
+        );
+        await waitFor(() => expect(onCreated).toHaveBeenCalled());
+        expect(createWorkflow).toHaveBeenCalledTimes(1);
+        expect(copyDocumentsToWorkflowAssets).toHaveBeenCalledTimes(2);
+    });
+
+    it("copies assets only after the grants have been written", async () => {
+        // Grants first: a refused grant stops the submit, and an asset copied
+        // before it would have to be redone on the retry.
+        const user = userEvent.setup({ delay: null });
+        vi.mocked(shareWorkflow).mockRejectedValue(new Error("nope"));
+        render(<NewWorkflowModal open onClose={vi.fn()} onCreated={vi.fn()} />);
+
+        await user.type(screen.getByLabelText("Title"), "New workflow");
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        await user.click(screen.getByPlaceholderText("Add by email..."));
+        // paste, not per-key typing: one input event cannot be cut off
+        // mid-word by a slow re-render on a loaded machine.
+        await user.paste("counsel@firm.test");
+        await user.click(screen.getByRole("button", { name: "Add" }));
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        await user.click(screen.getByRole("button", { name: "Select asset" }));
+        await user.click(
+            screen.getByRole("button", { name: "Create workflow" }),
+        );
+
+        expect(
+            await screen.findByText(
+                /Workflow created, but access was not granted to counsel@firm\.test/,
+            ),
+        ).toBeInTheDocument();
+        expect(copyDocumentsToWorkflowAssets).not.toHaveBeenCalled();
+        expect(
+            screen.getByText(
+                /The 1 selected file is still pending and will be copied when you try again\./,
+            ),
+        ).toBeInTheDocument();
+    });
+
     it("finishes a tabular workflow on Access without showing Assets", async () => {
         const user = userEvent.setup({ delay: null });
         const onCreated = vi.fn();

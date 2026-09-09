@@ -22,6 +22,7 @@ import {
 import { NoModelsWarningPopup } from "../popups/NoModelsWarningPopup";
 import { useUserProfile } from "@/app/contexts/UserProfileContext";
 import { isModelAvailable } from "@/app/lib/modelAvailability";
+import { roleFrom } from "@/app/lib/permissions";
 
 interface Props {
     workflow: Workflow | null;
@@ -190,7 +191,18 @@ export function UseWorkflowModal({ workflow, onClose, skipSelect = false }: Prop
         setSaving(true);
         try {
             const projectId = inProject ? selectedProjectId! : undefined;
-            const chatId = await saveChat(projectId);
+            // A project chat inherits the caller's role on the project, so
+            // the optimistic sidebar row must carry that role rather than
+            // assume the creator owns it. The picker rows already carry the
+            // server-computed role; absent one the context falls back to
+            // editor, which is the minimum this action required anyway.
+            const projectRow = projectId
+                ? projects.find((candidate) => candidate.id === projectId)
+                : undefined;
+            const chatId = await saveChat(
+                projectId,
+                projectRow ? roleFrom(projectRow) : null,
+            );
             if (!chatId) return;
             const files = selectedDocuments.map((document) => ({
                 filename: document.filename,
