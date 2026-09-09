@@ -1,5 +1,6 @@
 import { Worker, type Job } from "bullmq";
 import { getRedisConnection } from "../lib/queue/connection";
+import { reportError } from "../lib/observability/sentry";
 import {
     APP_JOBS_QUEUE,
     type AppJobDelivery,
@@ -63,6 +64,10 @@ export function createAppJobsWorker(): Worker<AppJobDelivery> {
     worker.on("failed", (job, err) => {
         // Only infrastructure errors land here (processClaimedJob contains
         // handler errors itself); the db_jobs row stays claimable.
+        reportError(err, {
+            tags: { component: "app-jobs", stage: "delivery" },
+            extra: { job_id: job?.id },
+        });
         console.error("[app-jobs] delivery processing failed", {
             jobId: job?.id,
             err,

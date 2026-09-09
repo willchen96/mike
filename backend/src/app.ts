@@ -29,6 +29,7 @@ import {
 } from "./middleware/internalErrorResponse";
 import { configuredAllowedOrigins } from "./lib/origins";
 import { envInt } from "./lib/runtimeConfig";
+import { tagCurrentRequest } from "./lib/observability/sentry";
 
 export const app = express();
 const isProduction = process.env.NODE_ENV === "production";
@@ -169,6 +170,8 @@ app.use((_req, res, next) => {
   const requestId = randomUUID();
   res.locals.requestId = requestId;
   res.setHeader("X-Request-ID", requestId);
+  // Same id on the Sentry event, the response body, and the access log.
+  tagCurrentRequest(requestId);
   next();
 });
 app.use(protectInternalErrorResponses);
@@ -302,6 +305,16 @@ app.use("/audit", auditRouter);
 app.use("/upload-sessions", uploadSessionsRouter);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// Deliberate failure for verifying the error pipeline end to end (a real
+// thrown error through the real 500 path, so the Sentry event carries the
+// request id the caller sees). Opt-in per deployment: it is an unauthenticated
+// way to generate events, so leave it off once the DSN is confirmed working.
+if (process.env.SENTRY_ENABLE_TEST_ROUTE === "true") {
+  app.get("/observability/sentry-test", () => {
+    throw new Error("Sentry backend test error (SENTRY_ENABLE_TEST_ROUTE)");
+  });
+}
 
 // The Ed25519 public key this deployment signs project export manifests with,
 // or null when no key is configured. Deliberately open: whoever checks a

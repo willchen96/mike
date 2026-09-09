@@ -18,6 +18,7 @@ import { deleteFile } from "../storage";
 import { enqueueAppJobDelivery } from "../queue/appJobsQueue";
 import { redisEnabled } from "./driver";
 import type { Db, DbJob, DbJobHandlers } from "./types";
+import { reportError } from "../observability/sentry";
 
 /**
  * Poll cadence depends on the driver: with Redis configured, BullMQ delivers
@@ -105,6 +106,11 @@ export async function processClaimedJob(
                 last_error: `unknown job kind: ${job.kind}`,
             }),
         );
+        reportError(new Error(`Unknown db_jobs kind: ${job.kind}`), {
+            tags: { component: "dbq", job_kind: job.kind },
+            extra: { job_id: job.id },
+            fingerprint: ["dbq-unknown-kind", job.kind],
+        });
         console.error("[dbq] unknown job kind", { id: job.id, kind: job.kind });
         return;
     }
@@ -145,6 +151,10 @@ export async function processClaimedJob(
                 try {
                     await hook(db, job);
                 } catch (hookErr) {
+                    reportError(hookErr, {
+                        tags: { component: "dbq", job_kind: job.kind, stage: "failure-hook" },
+                        extra: { job_id: job.id },
+                    });
                     console.error("[dbq] failure hook crashed", {
                         id: job.id,
                         kind: job.kind,
@@ -170,6 +180,21 @@ export async function processClaimedJob(
                 );
             }
         }
+        // Every failed attempt is reported — a bug shows up on attempt one,
+        // not after the backoff ladder has burned an hour. Retryable attempts
+        // are warnings; the terminal failure is the error, and both group per
+        // job kind so one bad handler is one issue with a hit count.
+        reportError(err, {
+            level: spent ? "error" : "warning",
+            tags: {
+                component: "dbq",
+                job_kind: job.kind,
+                attempt: job.attempts,
+                max_attempts: job.max_attempts,
+                terminal: spent,
+            },
+            extra: { job_id: job.id, dedupe_key: job.dedupe_key ?? null },
+        });
         console.error(
             spent
                 ? "[dbq] job permanently failed"
@@ -191,6 +216,10 @@ export async function runDbJobTick(
     if (error) {
         // Table/function missing (migration not applied yet) or transient DB
         // trouble: log and try again next tick — never crash the server.
+        reportError(new Error(`db_jobs claim failed: ${error.message}`), {
+            tags: { component: "dbq", stage: "claim" },
+            fingerprint: ["dbq-claim-failed"],
+        });
         console.error("[dbq] claim failed", error.message);
         return 0;
     }
@@ -293,7 +322,10 @@ export function startDbJobRunner(handlers: DbJobHandlers): void {
     const tick = () => {
         if (inFlight) return;
         inFlight = runDbJobTick(db, handlers)
-            .catch((err) => console.error("[dbq] tick failed", err))
+            .catch((err) => {
+                reportError(err, { tags: { component: "dbq", stage: "tick" } });
+                console.error("[dbq] tick failed", err);
+            })
             .finally(() => {
                 inFlight = null;
             });
@@ -305,9 +337,10 @@ export function startDbJobRunner(handlers: DbJobHandlers): void {
     setTimeout(tick, 1_000).unref();
 
     const sweep = () =>
-        void runDbJobRetentionSweep(db).catch((err) =>
-            console.error("[dbq] retention sweep failed", err),
-        );
+        void runDbJobRetentionSweep(db).catch((err) => {
+            reportError(err, { tags: { component: "dbq", stage: "retention" } });
+            console.error("[dbq] retention sweep failed", err);
+        });
     sweepTimer = setInterval(sweep, SWEEP_EVERY_MS);
     sweepTimer.unref();
     setTimeout(sweep, 60_000).unref();
