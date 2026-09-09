@@ -10,6 +10,7 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 import { hasLlmKey, LLM_SKIP_REASON } from "./llm";
+import { createProject } from "./projects";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────────── */
 
@@ -200,8 +201,15 @@ test("rename chat: sidebar rename interaction updates the title", async ({ page 
     // ── Step 8: assert the new title appears in the sidebar ──────────────────────
     // ChatHistoryContext.renameChatFn optimistically updates the chat title in state.
     // SidebarChatItem re-renders the title button with the new text.
+    //
+    // exact: true is load-bearing. The row's menu trigger now carries
+    // aria-label="Actions for <title>" (an a11y fix worth keeping), and
+    // Playwright's default name matching is a case-insensitive SUBSTRING
+    // match — so a bare { name: newTitle } resolves to the title button AND
+    // its sibling trigger, and the assertion dies on a strict-mode violation
+    // rather than on anything real.
     await expect(
-        page.getByRole("button", { name: newTitle })
+        page.getByRole("button", { name: newTitle, exact: true })
     ).toBeVisible({ timeout: 10_000 });
 });
 
@@ -276,7 +284,12 @@ test("delete chat: sidebar delete action removes the chat from history", async (
     await renameInput.press("Enter");
 
     // The renamed chat's title button now uniquely identifies its row.
-    const targetTitle = page.getByRole("button", { name: uniqueTitle });
+    // exact: true — the row's menu trigger is labelled "Actions for <title>",
+    // which Playwright's default substring name matching also hits.
+    const targetTitle = page.getByRole("button", {
+        name: uniqueTitle,
+        exact: true,
+    });
     await expect(targetTitle).toBeVisible({ timeout: 10_000 });
     // The row wrapper that contains that title button (for reaching its menu).
     const targetRow = page
@@ -308,40 +321,20 @@ test("project assistant: create a new chat and submit a question", async ({ page
     // headroom beyond the 30s default.
     test.setTimeout(120_000);
 
-    // ── Step 1: navigate to projects ─────────────────────────────────────────────
-    await page.goto("/projects");
-    await expect(page).toHaveURL(/\/projects/, { timeout: 10_000 });
-
-    // ── Step 2: open the "New project" modal ─────────────────────────────────────
-    const createBtn = page.getByRole("button", { name: "New project" });
-    await expect(createBtn).toBeVisible({ timeout: 10_000 });
-    await createBtn.click();
-
-    // ── Step 3: fill in the project name ─────────────────────────────────────────
-    // NewProjectModal.tsx line 203: disabled={!name.trim() || loading}
-    // PDF upload is optional — we omit it to keep this test focused on routing.
-    const nameInput = page.getByPlaceholder("Project name");
-    await expect(nameInput).toBeVisible({ timeout: 5_000 });
+    // ── Steps 1-4: create a project ──────────────────────────────────────────────
+    // The whole wizard (Details → Access → Add Documents) lives in one shared
+    // helper, e2e/projects.ts, so a step added to NewProjectModal cannot leave
+    // this spec behind — which is exactly what happened when the Access step
+    // landed: a single "Next" left this test on step two, and the
+    // /create project|creating/i primary it then waited for was two clicks
+    // away. No document is attached; this test is about routing.
+    // NewProjectModal.handleSubmit does NOT navigate itself — it calls
+    // onCreated() then onClose(). ProjectsOverview.onCreated inserts the row
+    // AND router.push(`/projects/${p.id}`), so the helper's waitForURL is what
+    // confirms creation; the name never re-appears in a list to click.
     const projectName = `E2E Chat Route ${Date.now()}`;
-    await nameInput.fill(projectName);
-
-    // NewProjectModal is a two-step wizard ("Details" → "Add Documents"); the
-    // "Create project" submit button only exists on the second step.
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-
-    // ── Step 4: submit the form ──────────────────────────────────────────────────
-    // NewProjectModal.handleSubmit does NOT navigate itself — it calls onCreated()
-    // then onClose().  ProjectsOverview.onCreated (ProjectsOverview.tsx:475-478)
-    // inserts the row AND router.push(`/projects/${p.id}`), so the app navigates
-    // straight to the project detail page; the name never re-appears in a list to
-    // click.  Wait for that navigation instead of asserting a list row.
-    const submitBtn = page.getByRole("button", {
-        name: /create project|creating/i,
-    });
-    const projectUrl = /\/projects\/[^/]+$/;
-    await expect(submitBtn).toBeEnabled({ timeout: 10_000 });
-    await submitBtn.click();
-    await page.waitForURL(projectUrl, { timeout: 20_000 });
+    await createProject(page, projectName);
+    await expect(page).toHaveURL(/\/projects\/[^/]+$/);
 
     // ── Step 6: open the assistant tab and reach the empty-state "Create" ────────
     // The project assistant is now a nested route (/projects/[id]/assistant), not a

@@ -23,7 +23,6 @@ import { convertedPdfKey } from "../lib/convert";
 import {
   checkProjectAccess,
   getOrgRole,
-  listUserOrgIds,
   normalizeEmail,
   resolveContentOrgId,
 } from "../lib/access";
@@ -55,6 +54,16 @@ import {
 import { ensureResourceAccessSummaries } from "../lib/resourceAccessSummary";
 
 export const projectsRouter = Router();
+
+/**
+ * A project the caller can open but not write to is not a missing project.
+ * Collapsing "you cannot see this" and "your role is read-only" into one 404
+ * told a Viewer their matter had vanished, so every write gate answers 404
+ * only when checkProjectAccess itself refuses, and 403 with an intentional
+ * message when the role is simply too low.
+ */
+const DOCS_ORGANIZE_FORBIDDEN =
+  "You do not have permission to organize documents in this project.";
 
 function normalizeOptionalString(value: unknown) {
   if (typeof value !== "string") return null;
@@ -450,9 +459,8 @@ async function handleProjectDirectorySearch(req: Request, res: Response) {
   const db = createServerSupabase();
   const normalizedUserEmail = userEmail?.trim().toLowerCase();
 
-  const projectQueries = [
-    db.from("projects").select("*").eq("user_id", userId),
-  ];
+  const createdQuery = db.from("projects").select("*").eq("user_id", userId);
+  const projectQueries = [createdQuery];
   if (normalizedUserEmail) {
     // Direct access now lives in project_access_grants (one row per
     // recipient, with a role) rather than the roleless shared_with array, so
@@ -475,21 +483,95 @@ async function handleProjectDirectorySearch(req: Request, res: Response) {
     }
   }
   // Third access branch (multi-tenant): projects in an org the caller belongs
-  // to are searchable, mirroring listAccessibleProjectIds and the overview
-  // RPCs — otherwise the document picker would hide org content the project
-  // list shows.
-  const orgIds = await listUserOrgIds(userId, db);
-  if (orgIds.length > 0) {
-    projectQueries.push(db.from("projects").select("*").in("org_id", orgIds));
+  // to are searchable, otherwise the document picker would hide org content
+  // the project list shows. Membership alone is not the verdict, though:
+  // every other path resolves the project through checkProjectAccess /
+  // project_access_role, which return "no access" for a per-project deny
+  // override. Without the same filter here the picker hands a walled-off
+  // member the matter's name, cm_number and its document filenames.
+  const { data: membershipRows, error: membershipError } = await db
+    .from("org_members")
+    .select("org_id, role")
+    .eq("user_id", userId);
+  if (membershipError) return void sendInternalError(res, membershipError);
+  const orgRoleByOrgId = new Map<string, string>();
+  for (const row of (membershipRows ?? []) as {
+    org_id?: string | null;
+    role?: string | null;
+  }[]) {
+    if (row.org_id) orgRoleByOrgId.set(row.org_id, row.role ?? "");
   }
-  const projectResults = await Promise.all(projectQueries);
-  const projectError = projectResults.find((result) => result.error)?.error;
+  const orgIds = [...orgRoleByOrgId.keys()];
+  const [projectResults, orgProjectsResult] = await Promise.all([
+    Promise.all(projectQueries),
+    orgIds.length > 0
+      ? db.from("projects").select("*").in("org_id", orgIds)
+      : Promise.resolve({
+          data: [] as Record<string, unknown>[],
+          error: null,
+        }),
+  ]);
+  const projectError =
+    projectResults.find((result) => result.error)?.error ??
+    orgProjectsResult.error;
   if (projectError)
     return void sendInternalError(res, projectError);
   const projectsById = new Map<string, Record<string, unknown>>();
-  for (const result of projectResults) {
+  const [createdResult, ...grantResults] = projectResults;
+  // The "I created it" branch is NOT a verdict on its own. A creator who has
+  // since LEFT the organization keeps the projects.user_id row, but
+  // checkProjectAccess — which every other read path uses — answers "no
+  // access" for them, so the picker was the one surface still offering an
+  // org matter that 404s the moment it is opened. An org project is only
+  // theirs to see while they are still in that org; the org branch below
+  // re-admits it (with the deny override applied) when they are.
+  for (const project of createdResult?.data ?? []) {
+    const orgId = project.org_id as string | null | undefined;
+    if (orgId && !orgRoleByOrgId.has(orgId)) continue;
+    projectsById.set(project.id as string, project);
+  }
+  for (const result of grantResults) {
     for (const project of result.data ?? []) {
       projectsById.set(project.id as string, project);
+    }
+  }
+  const orgProjects = (orgProjectsResult.data ?? []) as Record<
+    string,
+    unknown
+  >[];
+  if (orgProjects.length > 0) {
+    // One batched read for the whole page, not a verdict per row: this is a
+    // filter over a result set and must not become an N+1. Mirrors
+    // listOrgResources, including its exemptions — the creator and org
+    // admins keep Owner and cannot be denied.
+    // Scoped by ORG, not by an .in() over every candidate project id: that
+    // list grows with the firm's matters and is spliced verbatim into the
+    // PostgREST query string, so a large tenant sent a URL past the server's
+    // request-line limit and the read failed (fail-closed, so the picker went
+    // blank). org_id is bounded by the caller's memberships, which is the
+    // same shape listOrgResources uses.
+    const { data: denialRows, error: denialError } = await db
+      .from("project_org_access_overrides")
+      .select("project_id")
+      .in("org_id", orgIds)
+      .eq("user_id", userId)
+      .eq("role", "deny");
+    // Fail closed: an unreadable override table must hide rows, never reveal
+    // them.
+    if (denialError) return void sendInternalError(res, denialError);
+    const deniedProjectIds = new Set(
+      ((denialRows ?? []) as { project_id?: string | null }[])
+        .map((row) => row.project_id)
+        .filter((id): id is string => !!id),
+    );
+    for (const project of orgProjects) {
+      const projectId = project.id as string;
+      const orgId = project.org_id as string | null;
+      const isCreator = project.user_id === userId;
+      const isOrgAdmin = !!orgId && orgRoleByOrgId.get(orgId) === "admin";
+      if (!isCreator && !isOrgAdmin && deniedProjectIds.has(projectId))
+        continue;
+      projectsById.set(projectId, project);
     }
   }
   const accessibleProjectIds = [...projectsById.keys()];
@@ -1177,8 +1259,10 @@ projectsRouter.post(
     const db = createServerSupabase();
 
     const access = await checkProjectAccess(projectId, userId, userEmail, db);
-    if (!access.ok || !can(access.projectRole, "docs.organize"))
+    if (!access.ok)
       return void res.status(404).json({ detail: "Project not found" });
+    if (!can(access.projectRole, "docs.organize"))
+      return void res.status(403).json({ detail: DOCS_ORGANIZE_FORBIDDEN });
 
     // Adding-by-id pulls a doc into the project — only the doc's owner
     // is allowed to do that, so other people's standalone docs can't be
@@ -1367,8 +1451,10 @@ projectsRouter.patch(
   const db = createServerSupabase();
 
   const access = await checkProjectAccess(projectId, userId, userEmail, db);
-  if (!access.ok || !can(access.projectRole, "docs.organize"))
+  if (!access.ok)
     return void res.status(404).json({ detail: "Project not found" });
+  if (!can(access.projectRole, "docs.organize"))
+    return void res.status(403).json({ detail: DOCS_ORGANIZE_FORBIDDEN });
 
   const { data: doc } = await db
     .from("documents")
@@ -1509,8 +1595,10 @@ projectsRouter.post(
     // yet. It therefore needs the same docs.organize gate its sibling folder
     // routes declare; without it a viewer — whose whole tier is read-only —
     // could POST an arbitrary nested folder tree into someone else's project.
-    if (!access.ok || !can(access.projectRole, "docs.organize"))
+    if (!access.ok)
       return void res.status(404).json({ detail: "Project not found" });
+    if (!can(access.projectRole, "docs.organize"))
+      return void res.status(403).json({ detail: DOCS_ORGANIZE_FORBIDDEN });
     if (baseFolderId) {
       const parent = await loadProjectFolder(db, projectId, baseFolderId);
       if (!parent)
@@ -1552,8 +1640,10 @@ projectsRouter.post("/:projectId/folders", requireAuth, async (req, res) => {
 
   const db = createServerSupabase();
   const access = await checkProjectAccess(projectId, userId, userEmail, db);
-  if (!access.ok || !can(access.projectRole, "docs.organize"))
+  if (!access.ok)
     return void res.status(404).json({ detail: "Project not found" });
+  if (!can(access.projectRole, "docs.organize"))
+    return void res.status(403).json({ detail: DOCS_ORGANIZE_FORBIDDEN });
 
   // Verify parent folder belongs to this project
   if (parent_folder_id) {
@@ -1598,8 +1688,10 @@ projectsRouter.patch(
   // Re-shaping the folder tree is member work, alongside the documents it
   // holds — Will's review put "organize documents and folders" on one line.
   const access = await checkProjectAccess(projectId, userId, userEmail, db);
-  if (!access.ok || !can(access.projectRole, "docs.organize"))
+  if (!access.ok)
     return void res.status(404).json({ detail: "Project not found" });
+  if (!can(access.projectRole, "docs.organize"))
+    return void res.status(403).json({ detail: DOCS_ORGANIZE_FORBIDDEN });
 
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
@@ -1663,8 +1755,10 @@ projectsRouter.delete(
   // member may already do. Gating the folder higher bought no safety, only a
   // confusing extra tier.
   const access = await checkProjectAccess(projectId, userId, userEmail, db);
-  if (!access.ok || !can(access.projectRole, "docs.organize"))
+  if (!access.ok)
     return void res.status(404).json({ detail: "Project not found" });
+  if (!can(access.projectRole, "docs.organize"))
+    return void res.status(403).json({ detail: DOCS_ORGANIZE_FORBIDDEN });
 
   const { data: allFolders, error: foldersError } = await db
     .from("project_subfolders")
@@ -1732,8 +1826,10 @@ projectsRouter.patch(
 
   const db = createServerSupabase();
   const access = await checkProjectAccess(projectId, userId, userEmail, db);
-  if (!access.ok || !can(access.projectRole, "docs.organize"))
+  if (!access.ok)
     return void res.status(404).json({ detail: "Project not found" });
+  if (!can(access.projectRole, "docs.organize"))
+    return void res.status(403).json({ detail: DOCS_ORGANIZE_FORBIDDEN });
 
   if (folder_id) {
     const folder = await loadProjectFolder(db, projectId, folder_id);

@@ -27,6 +27,7 @@ import {
     type AccessContact,
 } from "@/app/components/popups/PermissionDeniedPopup";
 import { can, roleFrom } from "@/app/lib/permissions";
+import { userFacingApiError } from "@/app/lib/userFacingError";
 import { WarningPopup } from "@/app/components/popups/WarningPopup";
 import { ConfirmPopup } from "@/app/components/popups/ConfirmPopup";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -87,6 +88,10 @@ export default function TabularReviewsPage() {
     const [projects, setProjects] = useState<Project[]>([]);
     const [creating, setCreating] = useState(false);
     const [newTROpen, setNewTROpen] = useState(false);
+    // Holds the review created by the open New review dialog so a retry after
+    // a failed access grant does not create a second one. Cleared when the
+    // dialog closes, whether it finished or was cancelled.
+    const createdReviewRef = useRef<TabularReview | null>(null);
     const [detailsReview, setDetailsReview] = useState<TabularReview | null>(
         null,
     );
@@ -260,24 +265,56 @@ export default function TabularReviewsPage() {
             email: string;
             role: import("@/app/lib/mikeApi").AccessAssignmentRole;
         }[],
-    ) => {
+    ): Promise<string | void> => {
         setCreating(true);
         try {
-            const review = await createTabularReview({
-                title,
-                document_ids: documentIds ?? [],
-                columns_config: columnsConfig ?? [],
-                document_grouping: documentGrouping,
-                model,
-                ...(projectId && { project_id: projectId }),
-            });
+            // A grant that fails after the review exists used to throw out of
+            // here, so the modal said "Could not create the review." and a
+            // second Create made a SECOND review. The created row is held
+            // until the modal closes, so a retry re-runs only the grants.
+            const review =
+                createdReviewRef.current ??
+                (await createTabularReview({
+                    title,
+                    document_ids: documentIds ?? [],
+                    columns_config: columnsConfig ?? [],
+                    document_grouping: documentGrouping,
+                    model,
+                    ...(projectId && { project_id: projectId }),
+                }));
+            createdReviewRef.current = review;
+
+            // Sequential, one try per recipient: these are a handful of
+            // addresses, and one refusal should be reported with its own
+            // message rather than losing the others. The endpoint upserts,
+            // so retrying after a partial failure is safe.
+            const grantFailures: { email: string; detail: string }[] = [];
             for (const assignment of accessAssignments) {
-                await grantTabularReviewAccess(
-                    review.id,
-                    assignment.email,
-                    assignment.role,
-                );
+                try {
+                    await grantTabularReviewAccess(
+                        review.id,
+                        assignment.email,
+                        assignment.role,
+                    );
+                } catch (error: unknown) {
+                    grantFailures.push({
+                        email: assignment.email,
+                        detail: userFacingApiError(error, "the request failed"),
+                    });
+                }
             }
+            if (grantFailures.length > 0) {
+                // The review exists, so say so — and stay on the dialog rather
+                // than navigating away from the only place that knows the
+                // sharing did not happen. Same wording as NewProjectModal.
+                return `Review created, but access was not granted to ${grantFailures
+                    .map((failure) => failure.email)
+                    .join(", ")}: ${grantFailures[0].detail}`;
+            }
+
+            // Handed over: the navigation below shows the review, so the
+            // dialog's close must not ask the list to refetch for it.
+            createdReviewRef.current = null;
             router.push(
                 projectId
                     ? `/projects/${projectId}/tabular-reviews/${review.id}`
@@ -840,7 +877,20 @@ export default function TabularReviewsPage() {
 
             <NewTRModal
                 open={newTROpen}
-                onClose={() => setNewTROpen(false)}
+                onClose={() => {
+                    // The dialog's own reset runs through here, so this is the
+                    // one place that has to forget the held review.
+                    //
+                    // A review created behind a refused grant never reached
+                    // the list — the page only adds it on the navigation that
+                    // a successful create performs — so refetch on the way out
+                    // instead of leaving it invisible until a reload.
+                    const createdWithoutHandover =
+                        createdReviewRef.current !== null;
+                    createdReviewRef.current = null;
+                    setNewTROpen(false);
+                    if (createdWithoutHandover) retry();
+                }}
                 onAdd={handleNewReview}
                 projects={projects}
             />

@@ -223,12 +223,20 @@ async function toApiError(response: Response, path: string) {
             status: response.status,
             code: typeof parsed.code === "string" ? parsed.code : null,
             requestId,
+            // A 4xx whose body carries no usable `detail` is a malformed
+            // error response, and it is treated as one. `API error: 409` used
+            // to be produced here instead — and because a 4xx message is the
+            // one userFacingApiError shows VERBATIM (on the assumption that a
+            // 4xx says something the user can act on), it reached the screen:
+            // "Account not deleted / API error: 409". The catch arm below
+            // already has the right sentence for "the server did not tell us
+            // what went wrong"; this arm now uses it too.
             message:
                 response.status >= 500
                     ? INTERNAL_ERROR_MESSAGE
                     : typeof parsed.detail === "string" && parsed.detail
                       ? parsed.detail
-                      : `API error: ${response.status}`,
+                      : MALFORMED_ERROR_RESPONSE_MESSAGE,
         });
     } catch {
         devLog("[mike-api] non-ok non-json response", {

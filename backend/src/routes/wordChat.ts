@@ -990,6 +990,7 @@ wordChatRouter.post("/", requireAuth, async (req, res) => {
     db,
     persistChat ? chatId : null,
     "word_chat_messages",
+    userEmail,
   );
   const activeDocumentText = parsedDocumentContext.documentContext;
   if (activeDocumentText !== undefined) {

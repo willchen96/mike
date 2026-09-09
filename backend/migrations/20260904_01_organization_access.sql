@@ -708,10 +708,12 @@ AS $function$
       and (p_type is null or w.type = p_type)
   ),
   org_shared as (
-    -- Same org-membership arm as get_workflows_overview, including the
-    -- workflow_shares NOT EXISTS dedup, so a row visible via both routes
-    -- contributes its options exactly once. Tagged 'shared' to match the
-    -- overview's scope bucketing.
+    -- Same org-membership arm as get_workflows_overview. The `shared` arm
+    -- above takes only org_id IS NULL workflows and this one only org_id IS
+    -- NOT NULL, so the two are disjoint by construction and a row visible via
+    -- both routes still contributes its options exactly once -- no dedup
+    -- predicate is needed. Tagged 'shared' to match the overview's scope
+    -- bucketing.
     select w.practice, w.language, w.jurisdictions, 'shared'::text as source
     from public.workflows w
     where w.org_id is not null
@@ -1373,10 +1375,16 @@ AS $function$
     )
     when p_workflow_user_id::text = p_user_id then 'owner'
     else (
+      -- BOTH sides lowered. get_workflows_overview lists a share with
+      -- lower() on both, so a legacy mixed-case row listed for its recipient
+      -- and then 404'd the moment they opened it (and re-sharing produced a
+      -- second row rather than updating the first). The 02 migration
+      -- normalizes the stored values and adds a lowercase CHECK; this stays
+      -- symmetrical with the overview regardless.
       select s.role from public.workflow_shares s
       where s.workflow_id = p_workflow_id
         and coalesce(p_user_email, '') <> ''
-        and s.shared_with_email = lower(p_user_email)
+        and lower(s.shared_with_email) = lower(p_user_email)
       limit 1
     )
   end;
@@ -1770,6 +1778,23 @@ END $do$;
 CREATE INDEX IF NOT EXISTS idx_workflows_org ON public.workflows (org_id);
 DROP TRIGGER IF EXISTS workflows_cleanup_direct_grants ON public.workflows;
 CREATE TRIGGER workflows_cleanup_direct_grants AFTER INSERT OR UPDATE OF org_id ON public.workflows FOR EACH ROW EXECUTE FUNCTION public.cleanup_inherited_direct_grants();
+
+-- Every new table is service-role only, like every other table in this
+-- schema: the API is the only thing that reads them, and RLS ENABLE with no
+-- policy is not by itself a grant boundary — `anon` and `authenticated`
+-- inherit table privileges from PUBLIC unless they are revoked. schema.sql
+-- revokes all eight for fresh installs; without these lines an UPGRADED
+-- deployment ends up with a different, weaker posture than a fresh one for
+-- precisely the tables that decide who can see a firm's matters.
+-- Idempotent: revoking a privilege that is not held is a no-op.
+REVOKE ALL ON public.organizations FROM anon, authenticated;
+REVOKE ALL ON public.org_members FROM anon, authenticated;
+REVOKE ALL ON public.org_invitations FROM anon, authenticated;
+REVOKE ALL ON public.project_access_grants FROM anon, authenticated;
+REVOKE ALL ON public.project_org_access_overrides FROM anon, authenticated;
+REVOKE ALL ON public.chat_access_grants FROM anon, authenticated;
+REVOKE ALL ON public.tabular_review_access_grants FROM anon, authenticated;
+REVOKE ALL ON public.workflow_org_access_overrides FROM anon, authenticated;
 
 notify pgrst, 'reload schema';
 

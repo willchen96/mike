@@ -28,8 +28,16 @@ export default function AssistantChatPage() {
     // parity change, so a project VIEWER can land on this page — dropping
     // the served role handed them a live composer whose sends 403. Arriving
     // via "new chat" means the caller just created the thread: creator.
-    const [canSend, setCanSend] = useState<boolean>(
-        initialMessages.length > 0,
+    //
+    // Three states, not two. Initialising to `initialMessages.length > 0`
+    // read "false" on every cold load — the exact path a chat's own owner
+    // takes when they open it from the sidebar — so they were told "Viewing
+    // only — sending needs edit access" until getChat resolved. `null` says
+    // "not known yet": still fail-closed (the composer is disabled), but the
+    // placeholder stays neutral instead of asserting something false about
+    // their access. A failed getChat leaves it null and redirects.
+    const [canSend, setCanSend] = useState<boolean | null>(
+        initialMessages.length > 0 ? true : null,
     );
     const [chat, setChat] = useState<Chat | null>(null);
     const [chatModel, setChatModel] = useState<string | null | undefined>(

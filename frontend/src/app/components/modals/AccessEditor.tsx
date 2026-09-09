@@ -409,6 +409,8 @@ export function OrganizationAccessEditor({
     loading = false,
     disabled = false,
     error,
+    currentUserId,
+    currentUserEmail,
     onAssign,
     onRemove,
 }: {
@@ -419,6 +421,14 @@ export function OrganizationAccessEditor({
     loading?: boolean;
     disabled?: boolean;
     error?: string | null;
+    /**
+     * Who is looking. Both identifiers, because a roster row can arrive with
+     * one and not the other — and the server refuses either override aimed at
+     * the caller ("You cannot share a project with yourself"), so offering
+     * their own name in these pickers only ever produced that error.
+     */
+    currentUserId?: string | null;
+    currentUserEmail?: string | null;
     onAssign: (
         member: AccessRow,
         role: "owner" | "deny",
@@ -427,7 +437,6 @@ export function OrganizationAccessEditor({
         assignment: OrganizationAccessAssignment,
     ) => Promise<unknown> | unknown;
 }) {
-    const [denyExpanded, setDenyExpanded] = useState(false);
     const assignedKeys = new Set(
         assignments.map(
             (assignment) =>
@@ -437,8 +446,16 @@ export function OrganizationAccessEditor({
                 "",
         ),
     );
+    const selfEmail = currentUserEmail?.trim().toLowerCase() ?? null;
+    const isSelf = (member: AccessRow) =>
+        (!!currentUserId && member.user_id === currentUserId) ||
+        (!!selfEmail && member.email?.trim().toLowerCase() === selfEmail);
     const availableMembers = members.filter((member) => {
         if (member.isCreator || !member.email) return false;
+        // Neither override can be aimed at the caller: the server answers
+        // "You cannot share a project with yourself", so their own row in
+        // these pickers was an action that could only fail.
+        if (isSelf(member)) return false;
         return !assignedKeys.has(
             member.user_id ?? member.email.toLowerCase(),
         );
@@ -457,6 +474,38 @@ export function OrganizationAccessEditor({
     const deniedAssignments = assignments.filter(
         (assignment) => assignment.role === "deny",
     );
+    const denyCount = deniedAssignments.length;
+    // An existing deny list is a security decision somebody needs to see, so
+    // the section opens itself when there is anything in it. The assignments
+    // arrive with the roster, after mount, so the mount-time initialiser is
+    // not enough on its own — re-derive it when the load finishes.
+    //
+    // Once only, though. Every grant and revoke re-reads the roster, and each
+    // of those re-runs this: a deny list the user had deliberately collapsed
+    // sprang open again after their next change, and again after the one
+    // after that. Opening it the first time is the point being made; after
+    // that the section is theirs.
+    const [denyState, setDenyState] = useState({
+        loading,
+        expanded: denyCount > 0,
+        autoExpanded: denyCount > 0,
+    });
+    if (denyState.loading !== loading) {
+        const settled = !loading;
+        const shouldAutoExpand =
+            settled && !denyState.autoExpanded && denyCount > 0;
+        setDenyState({
+            loading,
+            expanded: shouldAutoExpand ? true : denyState.expanded,
+            autoExpanded: denyState.autoExpanded || (settled && denyCount > 0),
+        });
+    }
+    const denyExpanded = denyState.expanded;
+    const toggleDenyExpanded = () =>
+        setDenyState((current) => ({
+            ...current,
+            expanded: !current.expanded,
+        }));
     const resourceNoun = ownerLabel.toLowerCase().startsWith("workflow")
         ? "workflow"
         : "project";
@@ -502,12 +551,14 @@ export function OrganizationAccessEditor({
                             type="button"
                             aria-expanded={denyExpanded}
                             aria-controls="organization-deny-list-content"
-                            onClick={() =>
-                                setDenyExpanded((expanded) => !expanded)
-                            }
+                            onClick={toggleDenyExpanded}
                             className="flex items-center gap-1.5 rounded-lg text-left text-sm font-medium text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
                         >
-                            <span>Deny list</span>
+                            <span>
+                                {denyCount > 0
+                                    ? `Deny list (${denyCount})`
+                                    : "Deny list"}
+                            </span>
                             <ChevronDown
                                 aria-hidden="true"
                                 className={`h-3.5 w-3.5 text-gray-400 transition-transform ${denyExpanded ? "rotate-180" : ""}`}
@@ -554,6 +605,7 @@ export function AccessEditor({
     loading = false,
     canManage,
     currentUserEmail,
+    currentUserId,
     busy = false,
     pendingEmail = null,
     newRole,
@@ -569,6 +621,7 @@ export function AccessEditor({
     loading?: boolean;
     canManage: boolean;
     currentUserEmail?: string | null;
+    currentUserId?: string | null;
     busy?: boolean;
     pendingEmail?: string | null;
     newRole: ProjectRole;
@@ -586,6 +639,7 @@ export function AccessEditor({
 }) {
     const roleOptions = PROJECT_ROLES;
     const normalizedCurrentEmail = currentUserEmail?.trim().toLowerCase();
+    const normalizedCurrentUserId = currentUserId?.trim() || null;
 
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -666,11 +720,13 @@ export function AccessEditor({
                         }
                         className="bg-white focus-within:bg-white"
                     />
-                    {error ? <p className="text-xs text-red-500">{error}</p> : null}
                 </section>
             ) : null}
 
-            {scope !== "direct" && error ? (
+            {/* One alert for every scope: the add form is only rendered to a
+                manager in the direct scope, so an error nested inside it was
+                invisible when a re-role or a revoke failed anywhere else. */}
+            {error ? (
                 <p role="alert" className="text-xs text-red-500">
                     {error}
                 </p>
@@ -709,9 +765,14 @@ export function AccessEditor({
                         ))}
                     </div>
                 ) : rows.length === 0 ? (
-                    <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-gray-400">
-                        No one has access yet.
-                    </div>
+                    // In the inherited scope the note above already explains
+                    // where access comes from; "No one has access yet"
+                    // underneath it reads as a contradiction.
+                    scope === "project" ? null : (
+                        <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-gray-400">
+                            No one has access yet.
+                        </div>
+                    )
                 ) : (
                     <div
                         role="list"
@@ -721,9 +782,15 @@ export function AccessEditor({
                             const rowKey =
                                 entry.key ?? entry.user_id ?? entry.email ?? "unknown";
                             const email = entry.email ?? "";
+                            // Either identifier is enough; when neither is
+                            // known the row stays interactive rather than
+                            // guessing which grant belongs to the viewer.
                             const isYou =
-                                !!normalizedCurrentEmail &&
-                                email.toLowerCase() === normalizedCurrentEmail;
+                                (!!normalizedCurrentUserId &&
+                                    entry.user_id === normalizedCurrentUserId) ||
+                                (!!normalizedCurrentEmail &&
+                                    email.toLowerCase() ===
+                                        normalizedCurrentEmail);
                             const name = isYou
                                 ? "You"
                                 : entry.display_name?.trim() || "—";
@@ -741,6 +808,12 @@ export function AccessEditor({
                                         label={email || name}
                                         editable={
                                             !entry.isCreator &&
+                                            // Re-roling yourself is refused by
+                                            // the server ("You cannot share a
+                                            // project with yourself"), so the
+                                            // picker only ever produced an
+                                            // error.
+                                            !isYou &&
                                             canManage &&
                                             scope !== "project" &&
                                             !!onRoleChange
@@ -751,7 +824,11 @@ export function AccessEditor({
                                         options={roleOptions}
                                     />
                                     <div className="relative h-6 w-6">
+                                        {/* No Remove on your own grant: one
+                                            unconfirmed click would lock the
+                                            viewer out of the resource. */}
                                         {!entry.isCreator &&
+                                        !isYou &&
                                         canManage &&
                                         scope === "direct" &&
                                         onRemove ? (

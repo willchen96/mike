@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Grant-reachable chats appear in the global sidebar since the parity
@@ -36,7 +36,7 @@ vi.mock("@/app/components/assistant/ChatView", () => ({
         canSend,
         chat,
     }: {
-        canSend?: boolean;
+        canSend?: boolean | null;
         chat?: { access_role?: string } | null;
     }) => (
         <>
@@ -83,5 +83,40 @@ describe("global chat page composer gating", () => {
             expect(screen.getByTestId("can-send")).toHaveTextContent("true"),
         );
         expect(screen.getByTestId("chat-role")).toHaveTextContent("editor");
+    });
+
+    it("says 'not known yet' rather than 'viewing only' while getChat is in flight", async () => {
+        // Every cold load starts with no initialMessages, so the old
+        // `useState(initialMessages.length > 0)` opened at FALSE — and a
+        // chat's own owner was told "Viewing only — sending needs edit
+        // access" until the fetch landed. null is the third answer: still
+        // fail-closed (ChatInput disables on it), but it asserts nothing
+        // about the caller's access.
+        let settle!: (value: ReturnType<typeof chatDetail>) => void;
+        getChat.mockReturnValue(
+            new Promise((resolve) => {
+                settle = resolve;
+            }),
+        );
+
+        render(<AssistantChatPage />);
+
+        expect(screen.getByTestId("can-send")).toHaveTextContent("null");
+
+        await act(async () => {
+            settle(chatDetail("owner"));
+        });
+        await waitFor(() =>
+            expect(screen.getByTestId("can-send")).toHaveTextContent("true"),
+        );
+    });
+
+    it("stays fail-closed when getChat never answers", async () => {
+        getChat.mockRejectedValue(new Error("boom"));
+        render(<AssistantChatPage />);
+
+        await waitFor(() => expect(getChat).toHaveBeenCalled());
+        // null, not true: an unknown standing is never a licence.
+        expect(screen.getByTestId("can-send")).not.toHaveTextContent("true");
     });
 });

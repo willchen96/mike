@@ -15,6 +15,12 @@ function makeDb(events: Record<string, unknown>[], error?: { message: string }) 
             select: () => b,
             or: () => b,
             eq: () => b,
+            // The project scope resolves through lib/access now, which also
+            // composes .is()/.in() and .maybeSingle(). Every table still
+            // answers "no rows", so the caller sees no accessible projects.
+            is: () => b,
+            in: () => b,
+            maybeSingle: () => Promise.resolve({ data: null, error: null }),
             ilike: () => b,
             gte: () => b,
             lte: () => b,
@@ -74,7 +80,10 @@ describe("buildAuditCsv", () => {
     it("always reads page 1 — the export is one flat window", async () => {
         const { db, ranges } = makeDb([]);
         await buildAuditCsv(db, "u1", undefined, { ...query, page: 7 });
-        expect(ranges).toEqual([[0, AUDIT_EXPORT_LIMIT - 1]]);
+        // The accessible-project scan pages from 0 as well; what matters is
+        // that the EVENTS read is one flat window and nothing starts later.
+        expect(ranges).toContainEqual([0, AUDIT_EXPORT_LIMIT - 1]);
+        expect(ranges.every(([from]) => from === 0)).toBe(true);
     });
 
     it("throws on a query error so the export job retries", async () => {
@@ -103,12 +112,19 @@ function makeProfileDb(
             select: () => b,
             or: () => b,
             eq: () => b,
+            // See makeDb: the project scope's .is() chain runs first and
+            // finds nothing, so only the profile lookup below matters here.
+            is: () => b,
+            maybeSingle: () => Promise.resolve({ data: null, error: null }),
             ilike: () => b,
             gte: () => b,
             lte: () => b,
             contains: () => b,
             order: () => b,
-            in: () => {
+            in: (column: string) => {
+                // Only the profile lookup filters on user_id; every other
+                // `.in()` (project ids for the events read) keeps chaining.
+                if (column !== "user_id") return b;
                 profilesQueried = true;
                 return Promise.resolve({ data: profiles, error: null });
             },

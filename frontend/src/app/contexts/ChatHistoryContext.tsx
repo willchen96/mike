@@ -18,6 +18,7 @@ import {
     renameChat,
 } from "@/app/lib/mikeApi";
 import type { Chat, Message } from "@/app/components/shared/types";
+import type { ProjectRole } from "@/app/lib/permissions";
 
 interface ChatHistoryContextType {
     chats: Chat[] | null;
@@ -27,7 +28,10 @@ interface ChatHistoryContextType {
     setCurrentChatId: (chatId: string | null) => void;
     loadChats: () => Promise<void>;
   loadMoreChats: () => Promise<void>;
-    saveChat: (projectId?: string) => Promise<string | null>;
+    saveChat: (
+        projectId?: string,
+        projectRole?: ProjectRole | null,
+    ) => Promise<string | null>;
     renameChat: (chatId: string, title: string) => Promise<void>;
     updateChatTitle: (chatId: string, title: string) => void;
     newChatMessages: Message[] | null;
@@ -147,28 +151,44 @@ export function ChatHistoryProvider({ children }: { children: ReactNode }) {
     );
 
     const saveChat = useCallback(
-        async (projectId?: string): Promise<string | null> => {
+        async (
+            projectId?: string,
+            projectRole?: ProjectRole | null,
+        ): Promise<string | null> => {
             try {
                 const { id } = await createChat(
                     projectId ? { project_id: projectId } : undefined,
                 );
                 const now = new Date().toISOString();
+                // The optimistic row must say what the server would say.
+                // The overview RPC serves is_owner + access_role on every
+                // row, and the sidebar's gates read them via roleFrom(),
+                // which fails closed to viewer when both are absent — so
+                // without a stamp the creator was refused rename and delete
+                // on their own brand-new thread until a reload.
+                //
+                // What the stamp should SAY differs by chat kind. A
+                // standalone chat belongs to its creator, so owner is what
+                // the server serves back. A PROJECT chat does not: the
+                // server derives its role from the caller's role on the
+                // project (ensureSharedRowAccess), so an editor who starts a
+                // thread there is an editor on it. Stamping owner offered
+                // that editor a Delete which came back 403 — the sidebar
+                // promised something the server refuses. Callers pass their
+                // project role; absent one we fall back to editor, the
+                // minimum the server requires to have created the chat at
+                // all, rather than to the top of the ladder.
+                const role: ProjectRole = projectId
+                    ? (projectRole ?? "editor")
+                    : "owner";
                 const newChat: Chat = {
                     id,
                     project_id: projectId ?? null,
                     user_id: user?.id ?? "",
                     title: null,
                     created_at: now,
-                    // The optimistic row must say what the server would say.
-                    // The overview RPC serves is_owner + access_role on every
-                    // row, and the sidebar's gates read them via roleFrom(),
-                    // which fails closed to viewer when both are absent — so
-                    // without this stamp the creator was refused rename and
-                    // delete on their own brand-new thread until a reload.
-                    // The caller IS the creator here, and a chat's creator
-                    // derives admin standing on their row by definition.
-                    is_owner: true,
-                    access_role: "owner",
+                    is_owner: role === "owner",
+                    access_role: role,
                 };
                 setChats((prev) => [newChat, ...(prev ?? [])]);
                 return id;

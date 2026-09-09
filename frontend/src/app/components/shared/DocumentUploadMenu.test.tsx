@@ -63,6 +63,23 @@ describe("DocumentUploadMenu", () => {
         expect(screen.getAllByRole("menuitem")).toHaveLength(2);
     });
 
+    it("offers no way in when every source is withheld", () => {
+        // A null action is "you may not do this here". Folder upload has to
+        // answer that the same way files and saved documents do; while it
+        // stayed live for a viewer the menu still opened, the native folder
+        // picker appeared, and the refusal arrived only once the upload
+        // session was under way.
+        render(
+            <DocumentUploadMenu
+                onSavedFiles={null}
+                onUploadFiles={null}
+                onUploadFolder={null}
+            />,
+        );
+
+        expect(screen.getByRole("button", { name: "Upload" })).toBeDisabled();
+    });
+
     it("disables upload while its collection is loading", () => {
         render(
             <DocumentUploadMenu

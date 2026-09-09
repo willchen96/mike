@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { getProject } from "@/app/lib/mikeApi";
@@ -72,6 +73,32 @@ function Probe() {
                 {String(canDo("container.delete"))}
             </span>
             <span data-testid="can-edit">{String(canDo("content.edit"))}</span>
+        </div>
+    );
+}
+
+// Loads the chat list (the optimistic row is only prepended to a loaded
+// list), then exposes the row the workspace stamps for a new chat.
+function ChatProbe() {
+    const { createChat, ensureProjectChats, projectChats } =
+        useProjectWorkspace();
+
+    useEffect(() => {
+        void ensureProjectChats();
+    }, [ensureProjectChats]);
+
+    return (
+        <div>
+            <button onClick={() => void createChat()}>new chat</button>
+            <span data-testid="chat-count">
+                {projectChats === null ? "none" : String(projectChats.length)}
+            </span>
+            <span data-testid="chat-role">
+                {String(projectChats?.[0]?.access_role ?? "none")}
+            </span>
+            <span data-testid="chat-owner">
+                {String(projectChats?.[0]?.is_owner ?? "none")}
+            </span>
         </div>
     );
 }
@@ -187,6 +214,32 @@ describe("ProjectWorkspace while the project is still loading", () => {
         expect(
             screen.queryByText(/Only an admin can/),
         ).not.toBeInTheDocument();
+    });
+
+    it("stamps the caller's project role on a new chat, not owner", async () => {
+        // The server derives a project chat's role from the PROJECT role, so
+        // stamping "owner" on the optimistic row offered an editor a Delete
+        // that came back 403 in a popup.
+        vi.mocked(getProject).mockResolvedValue({
+            ...OWNER_PROJECT,
+            access_role: "editor",
+        } as unknown as Project);
+        render(
+            <ProjectWorkspaceProvider projectId="p1">
+                <ChatProbe />
+            </ProjectWorkspaceProvider>,
+        );
+        await waitFor(() =>
+            expect(screen.getByTestId("chat-count")).toHaveTextContent("0"),
+        );
+
+        fireEvent.click(screen.getByText("new chat"));
+
+        await waitFor(() =>
+            expect(screen.getByTestId("chat-count")).toHaveTextContent("1"),
+        );
+        expect(screen.getByTestId("chat-role")).toHaveTextContent("editor");
+        expect(screen.getByTestId("chat-owner")).toHaveTextContent("false");
     });
 
     it("refuses, and names an admin, once the row says viewer", async () => {

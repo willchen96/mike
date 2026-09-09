@@ -931,7 +931,13 @@ export function ProjectsOverview() {
 
             <NewProjectModal
                 open={modalOpen}
-                onClose={() => setModalOpen(false)}
+                onClose={(createdWithoutHandover) => {
+                    setModalOpen(false);
+                    // A project created behind a failed grant or upload never
+                    // arrived through onCreated: refetch so it is on the list
+                    // the user lands back on, not only after a reload.
+                    if (createdWithoutHandover) retry();
+                }}
                 onCreated={(p) => {
                     setProjects((prev) => [p, ...prev]);
                     router.push(`/projects/${p.id}`);

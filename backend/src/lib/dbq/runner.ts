@@ -59,10 +59,29 @@ export type DbJobFailureHook = (db: Db, job: DbJob) => Promise<void>;
 export const DB_JOB_FAILURE_HOOKS: Record<string, DbJobFailureHook> = {};
 
 /**
+ * "Retrying cannot fix this." A handler throws it when the job is refused by
+ * a rule, not defeated by a transient fault — and the state machine skips
+ * straight to `failed`, the same way an unknown kind does.
+ *
+ * The retry budget is for flaky networks and busy databases. Spending 20
+ * attempts over hours on a job the domain will refuse identically every time
+ * (account deletion for the only admin of an organization that still has
+ * members) buries the real reason under a wall of repeats and leaves the
+ * user's request in limbo far longer than it needs to be.
+ */
+export class NonRetryableJobError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "NonRetryableJobError";
+    }
+}
+
+/**
  * Run one claimed job through its handler and persist the outcome:
  *   handler resolves        -> done (+ optional result)
  *   handler throws, retries -> pending again with run_at pushed back
  *   handler throws, spent   -> failed (terminal, kept for inspection)
+ *   handler throws NonRetryableJobError -> failed immediately
  *   unknown kind            -> failed immediately (retrying can't fix it)
  * Exported for unit tests; the poll loop below is just claim + fan-in.
  */
@@ -122,7 +141,9 @@ export async function processClaimedJob(
     } catch (err) {
         const message =
             err instanceof Error ? err.message : String(err ?? "unknown");
-        const spent = job.attempts >= job.max_attempts;
+        const spent =
+            err instanceof NonRetryableJobError ||
+            job.attempts >= job.max_attempts;
         const delayMs = retryDelayMs(job.attempts);
         await fence(
             db.from("db_jobs").update(

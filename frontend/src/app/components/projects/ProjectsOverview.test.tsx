@@ -3,13 +3,19 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectsOverview } from "./ProjectsOverview";
 
-const { activeTab, projectRows, setActiveTab, usePaginatedProjectsSpy } =
-    vi.hoisted(() => ({
-        activeTab: { current: "all" as string },
-        projectRows: { current: [] as Record<string, unknown>[] },
-        setActiveTab: vi.fn(),
-        usePaginatedProjectsSpy: vi.fn(),
-    }));
+const {
+    activeTab,
+    projectRows,
+    retrySpy,
+    setActiveTab,
+    usePaginatedProjectsSpy,
+} = vi.hoisted(() => ({
+    activeTab: { current: "all" as string },
+    projectRows: { current: [] as Record<string, unknown>[] },
+    retrySpy: vi.fn(),
+    setActiveTab: vi.fn(),
+    usePaginatedProjectsSpy: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -35,7 +41,7 @@ vi.mock("@/app/hooks/usePaginatedProjects", () => ({
             error: null,
             loadMoreError: null,
             loadMore: vi.fn(),
-            retry: vi.fn(),
+            retry: retrySpy,
             selectedProjectIds: [],
             setSelectedProjectIds: vi.fn(),
             selectAllMatching: vi.fn(),
@@ -58,7 +64,23 @@ vi.mock("@/app/lib/mikeApi", () => ({
     deleteProject: vi.fn(),
 }));
 
-vi.mock("./NewProjectModal", () => ({ NewProjectModal: () => null }));
+vi.mock("./NewProjectModal", () => ({
+    NewProjectModal: ({
+        open,
+        onClose,
+    }: {
+        open: boolean;
+        onClose: (createdWithoutHandover?: boolean) => void;
+    }) =>
+        open ? (
+            <div>
+                <button onClick={() => onClose(true)}>
+                    close after partial create
+                </button>
+                <button onClick={() => onClose()}>close untouched</button>
+            </div>
+        ) : null,
+}));
 vi.mock("./ProjectDetailsModal", () => ({ ProjectDetailsModal: () => null }));
 
 function lastScope() {
@@ -71,6 +93,7 @@ describe("ProjectsOverview tabs", () => {
         activeTab.current = "all";
         projectRows.current = [];
         setActiveTab.mockReset();
+        retrySpy.mockReset();
         usePaginatedProjectsSpy.mockReset();
         vi.stubGlobal(
             "matchMedia",
@@ -178,5 +201,32 @@ describe("ProjectsOverview tabs", () => {
         expect(screen.getByText("3 users")).toBeInTheDocument();
         expect(screen.getByText("Elite Law LLP")).toBeInTheDocument();
         expect(screen.getByTitle("Shared with Elite Law LLP")).toBeVisible();
+    });
+
+    it("refetches when the new-project modal closes on a project it never handed over", async () => {
+        // A project created behind a failed grant or upload never reaches
+        // onCreated, so without this refetch the row the user just made is
+        // missing from the list they land back on until a reload.
+        const user = userEvent.setup();
+        render(<ProjectsOverview />);
+
+        await user.click(screen.getByRole("button", { name: "Create" }));
+        await user.click(
+            screen.getByRole("button", { name: "close after partial create" }),
+        );
+
+        expect(retrySpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not refetch when the new-project modal is simply cancelled", async () => {
+        const user = userEvent.setup();
+        render(<ProjectsOverview />);
+
+        await user.click(screen.getByRole("button", { name: "Create" }));
+        await user.click(
+            screen.getByRole("button", { name: "close untouched" }),
+        );
+
+        expect(retrySpy).not.toHaveBeenCalled();
     });
 });

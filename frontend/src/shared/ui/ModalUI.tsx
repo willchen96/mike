@@ -76,6 +76,15 @@ export function ModalUI({
                 : [];
 
         window.requestAnimationFrame(() => {
+            // React's `autoFocus` prop focuses the element on mount but never
+            // writes an `autofocus` attribute, so the attribute probe below
+            // never matched and this frame stole focus from the intended
+            // field to the first focusable (the Close button). If something
+            // inside the dialog already holds focus, leave it there.
+            const active = document.activeElement as HTMLElement | null;
+            if (dialog && active && active !== dialog && dialog.contains(active)) {
+                return;
+            }
             const target =
                 focusable().find((element) =>
                     element.hasAttribute("autofocus"),

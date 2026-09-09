@@ -8,6 +8,7 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 import { hasLlmKey, LLM_SKIP_REASON } from "./llm";
+import { createProject } from "./projects";
 import path from "path";
 
 const PDF_FIXTURE = path.join(__dirname, "fixtures/test.pdf");
@@ -65,49 +66,16 @@ test("create project, upload PDF, ask a question and receive a response", async 
        so set it here. */
     test.setTimeout(120_000);
 
-    /* ── Step 1: navigate to projects ─────────────────────────────────────── */
-    await page.goto("/projects");
-    await expect(page).toHaveURL(/\/projects/);
-
-    /* ── Step 2: open the "New project" modal ────────────────────────────── */
-    /* The Plus icon button in the header has aria-label="New project" */
-    const createBtn = page.getByRole("button", { name: "New project" });
-    await expect(createBtn).toBeVisible({ timeout: 10_000 });
-    await createBtn.click();
-
-    /* ── Step 3: fill in the project name ─────────────────────────────────── */
-    const nameInput = page.getByPlaceholder("Project name");
-    await expect(nameInput).toBeVisible({ timeout: 5_000 });
-
+    /* ── Steps 1-5: create a project with the PDF attached ────────────────── */
+    /* The wizard (Details → Access → Add Documents) is driven from one shared
+       helper, e2e/projects.ts, so a new step cannot be added to the modal
+       without this spec picking it up. This spec used to walk the modal
+       itself, clicking a single "Next" and then a `button[type="submit"]`;
+       the Access step stranded it on step two and the final primary is a
+       type="button", so both halves were wrong. */
     const projectName = `E2E Test Project ${Date.now()}`;
-    await nameInput.fill(projectName);
-
-    /* ── Step 4: advance to "Add Documents" and upload a PDF ──────────────── */
-    /* NewProjectModal is a two-step wizard; the details step's primary action is
-       a plain "Next" and only the documents step carries the file input. */
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-
-    const uploadBtn = page.getByRole("button", { name: /^Upload/ });
-    /* We need to trigger the hidden file input; intercept the chooser */
-    const fileChooserPromise = page.waitForEvent("filechooser");
-    await uploadBtn.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(PDF_FIXTURE);
-
-    /* The button label should update to reflect the queued file */
-    await expect(
-        page.getByRole("button", { name: /^Upload \(1\)/ }),
-    ).toBeVisible({ timeout: 5_000 });
-
-    /* ── Step 5: submit the form ──────────────────────────────────────────── */
-    /* The PDF upload runs inside NewProjectModal.handleSubmit
-       (await Promise.all([uploadProjectDocument(...)])) BEFORE onCreated fires,
-       so the "Creating…" button state can persist for many seconds while the
-       file uploads. ProjectsOverview.onCreated then router.push()es to the new
-       project page, so wait for that navigation (generously, to cover the
-       upload). */
-    await page.click('button[type="submit"]');
-    await page.waitForURL(/\/projects\/[^/]+$/, { timeout: 30_000 });
+    await createProject(page, projectName, PDF_FIXTURE);
+    await expect(page).toHaveURL(/\/projects\/[^/]+$/);
 
     /* ── Step 6: open the project assistant ───────────────────────────────── */
     /* We're already on /projects/[id] (Documents tab by default). The project

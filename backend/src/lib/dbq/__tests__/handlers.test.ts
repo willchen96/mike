@@ -12,8 +12,11 @@ vi.mock("../../audit", async (importOriginal) => {
 });
 
 const deleteUserAccountData = vi.fn(async () => {});
+const listOrgsBlockingAccountDeletion = vi.fn(async () => [] as unknown[]);
 vi.mock("../../userDataCleanup", () => ({
     deleteUserAccountData: (...a: unknown[]) => deleteUserAccountData(...a),
+    listOrgsBlockingAccountDeletion: (...a: unknown[]) =>
+        listOrgsBlockingAccountDeletion(...a),
 }));
 
 const buildUserAccountExport = vi.fn(async () => ({ hello: "world" }));
@@ -85,6 +88,7 @@ import {
     handleExportBuild,
     MAX_ZIP_EXPORT_DOCUMENTS,
 } from "../handlers";
+import { NonRetryableJobError } from "../runner";
 import type { DbJob } from "../types";
 
 const JOB = (kind: string, payload: Record<string, unknown>): DbJob => ({
@@ -106,6 +110,9 @@ const JOB = (kind: string, payload: Record<string, unknown>): DbJob => ({
 // Minimal db double for the handlers' own db_jobs queries.
 function makeDb(selectData: unknown[] = []) {
     const deletes: Record<string, unknown>[] = [];
+    // Every requested column list, so a test can assert that a handler asked
+    // for the columns its own access check needs.
+    const selects: string[] = [];
     // Ordered log of everything the handler did, so a test can assert not just
     // WHAT happened but in what order (erasure ordering is the invariant).
     const trace: string[] = [];
@@ -119,7 +126,8 @@ function makeDb(selectData: unknown[] = []) {
             filters: {},
         };
         const b: Record<string, unknown> = {
-            select() {
+            select(columns?: string) {
+                if (typeof columns === "string") selects.push(columns);
                 return b;
             },
             delete() {
@@ -157,6 +165,7 @@ function makeDb(selectData: unknown[] = []) {
     }
     return {
         deletes,
+        selects,
         trace,
         from,
         auth: { admin: { deleteUser: authDeleteUser } },
@@ -222,6 +231,29 @@ describe("handleChatTurnAudit", () => {
 });
 
 describe("handleAccountDelete", () => {
+    it("refuses, terminally, before destroying anything when an org blocks it", async () => {
+        // The route answers 409 for this account, but an org can gain a
+        // member between the request and the job, and old rows can be
+        // requeued. Ask BEFORE the first delete — and throw the
+        // non-retryable error, because no number of retries will give the
+        // organization a second admin.
+        const db = makeDb([]);
+        listOrgsBlockingAccountDeletion.mockResolvedValueOnce([
+            { org_id: "o1", name: "Org A", reason: "members" },
+        ]);
+
+        await expect(
+            handleAccountDelete(
+                db as never,
+                JOB("account.delete", { userId: "u1", userEmail: "u@x.test" }),
+            ),
+        ).rejects.toThrow(NonRetryableJobError);
+
+        expect(deleteUserAccountData).not.toHaveBeenCalled();
+        expect(db.auth.admin.deleteUser).not.toHaveBeenCalled();
+        expect(db.deletes).toHaveLength(0);
+    });
+
     it("runs the cascade and purges the user's other queue rows (not itself)", async () => {
         const db = makeDb([]);
         await handleAccountDelete(
@@ -235,11 +267,10 @@ describe("handleAccountDelete", () => {
         for (const d of db.deletes) expect(d["neq:id"]).toBe("job-1");
     });
 
-    // documents.user_id references auth.users ON DELETE CASCADE, and
-    // document_versions cascades from documents, so deleting the auth user is
-    // what destroys the rows recording where this account's files live. Do it
-    // first and the cascade has nothing left to read — the objects are
-    // orphaned in storage with no row pointing at them, forever.
+    // documents.user_id references auth.users ON DELETE SET NULL, so deleting
+    // the auth user first would not erase this account's rows — it would
+    // anonymise them, past the reach of every `eq("user_id", userId)` delete
+    // in the cascade, with their storage objects left behind forever.
     it("deletes the auth user LAST, after the data cascade", async () => {
         const db = makeDb([]);
         deleteUserAccountData.mockImplementation(async () => {
@@ -452,6 +483,45 @@ describe("handleExportBuild", () => {
         expect(contentType).toBe("application/zip");
         expect(out.filename).toBe("documents.zip");
         expect(out.content_type).toBe("application/zip");
+    });
+
+    // ensureDocAccess resolves a workflow asset through its workflow and an
+    // org document through its org. Selecting only user_id/project_id made
+    // both branches unreachable, so an org colleague's document and every
+    // detached document were silently dropped from the zip — the async
+    // export quietly returned less than the synchronous one.
+    it("selects the columns its own access check needs", async () => {
+        const db = makeDb([
+            {
+                id: "d1",
+                user_id: null,
+                project_id: null,
+                org_id: "o1",
+                workflow_id: "w1",
+            },
+        ]);
+
+        await handleExportBuild(
+            db as never,
+            JOB("export.build", {
+                userId: "u1",
+                userEmail: "u@x.test",
+                type: "documents-zip",
+                document_ids: ["d1"],
+            }),
+        );
+
+        const documentSelect = db.selects.find((columns) =>
+            columns.includes("current_version_id"),
+        );
+        expect(documentSelect).toContain("org_id");
+        expect(documentSelect).toContain("workflow_id");
+        expect(ensureDocAccess).toHaveBeenCalledWith(
+            expect.objectContaining({ org_id: "o1", workflow_id: "w1" }),
+            "u1",
+            "u@x.test",
+            db,
+        );
     });
 
     it("fails a documents-zip job whose documents are all inaccessible", async () => {

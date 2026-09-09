@@ -55,6 +55,15 @@ export function SidebarChatItem({ chat, isActive, onSelect, projectName }: Props
     const canRename = can(role, "content.edit");
     const canShare = can(role, "access.manage");
     const canDelete = can(role, "container.delete");
+    // One label for the row's tooltip and its accessible name, so the
+    // "Shared" marker rendered beside the title is part of both.
+    const chatTitle = chat.title ?? "Untitled chat";
+    const rowLabel = [
+        projectName ? `${projectName}: ${chatTitle}` : chatTitle,
+        chat.is_owner === false ? "(Shared)" : null,
+    ]
+        .filter(Boolean)
+        .join(" ");
 
     useEffect(() => {
         if (isRenaming) editInputRef.current?.focus();
@@ -139,13 +148,40 @@ export function SidebarChatItem({ chat, isActive, onSelect, projectName }: Props
                                 ? "pr-3 text-gray-900"
                                 : "pr-0 text-gray-700 group-hover:pr-3",
                         )}
-                        title={projectName ? `${projectName}: ${chat.title ?? "Untitled chat"}` : (chat.title ?? "Untitled chat")}
+                        // The "Shared" marker sits in a SIBLING element, so
+                        // neither the tooltip nor the accessible name of this
+                        // row carried it: a screen-reader user heard exactly
+                        // what the owner of the thread hears. It belongs in
+                        // both.
+                        title={rowLabel}
+                        aria-label={rowLabel}
                     >
                         {projectName && (
                             <span className="text-gray-400 font-normal">{projectName}: </span>
                         )}
                         {chat.title ?? "Untitled chat"}
                     </button>
+
+                    {/* Somebody else's thread. get_chats_overview now lists
+                        colleagues' organization-project chats alongside the
+                        caller's own, and nothing in the row said which was
+                        which — the same list, the same weight, so a rename
+                        or a delete could land on a colleague's work by
+                        mistake. Plain text, not a pill: this is an
+                        informational label (AGENTS.md).
+
+                        Strictly `=== false`: a row that carries no is_owner
+                        at all has told us nothing, and marking it "Shared"
+                        would be a claim we cannot make. */}
+                    {chat.is_owner === false && (
+                        // `text-[10px] text-gray-400` measured about 2.6:1 —
+                        // below the 4.5:1 the accessibility baseline requires,
+                        // on the one word in the row that says whose work this
+                        // is. text-xs on the muted gray that does meet it.
+                        <span className="mr-1 shrink-0 text-xs text-gray-500">
+                            Shared
+                        </span>
+                    )}
 
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -220,6 +256,12 @@ export function SidebarChatItem({ chat, isActive, onSelect, projectName }: Props
                     </DropdownMenu>
                 </>
             )}
+            {/* TODO(contacts): no `contacts` to pass. The sidebar rows come
+                from get_chats_overview and GET /chat/:id serves only
+                chat + is_owner + access_role, so no ranked admin list
+                reaches a chat surface and the popup's "Ask …" line can never
+                render here. Needs the server to return the shape project
+                detail already returns as `admin_contacts`. */}
             <PermissionDeniedPopup
                 open={!!gate}
                 action={gate?.action}

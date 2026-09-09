@@ -29,6 +29,14 @@ export interface AccessControls {
     inheritedFromProjectId?: string | null;
     canManage: boolean;
     ownerLabel?: string;
+    /**
+     * A failure the owner of this modal wants shown beside the roster rather
+     * than in place of it — a refused grants fetch, say, which leaves the
+     * people list perfectly loadable but management impossible. It shares the
+     * editor's error line with the modal's own action failures; an in-flight
+     * action's message wins, because it is the newer answer.
+     */
+    error?: string | null;
     onGrant: (email: string, role: AccessAssignmentRole) => Promise<void>;
     onRevoke: (email: string) => Promise<void>;
 }
@@ -39,6 +47,7 @@ interface Props {
     resource: SharedResource | null;
     fetchAccess: (id: string) => Promise<ProjectPeople>;
     currentUserEmail?: string | null;
+    currentUserId?: string | null;
     breadcrumb: string[];
     access: AccessControls;
 }
@@ -49,6 +58,7 @@ export function AccessModal({
     resource,
     fetchAccess,
     currentUserEmail,
+    currentUserId,
     breadcrumb,
     access,
 }: Props) {
@@ -213,6 +223,12 @@ export function AccessModal({
         setError(null);
         try {
             await access.onGrant(email, newRole);
+        } catch (cause) {
+            // A refused grant used to escape as an unhandled rejection with no
+            // message; the sibling changeRole/remove paths already report.
+            setError(
+                userFacingApiError(cause, "Could not add this user. Try again."),
+            );
         } finally {
             setBusy(false);
         }
@@ -327,11 +343,13 @@ export function AccessModal({
                                 : null
                         }
                         ownerLabel={access.ownerLabel}
+                        currentUserId={currentUserId}
+                        currentUserEmail={currentUserEmail}
                         loading={
                             accessLoading || loadedRosterKey !== rosterKey
                         }
                         disabled={!canManage || busy}
-                        error={error}
+                        error={error ?? access.error ?? null}
                         onAssign={(member, role) =>
                             changeRole(member, role)
                         }
@@ -355,6 +373,7 @@ export function AccessModal({
                     loading={accessLoading || loadedRosterKey !== rosterKey}
                     canManage={canManage}
                     currentUserEmail={currentUserEmail}
+                    currentUserId={currentUserId}
                     busy={busy}
                     pendingEmail={pendingEmail}
                     newRole={newRole}
@@ -363,7 +382,7 @@ export function AccessModal({
                     validateEmail={validateEmail}
                     onRoleChange={changeRole}
                     onRemove={scope === "direct" ? remove : undefined}
-                    error={error}
+                    error={error ?? access.error ?? null}
                 />
             </div>
         </Modal>

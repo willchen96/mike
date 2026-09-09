@@ -368,6 +368,13 @@ export async function checkWorkflowAccess(
         };
     const email = normalizeEmail(userEmail);
     if (!email) return { ok: false };
+    // An exact match is correct because BOTH sides are canonical:
+    // normalizeEmail trims and lowercases the caller's address, and
+    // workflow_shares.shared_with_email carries a lowercase CHECK (added by
+    // migration 20260904_02, which also folded the legacy mixed-case rows).
+    // Before that constraint a mixed-case row listed for its recipient via
+    // get_workflows_overview — which lowers both sides — and then missed
+    // here, so the workflow 404'd the moment they opened it.
     const { data: share, error } = await db
         .from("workflow_shares")
         .select("role")
@@ -571,10 +578,42 @@ export async function filterAccessibleDocumentIds(
     return verdicts.filter((entry) => entry.access.ok).map((entry) => entry.id);
 }
 
+const ACCESSIBLE_PROJECTS_PAGE_SIZE = 1000;
+/** Guards a runaway loop, not a product limit. */
+const ACCESSIBLE_PROJECTS_MAX_PAGES = 200;
+
+async function pageProjectRows<T>(
+    fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null }>,
+): Promise<T[]> {
+    const rows: T[] = [];
+    for (let page = 0; page < ACCESSIBLE_PROJECTS_MAX_PAGES; page += 1) {
+        const from = page * ACCESSIBLE_PROJECTS_PAGE_SIZE;
+        const { data } = await fetchPage(
+            from,
+            from + ACCESSIBLE_PROJECTS_PAGE_SIZE - 1,
+        );
+        const batch = (data ?? []) as T[];
+        rows.push(...batch);
+        if (batch.length < ACCESSIBLE_PROJECTS_PAGE_SIZE) break;
+    }
+    return rows;
+}
+
 /**
  * Returns the set of project IDs the user can access — projects they created,
  * any project they hold an access grant on, and any project in an org they
  * belong to. Used to scope chat lists and similar collection queries.
+ *
+ * Written as THREE bounded, paged reads plus ONE batched override read, and
+ * deliberately not as `checkProjectAccess` per row. The previous shape issued
+ * an unordered, unpaged `.in("org_id", …)` — silently truncated by PostgREST's
+ * db-max-rows, so a large firm's audit trail simply lost the projects past the
+ * cap — and then fanned out one verdict per org project, each of which is
+ * itself two or three round trips. A firm with a few hundred matters paid
+ * ~1000 sequential queries for one chat-list request. Paging by `id` (the
+ * primary key, so the order is total and stable across pages) makes the reads
+ * complete; re-deriving the org verdict inline from the same rules
+ * checkProjectAccess applies makes them cheap.
  */
 export async function listAccessibleProjectIds(
     userId: string,
@@ -582,59 +621,116 @@ export async function listAccessibleProjectIds(
     db: Db,
 ): Promise<string[]> {
     const normalizedEmail = normalizeEmail(userEmail);
-    const orgIds = await listUserOrgIds(userId, db);
-    const [{ data: personalOwned }, { data: grants }, { data: orgProjects }] =
+
+    // Roles, not just ids: an org ADMIN cannot be denied a project, which is
+    // one of the two exemptions the override filter below has to honour.
+    const { data: membershipRows } = await db
+        .from("org_members")
+        .select("org_id, role")
+        .eq("user_id", userId);
+    const orgRoleByOrgId = new Map<string, string>();
+    for (const row of (membershipRows ?? []) as {
+        org_id?: string | null;
+        role?: string | null;
+    }[]) {
+        if (row.org_id) orgRoleByOrgId.set(row.org_id, row.role ?? "");
+    }
+    const orgIds = [...orgRoleByOrgId.keys()];
+
+    const { data: grants } = normalizedEmail
+        ? await db
+              .from("project_access_grants")
+              .select("project_id")
+              .eq("email", normalizedEmail)
+        : { data: [] as { project_id?: string | null }[] };
+    const grantIds = [
+        ...new Set(
+            ((grants ?? []) as { project_id?: string | null }[])
+                .map((grant) => grant.project_id)
+                .filter((id): id is string => !!id),
+        ),
+    ];
+
+    const [personalOwned, personalGranted, orgProjects, denials] =
         await Promise.all([
-            db
-                .from("projects")
-                .select("id")
-                .eq("user_id", userId)
-                .is("org_id", null),
-            normalizedEmail
-                ? db
-                      .from("project_access_grants")
-                      .select("project_id")
-                      .eq("email", normalizedEmail)
-                : Promise.resolve({ data: [] as { project_id: string }[] }),
-            orgIds.length > 0
-                ? db
-                      .from("projects")
-                      .select("id, user_id, org_id")
-                      .in("org_id", orgIds)
-                : Promise.resolve({
-                      data: [] as {
+            // Personal projects the caller created. Their ORG projects are
+            // resolved by the org branch instead, because a creator who has
+            // left the org no longer has access to them — exactly what
+            // checkProjectAccess answers.
+            pageProjectRows<{ id: string }>((from, to) =>
+                db
+                    .from("projects")
+                    .select("id")
+                    .eq("user_id", userId)
+                    .is("org_id", null)
+                    .order("id", { ascending: true })
+                    .range(from, to),
+            ),
+            grantIds.length
+                ? pageProjectRows<{ id: string }>((from, to) =>
+                      db
+                          .from("projects")
+                          .select("id")
+                          .in("id", grantIds)
+                          .is("org_id", null)
+                          .order("id", { ascending: true })
+                          .range(from, to),
+                  )
+                : Promise.resolve([] as { id: string }[]),
+            orgIds.length
+                ? pageProjectRows<{
+                      id: string;
+                      user_id: string | null;
+                      org_id: string;
+                  }>((from, to) =>
+                      db
+                          .from("projects")
+                          .select("id, user_id, org_id")
+                          .in("org_id", orgIds)
+                          .order("id", { ascending: true })
+                          .range(from, to),
+                  )
+                : Promise.resolve(
+                      [] as {
                           id: string;
                           user_id: string | null;
                           org_id: string;
                       }[],
+                  ),
+            // One read for every deny this caller holds anywhere in their
+            // orgs, instead of one verdict per project. Scoped by org_id so
+            // the filter is bounded by membership rather than by a list of
+            // every candidate project id.
+            orgIds.length
+                ? db
+                      .from("project_org_access_overrides")
+                      .select("project_id")
+                      .in("org_id", orgIds)
+                      .eq("user_id", userId)
+                      .eq("role", "deny")
+                : Promise.resolve({
+                      data: [] as { project_id?: string | null }[],
+                      error: null,
                   }),
         ]);
 
-    const grantIds = (grants ?? [])
-        .map((grant: { project_id?: string | null }) => grant.project_id)
-        .filter((id): id is string => !!id);
-    const { data: personalGranted } = grantIds.length
-        ? await db
-              .from("projects")
-              .select("id")
-              .in("id", grantIds)
-              .is("org_id", null)
-        : { data: [] as { id: string }[] };
-
-    const verdicts = await Promise.all(
-        ((orgProjects ?? []) as {
-            id: string;
-            user_id: string | null;
-            org_id: string;
-        }[]).map((project) =>
-            checkProjectAccess(project.id, userId, userEmail, db),
-        ),
+    const deniedProjectIds = new Set(
+        ((denials.data ?? []) as { project_id?: string | null }[])
+            .map((row) => row.project_id)
+            .filter((id): id is string => !!id),
     );
+
     const ids = new Set<string>();
-    for (const p of (personalOwned ?? []) as { id: string }[]) ids.add(p.id);
-    for (const p of (personalGranted ?? []) as { id: string }[]) ids.add(p.id);
-    for (let i = 0; i < verdicts.length; i += 1) {
-        if (verdicts[i]?.ok) ids.add(orgProjects?.[i]?.id as string);
+    for (const project of personalOwned) ids.add(project.id);
+    for (const project of personalGranted) ids.add(project.id);
+    for (const project of orgProjects) {
+        // The two exemptions checkProjectAccess applies: the creator and an
+        // org admin always keep Owner and cannot be denied.
+        const isCreator = !!project.user_id && project.user_id === userId;
+        const isOrgAdmin = orgRoleByOrgId.get(project.org_id) === "admin";
+        if (!isCreator && !isOrgAdmin && deniedProjectIds.has(project.id))
+            continue;
+        ids.add(project.id);
     }
     return [...ids];
 }

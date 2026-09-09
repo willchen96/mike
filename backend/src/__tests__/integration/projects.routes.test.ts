@@ -373,6 +373,150 @@ describe("projects.routes", () => {
 
       expect(res.status).toBe(404);
     });
+
+    // ── directory search vs. the deny override ─────────────────────────
+    // The picker's org branch used to be plain membership: `projects` where
+    // org_id IN (my orgs), with no per-project verdict. Every other path
+    // resolves through checkProjectAccess / project_access_role, which
+    // refuse on a deny — so the picker was handing a walled-off member the
+    // matter's name, cm_number and its document filenames.
+    //
+    // The shared stub answers per TABLE, and this route reads the same
+    // `projects` table three different ways, so these two tests use a
+    // filter-aware db instead.
+    function directorySearchDb(options: {
+      personal?: Record<string, unknown>[];
+      orgProjects?: Record<string, unknown>[];
+      memberships?: { org_id: string; role: string }[];
+      denies?: string[];
+    }) {
+      const personal = options.personal ?? [];
+      const orgProjects = options.orgProjects ?? [];
+      const memberships = options.memberships ?? [];
+      const denied = new Set(options.denies ?? []);
+
+      const build = (resolve: (f: Record<string, unknown>) => unknown[]) => {
+        const filters: Record<string, unknown> = {};
+        const b: Record<string, unknown> = {};
+        for (const method of ["select", "order", "limit", "range", "ilike"])
+          b[method] = () => b;
+        b.is = () => b;
+        b.eq = (column: string, value: unknown) => {
+          filters[`eq:${column}`] = value;
+          return b;
+        };
+        b.in = (column: string, value: unknown) => {
+          filters[`in:${column}`] = value;
+          return b;
+        };
+        b.single = () =>
+          Promise.resolve({ data: resolve(filters)[0] ?? null, error: null });
+        b.maybeSingle = b.single;
+        b.then = (onResolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: resolve(filters), error: null }).then(
+            onResolve,
+          );
+        return b;
+      };
+
+      return {
+        from: (table: string) => {
+          if (table === "projects")
+            return build((filters) => {
+              if (filters["in:org_id"]) return orgProjects;
+              if (filters["in:id"]) return [];
+              return personal;
+            });
+          if (table === "project_org_access_overrides")
+            // The deny read is scoped by the caller's memberships (org_id),
+            // their user_id and role — never by every org project's id.
+            return build((filters) => {
+              const orgIds = (filters["in:org_id"] as string[] | undefined) ?? [];
+              if (filters["in:project_id"]) return [];
+              return orgProjects
+                .filter(
+                  (project) =>
+                    denied.has(project.id as string) &&
+                    orgIds.includes(project.org_id as string),
+                )
+                .map((project) => ({ project_id: project.id }));
+            });
+          if (table === "org_members") return build(() => memberships);
+          return build(() => []);
+        },
+        rpc: () => Promise.resolve({ data: [], error: null }),
+        auth: {
+          getUser: () =>
+            Promise.resolve({ data: { user: { id: "u1" } }, error: null }),
+        },
+      };
+    }
+
+    const WALLED = {
+      id: "p-walled",
+      name: "Matter P",
+      cm_number: "2026-0042",
+      org_id: "o1",
+      user_id: "u2",
+      updated_at: "2026-09-01T00:00:00Z",
+    };
+
+    it("hides an org project the caller is denied on", async () => {
+      vi.mocked(createServerSupabase).mockImplementationOnce(
+        () =>
+          directorySearchDb({
+            memberships: [{ org_id: "o1", role: "member" }],
+            orgProjects: [WALLED],
+            denies: ["p-walled"],
+          }) as unknown as ReturnType<typeof createServerSupabase>,
+      );
+
+      const res = await request(app)
+        .get("/projects?view=directory-search&search=Matter")
+        .set(...AUTH);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([]);
+    });
+
+    it("still returns the org project when no deny override exists", async () => {
+      vi.mocked(createServerSupabase).mockImplementationOnce(
+        () =>
+          directorySearchDb({
+            memberships: [{ org_id: "o1", role: "member" }],
+            orgProjects: [WALLED],
+          }) as unknown as ReturnType<typeof createServerSupabase>,
+      );
+
+      const res = await request(app)
+        .get("/projects?view=directory-search&search=Matter")
+        .set(...AUTH);
+
+      expect(res.status).toBe(200);
+      expect(res.body.map((project: { id: string }) => project.id)).toEqual([
+        "p-walled",
+      ]);
+    });
+
+    it("keeps an org admin's view of a project carrying a stale deny row", async () => {
+      vi.mocked(createServerSupabase).mockImplementationOnce(
+        () =>
+          directorySearchDb({
+            memberships: [{ org_id: "o1", role: "admin" }],
+            orgProjects: [WALLED],
+            denies: ["p-walled"],
+          }) as unknown as ReturnType<typeof createServerSupabase>,
+      );
+
+      const res = await request(app)
+        .get("/projects?view=directory-search&search=Matter")
+        .set(...AUTH);
+
+      expect(res.status).toBe(200);
+      expect(res.body.map((project: { id: string }) => project.id)).toEqual([
+        "p-walled",
+      ]);
+    });
     });
 
     // ── GET /projects/ids (select-all-matching support) ──────────────────
@@ -618,7 +762,12 @@ describe("projects.routes", () => {
           conflict_resolution: "rename",
         });
 
-      expect(res.status).toBe(404);
+      // 403, not 404: the viewer can see this project, so claiming it does
+      // not exist is a lie the UI then repeats to them.
+      expect(res.status).toBe(403);
+      expect(res.body.detail).toBe(
+        "You do not have permission to organize documents in this project.",
+      );
       expect(captured.name).toBeUndefined();
     });
 
@@ -1029,12 +1178,62 @@ describe("projects.routes", () => {
             expect(res.status).toBe(204);
         });
 
-        it("blocks a viewer (404)", async () => {
+        it("blocks a viewer with a refusal, not a fake 404", async () => {
             checkProjectAccess.mockResolvedValue(roleAccess("viewer"));
             const res = await request(app)
                 .delete("/projects/p1/folders/f1")
                 .set(...AUTH);
+            expect(res.status).toBe(403);
+            expect(res.body.detail).toBe(
+                "You do not have permission to organize documents in this project.",
+            );
+        });
+
+        it("still answers 404 when the project is invisible", async () => {
+            checkProjectAccess.mockResolvedValue({ ok: false });
+            const res = await request(app)
+                .delete("/projects/p1/folders/f1")
+                .set(...AUTH);
             expect(res.status).toBe(404);
+            expect(res.body.detail).toBe("Project not found");
+        });
+    });
+
+    // ── POST /projects/:projectId/folders (404 vs 403) ───────────────────
+    // "Project not found" for a viewer who is looking straight at the
+    // project is the bug: a refusal has to say it is a refusal.
+    describe("POST /projects/:projectId/folders", () => {
+        it("refuses a viewer with 403 and an intentional message", async () => {
+            checkProjectAccess.mockResolvedValue({
+                ok: true,
+                isCreator: false,
+                orgRole: "member",
+                projectRole: "viewer",
+                project: { id: "p1", user_id: "u2", org_id: "o1" },
+            });
+
+            const res = await request(app)
+                .post("/projects/p1/folders")
+                .set(...AUTH)
+                .send({ name: "Closing" });
+
+            expect(res.status).toBe(403);
+            expect(res.body.detail).toBe(
+                "You do not have permission to organize documents in this project.",
+            );
+            expect(supabaseState.inserts).toEqual([]);
+        });
+
+        it("keeps 404 for a project the caller cannot see at all", async () => {
+            checkProjectAccess.mockResolvedValue({ ok: false });
+
+            const res = await request(app)
+                .post("/projects/p1/folders")
+                .set(...AUTH)
+                .send({ name: "Closing" });
+
+            expect(res.status).toBe(404);
+            expect(res.body.detail).toBe("Project not found");
         });
     });
 

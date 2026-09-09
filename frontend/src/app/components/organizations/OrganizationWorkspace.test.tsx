@@ -177,6 +177,7 @@ describe("OrganizationWorkspace", () => {
       screen.getByRole("button", { name: "Change role for William Chen" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Member" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(
       await screen.findByText("An organization must keep at least one admin."),
@@ -225,9 +226,15 @@ describe("OrganizationWorkspace", () => {
       screen.getByRole("menuitem", { name: "Remove all selected" }),
     );
 
+    // The refusal is about the route, not about admin arithmetic: leaving is
+    // a different action, and saying "must keep at least one admin" was wrong
+    // however many admins the organization had.
     expect(
-      await screen.findByText("An organization must keep at least one admin."),
+      await screen.findByText("Use Leave organization to remove yourself."),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText("An organization must keep at least one admin."),
+    ).not.toBeInTheDocument();
     expect(mocks.removeOrgMember).not.toHaveBeenCalled();
   });
 
@@ -248,6 +255,271 @@ describe("OrganizationWorkspace", () => {
     expect(screen.getByLabelText("Organization name")).toHaveValue(
       "Elite Law LLP",
     );
+  });
+
+  it("drops admin-only controls as soon as an admin demotes themselves", async () => {
+    const user = userEvent.setup();
+    mocks.updateOrgMember.mockResolvedValue({});
+    render(<OrganizationWorkspace orgId="org-1" />);
+    await screen.findByText("William Chen");
+
+    await user.click(
+      screen.getByRole("button", { name: "Change role for William Chen" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Member" }));
+
+    // Losing your own admin rights is confirmed before it happens.
+    expect(screen.getByText("Give up admin access?")).toBeInTheDocument();
+    expect(mocks.updateOrgMember).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() =>
+      expect(mocks.updateOrgMember).toHaveBeenCalledWith(
+        "org-1",
+        "me",
+        "member",
+      ),
+    );
+    // org.role has to follow the membership row, or the page keeps offering
+    // admin actions that now 403 until a reload.
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Organization settings" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Change role for Jane Lee" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Only organization admins can add members",
+      }),
+    ).toBeDisabled();
+    expect(mocks.getOrg).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the delete confirmation from outliving its settings modal", async () => {
+    const user = userEvent.setup();
+    render(<OrganizationWorkspace orgId="org-1" />);
+    await screen.findByText("William Chen");
+
+    await user.click(
+      screen.getByRole("button", { name: "Organization settings" }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Organization settings" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Delete organization" }),
+    );
+    expect(screen.getByText("Delete Elite Law LLP?")).toBeInTheDocument();
+
+    // Escape dismisses the modal; the confirmation lives in its own portal
+    // and would otherwise stay behind with a live Delete button.
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByText("Delete Elite Law LLP?")).not.toBeInTheDocument();
+    expect(mocks.deleteOrg).not.toHaveBeenCalled();
+  });
+
+  it("does not report a sent invitation as failed when the refresh rejects", async () => {
+    const user = userEvent.setup();
+    mocks.createOrgInvitation.mockResolvedValue({});
+    mocks.listOrgInvitations
+      .mockResolvedValueOnce([])
+      .mockRejectedValue(new Error("refresh failed"));
+    render(<OrganizationWorkspace orgId="org-1" />);
+    await screen.findByText("William Chen");
+
+    await user.click(screen.getByRole("button", { name: "Add member" }));
+    // ModalUI settles focus a frame after the dialog opens (the auto-focused
+    // field keeps it, else the first control); typing across that handoff
+    // loses the tail of the address, so wait for focus to land in the dialog.
+    await waitFor(() => {
+      const dialog = screen.getByRole("dialog");
+      expect(document.activeElement).not.toBe(document.body);
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    });
+    await user.type(
+      screen.getByPlaceholderText("Invite by email…"),
+      "new@firm.example",
+    );
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() =>
+      expect(mocks.createOrgInvitation).toHaveBeenCalledWith(
+        "org-1",
+        "new@firm.example",
+        "member",
+      ),
+    );
+    expect(
+      await screen.findByText("Invitation sent to new@firm.example."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Could not send the invitation."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Invitation action failed"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("re-reads invitations and the roster when the Add member modal opens", async () => {
+    // An invitation is accepted in the recipient's browser, so this page never
+    // hears about it. Opening Add member used to redisplay the list loaded at
+    // page load, which still called the new colleague "Pending" — and the
+    // People table behind it still did not have them at all.
+    const user = userEvent.setup();
+    const invitation = {
+      id: "i1",
+      org_id: "org-1",
+      email: "newjoiner@firm.example",
+      role: "member" as const,
+      invited_by: "me",
+      expires_at: "2026-09-30T00:00:00Z",
+      created_at: "2026-09-01T00:00:00Z",
+      accepted_at: null,
+      declined_at: null,
+      cancelled_at: null,
+    };
+    const joiner = {
+      id: "m3",
+      user_id: "u3",
+      display_name: "New Joiner",
+      email: "newjoiner@firm.example",
+      role: "member",
+      created_at: "2026-09-02T00:00:00Z",
+    };
+    mocks.listOrgInvitations
+      .mockResolvedValueOnce([{ ...invitation, status: "pending" }])
+      .mockResolvedValue([
+        {
+          ...invitation,
+          status: "accepted",
+          accepted_at: "2026-09-02T00:00:00Z",
+        },
+      ]);
+    const initialMembers = [
+      {
+        id: "m1",
+        user_id: "me",
+        display_name: "William Chen",
+        email: "me@firm.example",
+        role: "admin",
+        created_at: "2026-08-30T00:00:00Z",
+      },
+    ];
+    mocks.listOrgMembers
+      .mockResolvedValueOnce(initialMembers)
+      .mockResolvedValue([...initialMembers, joiner]);
+
+    render(<OrganizationWorkspace orgId="org-1" />);
+    await screen.findByText("William Chen");
+    expect(screen.queryByText("New Joiner")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add member" }));
+
+    await waitFor(() =>
+      expect(mocks.listOrgInvitations).toHaveBeenCalledTimes(2),
+    );
+    // The accepted invitation is no longer pending, so its row is gone...
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", {
+          name: "Cancel invitation to newjoiner@firm.example",
+        }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Pending invitations")).not.toBeInTheDocument();
+    // ...and the same person is now on the roster without a reload.
+    expect(screen.getByText("New Joiner")).toBeInTheDocument();
+  });
+
+  it("ignores a stale roster response that answers after a newer one", async () => {
+    // Two readers write this roster — the page load and the refresh that runs
+    // whenever the Add member modal opens or closes — and nothing ordered
+    // them. Whichever response landed LAST won: a three-person roster was
+    // seen collapsing to one when the older answer came back second.
+    const user = userEvent.setup();
+    const chen = {
+      id: "m1",
+      user_id: "me",
+      display_name: "William Chen",
+      email: "me@firm.example",
+      role: "admin",
+      created_at: "2026-08-30T00:00:00Z",
+    };
+    const lee = {
+      id: "m2",
+      user_id: "u2",
+      display_name: "Jane Lee",
+      email: "jane@firm.example",
+      role: "member",
+      created_at: "2026-09-01T00:00:00Z",
+    };
+    const joiner = {
+      id: "m3",
+      user_id: "u3",
+      display_name: "New Joiner",
+      email: "newjoiner@firm.example",
+      role: "member",
+      created_at: "2026-09-02T00:00:00Z",
+    };
+    const stale: { release: (members: unknown[]) => void } = {
+      release: () => {},
+    };
+    mocks.listOrgMembers
+      // The page load.
+      .mockResolvedValueOnce([chen, lee])
+      // Opening the modal: this read is overtaken and must not be applied.
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            stale.release = resolve;
+          }),
+      )
+      // Closing it: the newest answer, and the one the table must keep.
+      .mockResolvedValue([chen, lee, joiner]);
+
+    render(<OrganizationWorkspace orgId="org-1" />);
+    await screen.findByText("William Chen");
+
+    await user.click(screen.getByRole("button", { name: "Add member" }));
+    await screen.findByRole("dialog");
+    await user.keyboard("{Escape}");
+
+    // The close path re-reads BOTH lists, not the roster alone.
+    await waitFor(() => expect(screen.getByText("New Joiner")).toBeInTheDocument());
+    expect(mocks.listOrgInvitations.mock.calls.length).toBeGreaterThan(2);
+
+    // Now the overtaken read finally answers, with the roster as it was.
+    stale.release([chen]);
+    await waitFor(() =>
+      expect(mocks.listOrgMembers).toHaveBeenCalledTimes(3),
+    );
+    expect(screen.getByText("New Joiner")).toBeInTheDocument();
+    expect(screen.getByText("Jane Lee")).toBeInTheDocument();
+  });
+
+  it("says so when refreshing the people lists fails", async () => {
+    // A console line is not a user interface. The admin was left reading a
+    // roster that had quietly stopped tracking the server.
+    const user = userEvent.setup();
+    render(<OrganizationWorkspace orgId="org-1" />);
+    await screen.findByText("William Chen");
+    // The page loaded; it is the refresh behind the modal that fails.
+    mocks.listOrgMembers.mockRejectedValue(new Error("network"));
+
+    await user.click(screen.getByRole("button", { name: "Add member" }));
+
+    expect(
+      await screen.findByText("Organization action failed"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This organization's people could not be refreshed. Reload to see the current list.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("lets members browse resources but does not load administrative invitations", async () => {

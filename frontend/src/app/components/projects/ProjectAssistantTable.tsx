@@ -31,6 +31,7 @@ import {
     type TableSortDirection,
     TableStickyCell,
 } from "@/app/components/shared/TablePrimitive";
+import { ConfirmPopup } from "@/app/components/popups/ConfirmPopup";
 import { EmptyState } from "@/app/components/ui/empty-state";
 import { PillButton } from "@/app/components/ui/pill-button";
 import { ChatSkeuoIcon } from "@/app/components/shared/AppSidebarSkeuoIcons";
@@ -94,6 +95,24 @@ export function ProjectAssistantTable({
         direction: TableSortDirection;
     } | null>(null);
     const rowSelectionAnchorIdRef = useRef<string | null>(null);
+    const [chatPendingDelete, setChatPendingDelete] = useState<Chat | null>(
+        null,
+    );
+
+    /**
+     * Deleting a chat is destructive and irreversible, and a project admin's
+     * Delete reaches a colleague's thread — so it is confirmed first, the way
+     * every other delete in the app is. The role gate runs BEFORE the
+     * confirmation: asking a viewer to confirm a delete the server will refuse
+     * is two dialogs for one refusal.
+     */
+    function requestDeleteChat(chat: Chat) {
+        if (!can(roleFrom(chat), "container.delete")) {
+            onOwnerOnlyAction("delete this chat");
+            return;
+        }
+        setChatPendingDelete(chat);
+    }
 
     function clearSelection() {
         rowSelectionAnchorIdRef.current = null;
@@ -191,6 +210,7 @@ export function ProjectAssistantTable({
     );
 
     return (
+        <>
         <TableScrollArea
             header={
                 <TableHeaderRow className="pr-8 md:pr-8">
@@ -312,7 +332,7 @@ export function ProjectAssistantTable({
                                     onDelete={() =>
                                         appliesToSelection
                                             ? onDeleteSelectedChats()
-                                            : onDeleteChat(chat)
+                                            : requestDeleteChat(chat)
                                     }
                                     deleteLabel={
                                         appliesToSelection
@@ -411,7 +431,7 @@ export function ProjectAssistantTable({
                                         );
                                         setRenamingChatId(chat.id);
                                     }}
-                                    onDelete={() => onDeleteChat(chat)}
+                                    onDelete={() => requestDeleteChat(chat)}
                                 />
                             </div>
                         </TableRow>
@@ -420,6 +440,20 @@ export function ProjectAssistantTable({
                 </TableBody>
             )}
         </TableScrollArea>
+        <ConfirmPopup
+            open={chatPendingDelete !== null}
+            title="Delete chat?"
+            message="This cannot be undone."
+            confirmLabel="Delete"
+            confirmVariant="danger"
+            onCancel={() => setChatPendingDelete(null)}
+            onConfirm={() => {
+                const chat = chatPendingDelete;
+                setChatPendingDelete(null);
+                if (chat) void onDeleteChat(chat);
+            }}
+        />
+        </>
     );
 }
 

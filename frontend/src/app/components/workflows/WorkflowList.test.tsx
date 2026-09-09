@@ -8,6 +8,7 @@ const {
   getWorkflowFilterOptions,
   importWorkflowAddon,
   listWorkflowAddons,
+  retryWorkflows,
   routerPush,
   setActiveTab,
   usePaginatedWorkflowsSpy,
@@ -18,6 +19,7 @@ const {
   importWorkflowAddon: vi.fn(),
   setActiveTab: vi.fn(),
   listWorkflowAddons: vi.fn(),
+  retryWorkflows: vi.fn(),
   routerPush: vi.fn(),
   usePaginatedWorkflowsSpy: vi.fn(),
   workflowRows: { current: [] as Record<string, unknown>[] },
@@ -44,6 +46,7 @@ vi.mock("@/app/hooks/usePaginatedWorkflows", () => ({
       error: null,
       loadMoreError: null,
       loadMore: vi.fn(),
+      retry: retryWorkflows,
       selectedWorkflowIds: [],
       setSelectedWorkflowIds: vi.fn(),
       selectAllMatching: vi.fn(),
@@ -65,7 +68,23 @@ vi.mock("./UseWorkflowModal", () => ({
 }));
 
 vi.mock("./NewWorkflowModal", () => ({
-  NewWorkflowModal: () => null,
+  NewWorkflowModal: ({
+    open,
+    onClose,
+  }: {
+    open: boolean;
+    onClose: (createdWithoutHandoff?: boolean) => void;
+  }) =>
+    open ? (
+      <div>
+        <button type="button" onClick={() => onClose(true)}>
+          Dismiss after partial create
+        </button>
+        <button type="button" onClick={() => onClose(false)}>
+          Dismiss without creating
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("./WorkflowAddonPreviewModal", () => ({
@@ -80,6 +99,7 @@ describe("WorkflowList pack toolbar", () => {
     getWorkflowFilterOptions.mockReset();
     listWorkflowAddons.mockReset();
     importWorkflowAddon.mockReset();
+    retryWorkflows.mockReset();
     routerPush.mockReset();
     usePaginatedWorkflowsSpy.mockReset();
     listWorkflowAddons.mockReturnValue(new Promise(() => {}));
@@ -292,5 +312,53 @@ describe("WorkflowList pack toolbar", () => {
     expect(usePaginatedWorkflowsSpy.mock.calls.at(-1)?.[0]).toEqual(
       expect.objectContaining({ scope: "private" }),
     );
+  });
+
+  it("refetches when the new-workflow modal is dismissed after a partial create", async () => {
+    const user = userEvent.setup();
+    activeTab.current = "all";
+    // The workflow exists on the server but never reached onCreated, so only
+    // a refetch can put its row in the list.
+    retryWorkflows.mockImplementation(() => {
+      workflowRows.current = [
+        {
+          id: "created-workflow",
+          user_id: "user-1",
+          access_scope: "private",
+          metadata: {
+            title: "Created workflow",
+            type: "assistant",
+            contributors: [],
+            language: "English",
+            practice: null,
+            jurisdictions: null,
+          },
+          is_system: false,
+        },
+      ];
+    });
+    render(<WorkflowList />);
+
+    expect(screen.queryByText("Created workflow")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "New workflow" }));
+    await user.click(
+      screen.getByRole("button", { name: "Dismiss after partial create" }),
+    );
+
+    expect(retryWorkflows).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("Created workflow")).toBeVisible();
+  });
+
+  it("does not refetch when the new-workflow modal is dismissed with nothing created", async () => {
+    const user = userEvent.setup();
+    activeTab.current = "all";
+    render(<WorkflowList />);
+
+    await user.click(screen.getByRole("button", { name: "New workflow" }));
+    await user.click(
+      screen.getByRole("button", { name: "Dismiss without creating" }),
+    );
+
+    expect(retryWorkflows).not.toHaveBeenCalled();
   });
 });

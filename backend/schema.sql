@@ -536,8 +536,10 @@ create table if not exists public.projects (
   -- user_id is provenance ("who made this"), not the access rule — that flows
   -- from project_access_grants and org membership (lib/access.ts).
   user_id uuid references auth.users(id) on delete set null,
-  -- Multi-tenant: nullable so system/global rows stay valid; user_id remains
-  -- the hard cascade anchor (org_id uses SET NULL, not CASCADE).
+  -- Multi-tenant: nullable so system/global rows stay valid. The FK is
+  -- RESTRICT, so an organization holding projects cannot be deleted at all --
+  -- the API answers 409 (lib/orgs.ts deleteOrg) rather than letting the
+  -- database strand a firm's matters.
   org_id uuid references public.organizations(id) on delete restrict,
   name text not null,
   cm_number text,
@@ -1001,7 +1003,13 @@ create table if not exists public.workflow_shares (
     check (role in ('owner', 'editor', 'viewer')),
   created_at timestamptz not null default now(),
   constraint workflow_shares_workflow_email_unique
-    unique(workflow_id, shared_with_email)
+    unique(workflow_id, shared_with_email),
+  -- Canonical case, like every sibling grant table (project_access_grants,
+  -- chat_access_grants, tabular_review_access_grants, org_invitations).
+  -- Without it the unique constraint above treats A@x.com and a@x.com as two
+  -- different recipients while the access lookups treat them as one.
+  constraint workflow_shares_email_lowercase
+    check (shared_with_email = lower(shared_with_email))
 );
 
 create index if not exists workflow_shares_workflow_id_idx
@@ -1060,10 +1068,16 @@ as $$
     )
     when p_workflow_user_id::text = p_user_id then 'owner'
     else (
+      -- BOTH sides lowered. get_workflows_overview lists a share with
+      -- lower() on both, so a legacy mixed-case row listed for its recipient
+      -- and then 404'd the moment they opened it (and re-sharing produced a
+      -- second row rather than updating the first). The 02 migration
+      -- normalizes the stored values and adds a lowercase CHECK; this stays
+      -- symmetrical with the overview regardless.
       select s.role from public.workflow_shares s
       where s.workflow_id = p_workflow_id
         and coalesce(p_user_email, '') <> ''
-        and s.shared_with_email = lower(p_user_email)
+        and lower(s.shared_with_email) = lower(p_user_email)
       limit 1
     )
   end;
@@ -2098,6 +2112,42 @@ create index if not exists idx_tabular_review_access_grants_review
 
 alter table public.tabular_review_access_grants enable row level security;
 
+-- Archive of direct review shares that the organization model has nowhere to
+-- put. On main, a tabular review inside a project could ALSO carry its own
+-- shared_with list, and access.ts honoured it. In this model a
+-- project-contained review inherits access exclusively from its project --
+-- validate_direct_access_scope refuses a review-level grant on one -- so the
+-- 20260904_02 data migration cannot convert those recipients into grants.
+--
+-- Promoting them to project viewer grants was considered and REJECTED: a
+-- share on one review is not consent to see the whole matter, and silently
+-- widening access is a worse failure than losing it. Silently DESTROYING the
+-- shares is not acceptable either, so the migration copies the discarded
+-- (review, project, email) triples here. An operator can read this table and
+-- re-grant access at project level deliberately, per recipient, with the
+-- context to judge it. Fresh installs create it empty.
+create table if not exists public.tabular_review_legacy_shares (
+  id uuid primary key default gen_random_uuid(),
+  -- NEITHER id is a foreign key. This is a historical record of who lost
+  -- access at upgrade, and it must survive the rows it describes: an ON
+  -- DELETE CASCADE to tabular_reviews meant deleting the review -- or the
+  -- project, which cascades to its reviews -- destroyed the only record of
+  -- the recipients an operator was supposed to re-grant.
+  tabular_review_id uuid not null,
+  -- The project the review sat in when the share was archived.
+  project_id uuid,
+  email text not null,
+  archived_at timestamptz not null default now(),
+  unique(tabular_review_id, email),
+  constraint tabular_review_legacy_shares_email_lowercase
+    check (email = lower(email))
+);
+
+create index if not exists idx_tabular_review_legacy_shares_review
+  on public.tabular_review_legacy_shares(tabular_review_id);
+
+alter table public.tabular_review_legacy_shares enable row level security;
+
 create or replace function public.review_access_role(
   p_review_id uuid,
   p_review_user_id uuid,
@@ -2865,10 +2915,12 @@ as $$
       and (p_type is null or w.type = p_type)
   ),
   org_shared as (
-    -- Same org-membership arm as get_workflows_overview, including the
-    -- workflow_shares NOT EXISTS dedup, so a row visible via both routes
-    -- contributes its options exactly once. Tagged 'shared' to match the
-    -- overview's scope bucketing.
+    -- Same org-membership arm as get_workflows_overview. The `shared` arm
+    -- above takes only org_id IS NULL workflows and this one only org_id IS
+    -- NOT NULL, so the two are disjoint by construction and a row visible via
+    -- both routes still contributes its options exactly once -- no dedup
+    -- predicate is needed. Tagged 'shared' to match the overview's scope
+    -- bucketing.
     select w.practice, w.language, w.jurisdictions, 'shared'::text as source
     from public.workflows w
     where w.org_id is not null
@@ -4785,6 +4837,7 @@ revoke all on public.word_chat_messages from anon, authenticated;
 revoke all on public.word_document_edits from anon, authenticated;
 revoke all on public.tabular_reviews from anon, authenticated;
 revoke all on public.tabular_review_access_grants from anon, authenticated;
+revoke all on public.tabular_review_legacy_shares from anon, authenticated;
 revoke all on public.tabular_cells from anon, authenticated;
 revoke all on public.tabular_review_rows from anon, authenticated;
 revoke all on public.tabular_review_row_sources from anon, authenticated;

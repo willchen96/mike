@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { listOrgs } from "@/app/lib/mikeApi";
+import { MikeApiError, listOrgs } from "@/app/lib/mikeApi";
 import type { Project } from "@/app/components/shared/types";
 import { ProjectDetailsModal } from "./ProjectDetailsModal";
 
@@ -58,5 +59,55 @@ describe("ProjectDetailsModal", () => {
         const organisation = await screen.findByLabelText("Organisation");
         expect(organisation).toBeDisabled();
         expect(organisation).toHaveTextContent("Elite Law LLP");
+    });
+
+    it("names the organisation from the row when the org list fails", async () => {
+        // The select falls back to its raw value when no option matches, so a
+        // failed listOrgs used to show the organization's UUID.
+        vi.mocked(listOrgs).mockRejectedValue(new Error("network"));
+        render(
+            <ProjectDetailsModal
+                open
+                project={{
+                    ...project,
+                    organization_name: "Elite Law LLP",
+                }}
+                canEdit
+                onClose={vi.fn()}
+                onSave={vi.fn()}
+            />,
+        );
+
+        const organisation = await screen.findByLabelText("Organisation");
+        expect(organisation).toHaveTextContent("Elite Law LLP");
+        expect(organisation).not.toHaveTextContent("org-1");
+    });
+
+    it("reports what an intentional refusal said instead of a generic line", async () => {
+        const user = userEvent.setup();
+        render(
+            <ProjectDetailsModal
+                open
+                project={project}
+                canEdit
+                onClose={vi.fn()}
+                onSave={vi
+                    .fn()
+                    .mockRejectedValue(
+                        new MikeApiError({
+                            status: 409,
+                            message: "A project with that CM number exists.",
+                        }),
+                    )}
+            />,
+        );
+
+        await user.clear(screen.getByLabelText("Project name"));
+        await user.type(screen.getByLabelText("Project name"), "Renamed");
+        await user.click(screen.getByRole("button", { name: "Update" }));
+
+        expect(
+            await screen.findByText("A project with that CM number exists."),
+        ).toBeInTheDocument();
     });
 });

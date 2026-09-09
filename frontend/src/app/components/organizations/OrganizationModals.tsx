@@ -30,6 +30,32 @@ function friendlyError(error: unknown, fallback: string) {
   return userFacingApiError(error, fallback);
 }
 
+/**
+ * A refresh runs *after* its mutation has already succeeded, so a failing
+ * refresh must never be reported as a failed mutation. Callers await this
+ * outside their mutation's try block.
+ *
+ * Quiet is not the same as invisible, though: it returns whether the refresh
+ * worked, because the list on screen is now a claim about the server that the
+ * page cannot back up. "Invitation sent" beside an unchanged list reads as
+ * "…and nothing happened", which is precisely wrong.
+ */
+async function refreshQuietly(
+  onChanged: () => Promise<void> | void,
+): Promise<boolean> {
+  try {
+    await onChanged();
+    return true;
+  } catch (error) {
+    console.error("Failed to refresh organization data", error);
+    return false;
+  }
+}
+
+/** Appended to a success notice whose follow-up refresh did not land. */
+const STALE_LIST_NOTICE =
+  "The list below may be out of date — reload to see the current one.";
+
 export function CreateOrganizationModal({
   open,
   onClose,
@@ -93,7 +119,13 @@ export function CreateOrganizationModal({
     <>
       <Modal
         open={open}
-        onClose={onClose}
+        // A create in flight owns the organization's fate: dismissing the
+        // modal (Escape, backdrop, close button) mid-request would strand the
+        // result with nowhere to report it.
+        onClose={() => {
+          if (creating) return;
+          onClose();
+        }}
         breadcrumbs={["Organizations", "New organization"]}
         primaryAction={{
           label: createdOrg
@@ -233,13 +265,17 @@ export function InviteOrganizationMemberModal({
     setNotice(null);
     try {
       await createOrgInvitation(org.id, email, role);
-      setNotice(`Invitation sent to ${email}.`);
-      await onChanged();
-      return true;
     } catch (err) {
       setError(friendlyError(err, "Could not send the invitation."));
       return false;
     }
+    setNotice(`Invitation sent to ${email}.`);
+    // The invitation really was sent, so the notice stands — but if the list
+    // behind this modal could not be re-read, say that rather than let the
+    // unchanged list quietly contradict the notice.
+    if (!(await refreshQuietly(onChanged)))
+      setNotice(`Invitation sent to ${email}. ${STALE_LIST_NOTICE}`);
+    return true;
   }
 
   async function runInvitationAction(
@@ -249,20 +285,25 @@ export function InviteOrganizationMemberModal({
     setBusyId(invitation.id);
     setError(null);
     setNotice(null);
+    let changed = false;
+    let successNotice: string | null = null;
     try {
       if (action === "resend") {
         await resendOrgInvitation(org.id, invitation.id);
-        setNotice(`Invitation resent to ${invitation.email}.`);
+        successNotice = `Invitation resent to ${invitation.email}.`;
       } else {
         await cancelOrgInvitation(org.id, invitation.id);
-        setNotice(`Invitation to ${invitation.email} cancelled.`);
+        successNotice = `Invitation to ${invitation.email} cancelled.`;
       }
-      await onChanged();
+      setNotice(successNotice);
+      changed = true;
     } catch (err) {
       setError(friendlyError(err, `Could not ${action} the invitation.`));
     } finally {
       setBusyId(null);
     }
+    if (changed && !(await refreshQuietly(onChanged)) && successNotice)
+      setNotice(`${successNotice} ${STALE_LIST_NOTICE}`);
   }
 
   return (
@@ -385,7 +426,13 @@ export function OrganizationSettingsModal({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Two different failures shared one heading: a refused delete was announced
+  // as "Organization settings not saved", which describes the rename this
+  // modal also does and not the thing that actually failed.
+  const [error, setError] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
   const trimmedName = name.trim();
   const changed = useMemo(
     () => trimmedName !== org.name,
@@ -396,8 +443,15 @@ export function OrganizationSettingsModal({
     if (!open) return;
     setName(org.name);
     setError(null);
-    setConfirmDelete(false);
   }, [open, org.name]);
+
+  useEffect(() => {
+    // The confirmation renders in its own portal, so it must retire with the
+    // modal: otherwise it keeps floating over the page after Escape or a
+    // backdrop click, with a live "Delete" button still wired to this org.
+    if (open) return;
+    setConfirmDelete(false);
+  }, [open]);
 
   async function save() {
     if (!trimmedName || !changed || saving) return;
@@ -406,7 +460,10 @@ export function OrganizationSettingsModal({
     try {
       onUpdated(await updateOrg(org.id, trimmedName));
     } catch (err) {
-      setError(friendlyError(err, "Could not update the organization."));
+      setError({
+        title: "Organization settings not saved",
+        message: friendlyError(err, "Could not update the organization."),
+      });
     } finally {
       setSaving(false);
     }
@@ -418,13 +475,22 @@ export function OrganizationSettingsModal({
     setError(null);
     try {
       await deleteOrg(org.id);
-      onDeleted();
-    } catch (err) {
-      setError(friendlyError(err, "Could not delete the organization."));
+      // The confirmation was reset on failure and not on success, so after a
+      // delete that worked it stayed open — over a page now navigating away,
+      // with a live Delete button still aimed at an organization that no
+      // longer exists. Close it, and leave `deleting` set so the button
+      // cannot fire a second time during the navigation.
       setConfirmDelete(false);
-    } finally {
-      setDeleting(false);
+      onDeleted();
+      return;
+    } catch (err) {
+      setError({
+        title: "Organization not deleted",
+        message: friendlyError(err, "Could not delete the organization."),
+      });
+      setConfirmDelete(false);
     }
+    setDeleting(false);
   }
 
   return (
@@ -480,19 +546,22 @@ export function OrganizationSettingsModal({
         </div>
       </Modal>
       <ConfirmPopup
-        open={confirmDelete}
+        open={open && confirmDelete}
         title={`Delete ${org.name}?`}
         message="This removes the empty organization, its memberships and invitations."
         confirmLabel="Delete"
         confirmVariant="danger"
         confirmStatus={deleting ? "loading" : "idle"}
-        onCancel={() => setConfirmDelete(false)}
+        onCancel={() => {
+          if (deleting) return;
+          setConfirmDelete(false);
+        }}
         onConfirm={() => void remove()}
       />
       <WarningPopup
         open={open && error !== null}
-        title="Organization settings not saved"
-        message={error}
+        title={error?.title ?? "Organization settings not saved"}
+        message={error?.message ?? null}
         onClose={() => setError(null)}
       />
     </>

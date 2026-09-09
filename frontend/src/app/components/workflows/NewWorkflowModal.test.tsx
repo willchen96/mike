@@ -6,6 +6,8 @@ import {
     createWorkflow,
     listOrgMembers,
     listOrgs,
+    lookupUserByEmail,
+    MikeApiError,
     shareWorkflow,
     updateWorkflow,
 } from "@/app/lib/mikeApi";
@@ -22,6 +24,7 @@ vi.mock("@/app/lib/mikeApi", async (importOriginal) => ({
     createWorkflow: vi.fn(),
     listOrgMembers: vi.fn(),
     listOrgs: vi.fn(),
+    lookupUserByEmail: vi.fn(),
     shareWorkflow: vi.fn(),
     updateWorkflow: vi.fn(),
 }));
@@ -75,6 +78,11 @@ describe("NewWorkflowModal editing", () => {
         vi.mocked(createWorkflow).mockResolvedValue(workflow);
         vi.mocked(copyDocumentsToWorkflowAssets).mockResolvedValue([]);
         vi.mocked(shareWorkflow).mockResolvedValue(undefined);
+        vi.mocked(lookupUserByEmail).mockResolvedValue({
+            exists: true,
+            email: "counsel@firm.test",
+            display_name: "Counsel",
+        });
         vi.mocked(updateWorkflow).mockResolvedValue(workflow);
         useUserProfile.mockReturnValue({ profile: { practiceAreas: [] } });
     });
@@ -237,6 +245,82 @@ describe("NewWorkflowModal editing", () => {
         ).toBeLessThan(onCreated.mock.invocationCallOrder[0]);
     });
 
+    it("reports a failed asset copy against the workflow that exists", async () => {
+        // The copy ran before the grants and outside any try of its own, so a
+        // failure came back as "Failed to create workflow" — about a workflow
+        // the server had already made — and the retry re-copied everything
+        // that had worked.
+        const user = userEvent.setup({ delay: null });
+        const onCreated = vi.fn();
+        vi.mocked(copyDocumentsToWorkflowAssets).mockRejectedValueOnce(
+            new Error("copy failed"),
+        );
+        render(
+            <NewWorkflowModal open onClose={vi.fn()} onCreated={onCreated} />,
+        );
+
+        await user.type(screen.getByLabelText("Title"), "New workflow");
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        await user.click(screen.getByRole("button", { name: "Select asset" }));
+        await user.click(
+            screen.getByRole("button", { name: "Create workflow" }),
+        );
+
+        expect(
+            await screen.findByText(
+                "Workflow created, but 1 asset could not be copied. Press Create again to retry the copy.",
+            ),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByText("Failed to create workflow"),
+        ).not.toBeInTheDocument();
+        // Held open on the only screen that knows: the row never reached the
+        // caller's list.
+        expect(onCreated).not.toHaveBeenCalled();
+
+        // The retry reuses the workflow and re-sends only the missing asset.
+        await user.click(
+            screen.getByRole("button", { name: "Create workflow" }),
+        );
+        await waitFor(() => expect(onCreated).toHaveBeenCalled());
+        expect(createWorkflow).toHaveBeenCalledTimes(1);
+        expect(copyDocumentsToWorkflowAssets).toHaveBeenCalledTimes(2);
+    });
+
+    it("copies assets only after the grants have been written", async () => {
+        // Grants first: a refused grant stops the submit, and an asset copied
+        // before it would have to be redone on the retry.
+        const user = userEvent.setup({ delay: null });
+        vi.mocked(shareWorkflow).mockRejectedValue(new Error("nope"));
+        render(<NewWorkflowModal open onClose={vi.fn()} onCreated={vi.fn()} />);
+
+        await user.type(screen.getByLabelText("Title"), "New workflow");
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        await user.click(screen.getByPlaceholderText("Add by email..."));
+        // paste, not per-key typing: one input event cannot be cut off
+        // mid-word by a slow re-render on a loaded machine.
+        await user.paste("counsel@firm.test");
+        await user.click(screen.getByRole("button", { name: "Add" }));
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        await user.click(screen.getByRole("button", { name: "Select asset" }));
+        await user.click(
+            screen.getByRole("button", { name: "Create workflow" }),
+        );
+
+        expect(
+            await screen.findByText(
+                /Workflow created, but access was not granted to counsel@firm\.test/,
+            ),
+        ).toBeInTheDocument();
+        expect(copyDocumentsToWorkflowAssets).not.toHaveBeenCalled();
+        expect(
+            screen.getByText(
+                /The 1 selected file is still pending and will be copied when you try again\./,
+            ),
+        ).toBeInTheDocument();
+    });
+
     it("finishes a tabular workflow on Access without showing Assets", async () => {
         const user = userEvent.setup({ delay: null });
         const onCreated = vi.fn();
@@ -325,5 +409,128 @@ describe("NewWorkflowModal editing", () => {
                 "Deny Elite Law LLP members from accessing this workflow.",
             ),
         ).not.toHaveClass("pl-3");
+    });
+
+    async function reachCreateWithOneRecipient(
+        user: ReturnType<typeof userEvent.setup>,
+    ) {
+        await user.click(screen.getByRole("button", { name: "Tabular" }));
+        await user.type(screen.getByLabelText("Title"), "Tabular workflow");
+        await user.click(screen.getByRole("button", { name: "Next" }));
+
+        await user.click(screen.getByPlaceholderText("Add by email..."));
+        // paste, not per-key typing: one input event cannot be cut off
+        // mid-word by a slow re-render on a loaded machine.
+        await user.paste("counsel@firm.test");
+        await user.click(screen.getByRole("button", { name: "Add" }));
+    }
+
+    it("reports a refused grant against the workflow that was created", async () => {
+        const user = userEvent.setup({ delay: null });
+        const onCreated = vi.fn();
+        const onClose = vi.fn();
+        vi.mocked(shareWorkflow).mockRejectedValueOnce(
+            new MikeApiError({
+                message: "Only owners can share this workflow.",
+                status: 403,
+            }),
+        );
+        render(
+            <NewWorkflowModal
+                open
+                onClose={onClose}
+                onCreated={onCreated}
+            />,
+        );
+
+        await reachCreateWithOneRecipient(user);
+        await user.click(
+            screen.getByRole("button", { name: "Create workflow" }),
+        );
+
+        expect(
+            await screen.findByText(
+                "Workflow created, but access was not granted to counsel@firm.test: Only owners can share this workflow.",
+            ),
+        ).toBeVisible();
+        expect(createWorkflow).toHaveBeenCalledTimes(1);
+        expect(onCreated).not.toHaveBeenCalled();
+        expect(onClose).not.toHaveBeenCalled();
+
+        // Pressing Create again must retry only the grant, against the
+        // workflow that already exists.
+        await user.click(
+            screen.getByRole("button", { name: "Create workflow" }),
+        );
+        await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+        expect(createWorkflow).toHaveBeenCalledTimes(1);
+        expect(shareWorkflow).toHaveBeenCalledTimes(2);
+    });
+
+    it("tells the caller to refetch when a created workflow is dismissed unshared", async () => {
+        const user = userEvent.setup({ delay: null });
+        const onClose = vi.fn();
+        vi.mocked(shareWorkflow).mockRejectedValue(
+            new MikeApiError({
+                message: "Only owners can share this workflow.",
+                status: 403,
+            }),
+        );
+        render(
+            <NewWorkflowModal open onClose={onClose} onCreated={vi.fn()} />,
+        );
+
+        await reachCreateWithOneRecipient(user);
+        await user.click(
+            screen.getByRole("button", { name: "Create workflow" }),
+        );
+        await screen.findByText(/Workflow created, but access was not granted/);
+
+        await user.click(screen.getByRole("button", { name: "Close" }));
+        expect(onClose).toHaveBeenCalledWith(true);
+    });
+
+    it("does not ask for a refetch when nothing was created", async () => {
+        const user = userEvent.setup({ delay: null });
+        const onClose = vi.fn();
+        render(
+            <NewWorkflowModal open onClose={onClose} onCreated={vi.fn()} />,
+        );
+
+        await user.click(screen.getByRole("button", { name: "Close" }));
+        expect(onClose).toHaveBeenCalledWith(false);
+    });
+
+    it("refuses to dismiss while a create is in flight", async () => {
+        const user = userEvent.setup({ delay: null });
+        const onClose = vi.fn();
+        vi.mocked(createWorkflow).mockReturnValue(new Promise(() => {}));
+        render(
+            <NewWorkflowModal open onClose={onClose} onCreated={vi.fn()} />,
+        );
+
+        await reachCreateWithOneRecipient(user);
+        await user.click(
+            screen.getByRole("button", { name: "Create workflow" }),
+        );
+        await screen.findByRole("button", { name: "Creating…" });
+
+        await user.keyboard("{Escape}");
+        await user.click(screen.getByRole("button", { name: "Close" }));
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("surfaces a failure to load the organization list", async () => {
+        vi.mocked(listOrgs).mockRejectedValue(
+            new MikeApiError({
+                message: "Organizations are unavailable.",
+                status: 403,
+            }),
+        );
+        render(<NewWorkflowModal open onClose={vi.fn()} onCreated={vi.fn()} />);
+
+        expect(
+            await screen.findByText("Organizations are unavailable."),
+        ).toBeVisible();
     });
 });

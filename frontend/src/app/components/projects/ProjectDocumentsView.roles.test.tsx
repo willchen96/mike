@@ -5,9 +5,18 @@ import { can, type Capability, type ProjectRole } from "@/app/lib/permissions";
 import { ProjectDocumentsView } from "./ProjectDocumentsView";
 
 // Everything below the toolbar is out of scope here: this file pins WHICH
-// role sees the folder affordances, not what DocTable does with them.
+// role sees the folder affordances, not what DocTable does with them. The
+// table's props are recorded because the upload menu is assembled from the
+// three action registrations handed to it.
+const docTableProps = vi.hoisted(() => ({
+    current: null as Record<string, unknown> | null,
+}));
+
 vi.mock("@/app/components/documents/DocTable", () => ({
-    DocTable: () => <div data-testid="doc-table" />,
+    DocTable: (props: Record<string, unknown>) => {
+        docTableProps.current = props;
+        return <div data-testid="doc-table" />;
+    },
 }));
 vi.mock("@/app/components/modals/AddDocumentsModal", () => ({
     AddDocumentsModal: () => null,
@@ -83,6 +92,26 @@ describe("ProjectDocumentsView folder affordances", () => {
     it("withholds them from viewers", () => {
         renderAs("viewer");
         expect(screen.queryByText("Folder")).not.toBeInTheDocument();
+    });
+
+    it("wires no upload source at all for a viewer", () => {
+        // All three entries of the Upload menu are the same content.edit
+        // write. "Upload folder" used to stay live for a viewer, so the
+        // native folder picker opened and the refusal only arrived once the
+        // upload session was already under way.
+        renderAs("viewer");
+        expect(docTableProps.current?.onAddDocumentsActionChange).toBeUndefined();
+        expect(docTableProps.current?.onUploadFilesActionChange).toBeUndefined();
+        expect(
+            docTableProps.current?.onUploadFolderActionChange,
+        ).toBeUndefined();
+    });
+
+    it("wires every upload source for an editor", () => {
+        renderAs("editor");
+        expect(docTableProps.current?.onAddDocumentsActionChange).toBeDefined();
+        expect(docTableProps.current?.onUploadFilesActionChange).toBeDefined();
+        expect(docTableProps.current?.onUploadFolderActionChange).toBeDefined();
     });
 
     it("keeps them in place but disabled while the role is unknown", () => {

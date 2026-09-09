@@ -48,7 +48,51 @@ for (const [packagePath, entry] of Object.entries(lock.packages ?? {})) {
 }
 
 const packageEntries = Object.entries(packages);
+
+// FAIL CLOSED ON AN EMPTY LOCKFILE. A lockfile with no `packages` map (an
+// npm 6 lockfile, a truncated write, a wrong cwd) produces zero queries, so
+// every loop below is skipped, `advisories` is empty and the gate prints
+// "passed" having checked nothing at all — a gate that answers "clean" for a
+// tree it never looked at is worse than no gate.
+if (packageEntries.length === 0) {
+  console.error(
+    "package-lock.json declared no resolved packages — refusing to pass the gate.",
+  );
+  console.error(
+    "  (npm 6 lockfiles have no `packages` map; run `npm install` with npm 7+ to regenerate it.)",
+  );
+  process.exit(1);
+}
+
 const osvBaseUrl = process.env.OSV_API_BASE_URL ?? "https://api.osv.dev/v1";
+
+/**
+ * CANARY. `{}` is a perfectly valid npm bulk response — it is what the
+ * registry sends for a clean tree — which means NO shape check can tell
+ * "we looked and found nothing" apart from "this endpoint does not answer
+ * this question". A proxy, a captive portal, an internal mirror that
+ * implements the route as a stub, or the endpoint's eventual retirement all
+ * produce 200 `{}`, and the gate happily printed "0 advisories, passed".
+ *
+ * So every batch carries a package+version we KNOW carries a high-severity
+ * advisory. If the answer does not mention it, the endpoint is not answering
+ * advisory questions and we fall through to OSV. The canary is stripped
+ * before the report is evaluated, so it never appears as a finding.
+ *
+ * adm-zip 0.5.12 is the choice because it is already a real, allowlisted
+ * dependency of the word-addin workspace: whatever retires it from the
+ * advisory database will also break that allowlist entry, so the two cannot
+ * drift apart unnoticed.
+ */
+const CANARY_PACKAGE = "adm-zip";
+const CANARY_VERSION = "0.5.12";
+
+/**
+ * How many advisory batches were actually answered by a service. Checked
+ * before the pass line: a run that never got an answer has not audited
+ * anything, and must not be allowed to report success.
+ */
+let batchesAnswered = 0;
 
 async function fetchJson(url, init, { attempts = 3, timeoutMs = 30_000 } = {}) {
   let lastError;
@@ -82,6 +126,13 @@ async function loadNpmReport() {
   // fallback was the source of the previous five-minute CI failures.
   for (let offset = 0; offset < packageEntries.length; offset += 500) {
     const batch = Object.fromEntries(packageEntries.slice(offset, offset + 500));
+    // Only strip the canary back out if it was not already part of this
+    // workspace's tree. When it IS a real dependency its advisories are a
+    // real finding and must survive.
+    const canaryIsReal = Object.hasOwn(batch, CANARY_PACKAGE);
+    batch[CANARY_PACKAGE] = [
+      ...new Set([...(batch[CANARY_PACKAGE] ?? []), CANARY_VERSION]),
+    ];
     const batchReport = await fetchJson(endpoint, {
       method: "POST",
       headers: {
@@ -92,15 +143,52 @@ async function loadNpmReport() {
       body: JSON.stringify(batch),
     }, { attempts: 1, timeoutMs: 15_000 });
 
+    // VALIDATE, don't coerce. A registry (or a proxy, or a captive network)
+    // that answers 200 with `{"error":"..."}` used to sail through here: the
+    // payload is an object, its one value is not an array, the old code
+    // coerced it to `[]`, and the gate reported "0 advisories, passed". An
+    // advisory service that did not answer the question must send us to OSV,
+    // and if OSV fails too the gate fails — never passes by default.
     if (!batchReport || Array.isArray(batchReport) || typeof batchReport !== "object") {
       throw new Error("npm returned an invalid advisory report");
     }
+    for (const key of ["error", "message", "code"]) {
+      if (Object.hasOwn(batchReport, key)) {
+        throw new Error(
+          `npm advisory service returned an error payload (${key}: ${JSON.stringify(batchReport[key])})`,
+        );
+      }
+    }
+    for (const [packageName, packageAdvisories] of Object.entries(batchReport)) {
+      if (!Array.isArray(packageAdvisories)) {
+        throw new Error(
+          `npm returned a non-array advisory list for ${packageName}`,
+        );
+      }
+    }
+    // The canary must come back. An empty or missing entry means this
+    // endpoint did not answer the question we asked, however well-formed its
+    // 200 was — send the run to OSV rather than pass on silence.
+    if (
+      !Array.isArray(batchReport[CANARY_PACKAGE]) ||
+      batchReport[CANARY_PACKAGE].length === 0
+    ) {
+      throw new Error(
+        `npm returned no advisory for the canary ${CANARY_PACKAGE}@${CANARY_VERSION} — the endpoint is not answering advisory queries`,
+      );
+    }
+    if (!canaryIsReal) delete batchReport[CANARY_PACKAGE];
+
+    batchesAnswered += 1;
     for (const [packageName, packageAdvisories] of Object.entries(batchReport)) {
       report[packageName] = [
         ...(report[packageName] ?? []),
-        ...(Array.isArray(packageAdvisories) ? packageAdvisories : []),
+        ...packageAdvisories,
       ];
     }
+  }
+  if (batchesAnswered === 0) {
+    throw new Error("npm answered no advisory batches");
   }
   return report;
 }
@@ -128,6 +216,15 @@ async function loadOsvReport() {
     if (!Array.isArray(response?.results)) {
       throw new Error("OSV returned an invalid advisory report");
     }
+    // OSV answers positionally: one result per query, in order. A short array
+    // means some queries went unanswered, and reading the rest as "clean"
+    // would silently drop packages from the audit.
+    if (response.results.length !== batchQueries.length) {
+      throw new Error(
+        `OSV answered ${response.results.length} of ${batchQueries.length} queries`,
+      );
+    }
+    batchesAnswered += 1;
     for (const [resultIndex, result] of response.results.entries()) {
       const query = batchQueries[resultIndex];
       for (const vulnerability of result.vulns ?? []) {
@@ -195,6 +292,9 @@ let report;
 try {
   report = await loadNpmReport();
 } catch (npmError) {
+  // Each loader counts only its OWN answered batches; a partially answered
+  // npm run must not lend its credit to the OSV attempt.
+  batchesAnswered = 0;
   console.warn(
     `npm advisory service unavailable; checking OSV instead (${npmError instanceof Error ? npmError.message : String(npmError)})`,
   );
@@ -242,6 +342,14 @@ for (const e of unused) {
 if (blocking.length > 0) {
   console.error(`\n${blocking.length} high/critical advisories are not allowlisted:`);
   for (const line of blocking) console.error(`  ${line}`);
+  process.exit(1);
+}
+// Last line of defence: reaching here with nothing answered means the loops
+// above ran zero times, which is "no data", not "no advisories".
+if (batchesAnswered === 0) {
+  console.error(
+    "No advisory service answered — refusing to pass the gate.",
+  );
   process.exit(1);
 }
 console.log(`audit gate passed (${advisories.size} high/critical advisories, all allowlisted)`);

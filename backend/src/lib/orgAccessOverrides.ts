@@ -276,6 +276,50 @@ export async function setOrgAccessOverride(
     return { ok: true, override: data as OrgAccessOverride };
 }
 
+/**
+ * Persist a WHOLE BATCH of overrides in one statement.
+ *
+ * A loop of single upserts is not atomic: the org-membership triggers on
+ * these tables can refuse the fourth row after the first three have already
+ * committed, and the caller then answers 500 with access silently changed for
+ * three people. One upsert is one statement, so a trigger refusal on any
+ * target rolls the whole batch back and nothing is written.
+ */
+export async function setOrgAccessOverrides(
+    db: Db,
+    params: {
+        kind: OrgResourceKind;
+        resourceId: string;
+        orgId: string;
+        userIds: string[];
+        role: OrgAssignableRole;
+        assignedBy: string;
+    },
+): Promise<{ ok: true } | { ok: false; detail: string }> {
+    if (params.userIds.length === 0) return { ok: true };
+    const config = CONFIG[params.kind];
+    const updatedAt = new Date().toISOString();
+    const { error } = await db.from(config.table).upsert(
+        params.userIds.map((userId) => ({
+            [config.resourceColumn]: params.resourceId,
+            org_id: params.orgId,
+            user_id: userId,
+            role: params.role,
+            assigned_by: params.assignedBy,
+            updated_at: updatedAt,
+        })),
+        { onConflict: `${config.resourceColumn},user_id` },
+    );
+    if (error)
+        return {
+            ok: false,
+            detail:
+                error.message ??
+                "Failed to save organization access overrides",
+        };
+    return { ok: true };
+}
+
 export async function deleteOrgAccessOverride(
     db: Db,
     params: {

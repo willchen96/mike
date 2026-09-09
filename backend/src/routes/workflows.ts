@@ -39,7 +39,7 @@ import {
   findOrgMemberByEmail,
   isOrgAssignableRole,
   listOrgAccessPeople,
-  setOrgAccessOverride,
+  setOrgAccessOverrides,
 } from "../lib/orgAccessOverrides";
 import { convertedPdfKey } from "../lib/convert";
 import { copyFile, storageKey } from "../lib/storage";
@@ -1116,7 +1116,15 @@ workflowsRouter.post(
 
     const { data: sourceDocuments, error: documentsError } = await db
       .from("documents")
-      .select("id, user_id, project_id, workflow_id, current_version_id")
+      // org_id and workflow_id are part of the VERDICT, not decoration:
+      // ensureDocAccess falls through project -> workflow -> org, so a
+      // document selected without them looks container-less and is refused.
+      // Omitting org_id made every organization-library file unattachable —
+      // "One or more files could not be found" for a file the caller is
+      // looking straight at.
+      .select(
+        "id, user_id, project_id, org_id, workflow_id, current_version_id",
+      )
       .in("id", documentIds);
     if (documentsError) return void sendInternalError(res, documentsError);
     if (!sourceDocuments || sourceDocuments.length !== documentIds.length) {
@@ -1557,12 +1565,24 @@ workflowsRouter.delete(
         userId: shareId,
       });
       if (!result.ok) return void sendInternalError(res, result.detail);
+      if (!result.removed)
+        return void res
+          .status(404)
+          .json({ detail: "Access override not found" });
     } else {
-      await db
+      // Read the result. Ignoring it made a failed delete and an unknown
+      // share id indistinguishable from a real revocation: both answered
+      // 204, so the client removed the row from its list while the person
+      // it named kept access. Mirrors DELETE /projects/:id/access/:email.
+      const { data: removed, error } = await db
         .from("workflow_shares")
         .delete()
         .eq("id", shareId)
-        .eq("workflow_id", workflowId);
+        .eq("workflow_id", workflowId)
+        .select("id");
+      if (error) return void sendInternalError(res, error);
+      if (((removed ?? []) as unknown[]).length === 0)
+        return void res.status(404).json({ detail: "Access grant not found" });
     }
     res.status(204).send();
   }),
@@ -1620,6 +1640,12 @@ workflowsRouter.post(
         return void res.status(400).json({
           detail: "role must be owner, editor, viewer or deny",
         });
+      // Validate EVERY target before writing ANY override. Interleaving the
+      // two loops meant a rejected third email — a non-member, the creator,
+      // an admin — returned 400 with the first two overrides already
+      // persisted: the caller read "nothing happened" while access had
+      // silently changed for two people.
+      const targets: { userId: string }[] = [];
       for (const email of normalizedEmails) {
         const target = await findOrgMemberByEmail(db, orgId, email);
         if (!target.ok) {
@@ -1635,16 +1661,22 @@ workflowsRouter.post(
           return void res.status(400).json({
             detail: "Organization admins always have owner access",
           });
-        const result = await setOrgAccessOverride(db, {
-          kind: "workflow",
-          resourceId: workflowId,
-          orgId,
-          userId: target.member.userId,
-          role,
-          assignedBy: userId,
-        });
-        if (!result.ok) return void sendInternalError(res, result.detail);
+        targets.push({ userId: target.member.userId });
       }
+      // Validation is complete, so only a database failure can still stop
+      // this — and it must not stop it HALF WAY. One bulk upsert is one
+      // statement: the org-membership triggers on the override table can
+      // still refuse a row, and when they do the whole batch rolls back
+      // instead of leaving the people ahead of the refusal already granted.
+      const written = await setOrgAccessOverrides(db, {
+        kind: "workflow",
+        resourceId: workflowId,
+        orgId,
+        userIds: targets.map((target) => target.userId),
+        role,
+        assignedBy: userId,
+      });
+      if (!written.ok) return void sendInternalError(res, written.detail);
       return void res.status(204).send();
     }
 

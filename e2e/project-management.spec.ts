@@ -13,76 +13,9 @@
  */
 import { test, expect } from "@playwright/test";
 import path from "path";
+import { createProject } from "./projects";
 
 const PDF_FIXTURE = path.join(__dirname, "fixtures/test.pdf");
-
-// ─── Shared helper ────────────────────────────────────────────────────────────
-
-/**
- * Creates a new project via the "New project" modal and waits until
- * NewProjectModal's onCreated handler redirects to /projects/<id>.
- *
- * Pass `filePath` to also upload a document during creation.
- */
-async function createProject(
-    page: import("@playwright/test").Page,
-    projectName: string,
-    filePath?: string,
-) {
-    /* Creation is a navigation + modal wizard + (optionally) a file upload; the
-       per-test `{ timeout }` option passed to test() is silently ignored by
-       Playwright (that object only accepts tag/annotation), so raise the budget
-       here, where the slow work happens, for every caller. */
-    test.setTimeout(60_000);
-
-    await page.goto("/projects");
-    await expect(page).toHaveURL(/\/projects/, { timeout: 10_000 });
-
-    /* The Plus icon button in the header has aria-label="New project" */
-    const createBtn = page.getByRole("button", { name: "New project" });
-    await expect(createBtn).toBeVisible({ timeout: 10_000 });
-    await createBtn.click();
-
-    const nameInput = page.getByPlaceholder("Project name");
-    await expect(nameInput).toBeVisible({ timeout: 5_000 });
-    await nameInput.fill(projectName);
-
-    /* NewProjectModal is a three-step wizard: Details, Access, then Add
-       Documents. Project creation happens only from the final step. */
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-    await expect(page.getByRole("dialog", { name: "Access" })).toBeVisible();
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-    await expect(
-        page.getByRole("dialog", { name: "Add Documents" }),
-    ).toBeVisible();
-
-    if (filePath) {
-        /* On the documents step the footer "Upload" button opens a hidden file
-           input, and its label gains a "(n)" count once files are attached. */
-        const fileChooserPromise = page.waitForEvent("filechooser");
-        await page.getByRole("button", { name: /^Upload/ }).click();
-        (await fileChooserPromise).setFiles(filePath);
-        await expect(
-            page.getByRole("button", { name: /^Upload \(1\)/ }),
-        ).toBeVisible({ timeout: 5_000 });
-    }
-
-    /* Create — NewProjectModal's onCreated calls router.push(`/projects/${id}`).
-       The PDF upload runs (awaited) inside handleSubmit before onCreated fires,
-       so allow extra time for navigation when a file is attached.
-
-       (The modal's FileDirectory used to fan out a getProject() request per
-       existing project on open, which could overwhelm the local Supabase
-       gateway and required settle-waits plus a submit-retry loop here. The
-       directory now loads via one batched listProjects?include=documents
-       request, so a single submit is reliable.)
-
-       The documents step's primary action is a button whose label flips to
-       "Creating…" while in flight. */
-    const navTimeout = filePath ? 30_000 : 15_000;
-    await page.getByRole("button", { name: "Create project" }).click();
-    await page.waitForURL(/\/projects\/.+/, { timeout: navTimeout });
-}
 
 /**
  * Navigate to the projects list and return the table row for `projectName`.
@@ -179,7 +112,11 @@ test("delete a project", async ({ page }) => {
      * The "Actions" button is conditionally rendered only when selectedIds.length > 0.
      * It opens a small dropdown containing a "Delete" option.
      */
-    const actionsBtn = page.getByRole("button", { name: /^Actions/ });
+    /* Exact name, not a /^Actions/ prefix: the sidebar's chat rows carry
+       "Actions for <title>" buttons, so the prefix matched more than one
+       element and Playwright's strict mode failed the click outright. The
+       toolbar's own button is named exactly "Actions". */
+    const actionsBtn = page.getByRole("button", { name: "Actions", exact: true });
     await expect(actionsBtn).toBeVisible({ timeout: 3_000 });
     await actionsBtn.click();
 

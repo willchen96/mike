@@ -13,6 +13,23 @@ permissions:
   contents: read
 
 jobs:
+  # The gate's own regression suite. It asserts the FAIL-CLOSED contract —
+  # every bug this script has had was a path where "we could not check"
+  # printed the same "passed" as "we checked and it is clean" — and it runs
+  # against stub servers, so it needs no network and no install. Kept as its
+  # own job rather than a step in the matrix below so it runs once, and so a
+  # broken gate is legible as a broken gate rather than as four failing
+  # workspace audits.
+  audit-gate-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Audit gate self-tests
+        run: node --test scripts/audit-gate.test.mjs
+
   # Blocking for EVERY tree in the matrix below: high/critical advisories
   # fail the build unless their GHSA id is documented (with a reason) in
   # scripts/audit-allowlist.json — see scripts/audit-gate.mjs. Auditing

@@ -18,7 +18,10 @@ import {
     recordAudit,
     type ChatTurnAuditBase,
 } from "../audit";
-import { deleteUserAccountData } from "../userDataCleanup";
+import {
+    deleteUserAccountData,
+    listOrgsBlockingAccountDeletion,
+} from "../userDataCleanup";
 import {
     buildUserAccountExport,
     buildUserChatsExport,
@@ -60,7 +63,7 @@ import {
 import { publishCellUpdate } from "../queue/runProgress";
 import type { ConversionJobData } from "../queue/conversionQueue";
 import type { ExtractionJobData } from "../queue/extractionQueue";
-import { DB_JOB_FAILURE_HOOKS } from "./runner";
+import { DB_JOB_FAILURE_HOOKS, NonRetryableJobError } from "./runner";
 import type { Db, DbJob, DbJobHandlers } from "./types";
 
 /** The export types a client may request; anything else is a 400 upstream. */
@@ -101,6 +104,24 @@ export async function handleAccountDelete(db: Db, job: DbJob): Promise<void> {
     const userId = job.payload.userId as string | undefined;
     if (!userId) return;
     const userEmail = (job.payload.userEmail as string | undefined) ?? null;
+
+    // REFUSAL BEFORE DESTRUCTION. The route already answered 409 for an
+    // account that is the sole admin of an organization with members or
+    // content, but the org can change between the request and this job, and
+    // this handler is also reachable by requeueing an old row. Ask first,
+    // while nothing has been touched.
+    //
+    // Non-retryable on purpose: an organization does not acquire a second
+    // admin because we asked twenty more times over the next few hours. The
+    // row lands in `failed` with the reason legible on the first attempt.
+    const blockers = await listOrgsBlockingAccountDeletion(db, userId);
+    if (blockers.length > 0) {
+        throw new NonRetryableJobError(
+            `Account is the only admin of ${blockers.length} organization(s) that still hold members or content: ${blockers
+                .map((b) => `${b.org_id} (${b.reason})`)
+                .join(", ")}`,
+        );
+    }
 
     // The whole cascade is deletes — idempotent by nature, so a crash midway
     // simply re-runs. The user's sessions were revoked by the route, so no new
@@ -169,15 +190,16 @@ export async function handleAccountDelete(db: Db, job: DbJob): Promise<void> {
 
     // The auth user goes LAST, and only once every row above is gone.
     //
-    // documents.user_id references auth.users ON DELETE CASCADE, and
-    // document_versions cascades from documents in turn, so deleting the auth
-    // user destroys the only record of where this account's files live —
-    // storage_path, pdf_storage_path, and the version ids the extracted-text
-    // cache is keyed by. Delete auth first and the cascade above has nothing
-    // left to read: `generated/<userId>/…`, `extracted-text/<versionId>.txt`
-    // and every object uploaded by OTHER users into this user's projects are
-    // orphaned in object storage permanently, with no row anywhere pointing at
-    // them. Erasure that leaves the files behind is not erasure.
+    // documents.user_id references auth.users ON DELETE SET NULL (an
+    // organization's documents outlive the account that uploaded them), so
+    // deleting the auth user first does not destroy this account's rows — it
+    // ANONYMISES them. Every personal document would be left with a null
+    // user_id and no org: matched by none of the `eq("user_id", userId)`
+    // deletes above, listed nowhere, and still pointing at
+    // `generated/<userId>/…` and `extracted-text/<versionId>.txt` objects
+    // that nothing would ever sweep. Erasure that leaves the rows and the
+    // files behind is not erasure — so the data goes first, by user_id, while
+    // the user_id is still on it.
     //
     // Deleting it here also makes the job's retry budget mean something: while
     // this step is outstanding the account still exists, so a permanently
@@ -286,9 +308,15 @@ async function buildDocumentsZipExport(
         throw new Error(`[export.build] malformed payload on job ${job.id}`);
     }
 
+    // org_id and workflow_id are part of the verdict, not decoration:
+    // ensureDocAccess resolves a workflow asset through its workflow and an
+    // org document through its org. Selecting only project_id/user_id made
+    // both branches unreachable, so an org colleague's document and every
+    // detached document were silently dropped from the zip. The sync route
+    // (documents.ts) already selects the full set.
     const { data: rawDocs, error } = await db
         .from("documents")
-        .select("id, current_version_id, user_id, project_id")
+        .select("id, current_version_id, user_id, project_id, org_id, workflow_id")
         .in("id", documentIds as string[]);
     if (error) throw new Error(`[export.build] ${error.message}`);
 
@@ -299,6 +327,8 @@ async function buildDocumentsZipExport(
         id: string;
         user_id: string;
         project_id: string | null;
+        org_id?: string | null;
+        workflow_id?: string | null;
     }[]) {
         // Access is re-checked HERE, not at enqueue time: the payload's ids
         // are stale by definition (a share can be revoked while the job

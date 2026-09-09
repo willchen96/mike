@@ -41,7 +41,6 @@ import {
     normalizeEmail,
     resolveContentOrgId,
 } from "../lib/access";
-import { loadProfileUsersByEmail } from "../lib/userLookup";
 import {
     deleteContentGrant,
     listContentGrants,
@@ -85,9 +84,17 @@ async function validateAccessibleProjectId(
 ): Promise<{ ok: true } | { ok: false; status: number; detail: string }> {
     if (!projectId) return { ok: true };
     // Creating a chat under a project contributes content to it: member+.
+    // A Viewer can see the project, so answering 404 would claim it does not
+    // exist; the refusal is 403 and names the reason instead.
     const access = await checkProjectAccess(projectId, userId, userEmail, db);
-    if (!access.ok || !can(access.projectRole, "content.edit"))
+    if (!access.ok)
         return { ok: false, status: 404, detail: "Project not found" };
+    if (!can(access.projectRole, "content.edit"))
+        return {
+            ok: false,
+            status: 403,
+            detail: "You do not have permission to write in this project.",
+        };
     return { ok: true };
 }
 
@@ -318,16 +325,31 @@ chatRouter.post("/:chatId/access", requireAuth, async (req, res) => {
         return void res.status(400).json({
             detail: "Deny is only available for organization members",
         });
-    const { userById } = await loadProfileUsersByEmail(db);
+    // One creator's email, one row read. This used to scan every profile in
+    // the deployment to build two maps and then use a single entry.
+    const creatorProfile = access.chat.user_id
+        ? await db
+              .from("user_profiles")
+              .select("email")
+              .eq("user_id", access.chat.user_id)
+              .maybeSingle()
+        : null;
+    // A failed read is not "the creator has no email". Swallowing the error
+    // sent `creatorEmail: null` into upsertContentGrant, which is what stops
+    // the creator being handed a guest grant on their own chat — so a
+    // transient database fault quietly created exactly the row the check
+    // exists to prevent.
+    if (creatorProfile?.error)
+        return void sendInternalError(res, creatorProfile.error);
     const result = await upsertContentGrant(db, {
         kind: "chat",
         resourceId: chatId,
         email: req.body?.email,
         role: req.body?.role,
         createdBy: userId,
-        creatorEmail: access.chat.user_id
-            ? userById.get(access.chat.user_id)?.email
-            : null,
+        creatorEmail:
+            (creatorProfile?.data as { email?: string | null } | null)?.email ??
+            null,
     });
     if (!result.ok) {
         if (result.kind === "validation")
@@ -668,7 +690,13 @@ chatRouter.post("/:chatId/generate-title", requireAuth, async (req, res) => {
             apiKeys: settings.api_keys,
         });
 
-        await db.from("chats").update({ title }).eq("id", chatId);
+        // Read the write. An ignored error answered 200 with the new title,
+        // so the sidebar renamed the chat and reverted on the next reload.
+        const { error: titleError } = await db
+            .from("chats")
+            .update({ title })
+            .eq("id", chatId);
+        if (titleError) return void sendInternalError(res, titleError);
 
         res.json({ title });
     } catch (err) {
@@ -893,6 +921,8 @@ chatRouter.post("/", requireAuth, async (req, res) => {
         userId,
         db,
         chatId,
+        "chat_messages",
+        userEmail,
     );
     const docAvailability = Object.entries(docIndex).map(([doc_id, info]) => ({
         doc_id,
@@ -1099,12 +1129,26 @@ chatRouter.post("/", requireAuth, async (req, res) => {
 
         if (!chatTitle && lastUser?.content) {
             const title = lastUser.content.slice(0, 120);
-            await db.from("chats").update({ title }).eq("id", chatId);
-            chatTitle = title;
-            if (shouldGenerateTitle && !stream.signal.aborted) {
-                write(
-                    `data: ${JSON.stringify({ type: "chat_title", chatId, title })}\n\n`,
-                );
+            // The SSE response is already streaming, so a failure here cannot
+            // become an HTTP error — but it must not be announced either: an
+            // ignored error pushed a chat_title frame the client rendered and
+            // the next reload undid. Log it and leave the chat untitled.
+            const { error: titleError } = await db
+                .from("chats")
+                .update({ title })
+                .eq("id", chatId);
+            if (titleError) {
+                console.error("[chat/stream] failed to save chat title", {
+                    chatId,
+                    message: titleError.message,
+                });
+            } else {
+                chatTitle = title;
+                if (shouldGenerateTitle && !stream.signal.aborted) {
+                    write(
+                        `data: ${JSON.stringify({ type: "chat_title", chatId, title })}\n\n`,
+                    );
+                }
             }
         }
         void enqueueChatTurnAudit(

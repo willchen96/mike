@@ -334,6 +334,18 @@ export function TRView({ reviewId, projectId }: Props) {
 
     const requireStructure = requireContent;
 
+    /**
+     * Adding columns is `content.edit` server-side, so the refusal belongs at
+     * the button, not at the submit: a viewer used to open the modal, name a
+     * column, write a prompt and pick a format before "Editors only" arrived.
+     * `handleAddColumn` keeps its own gate as the backstop for any other way
+     * in.
+     */
+    function openAddColumns() {
+        if (!requireStructure("add columns")) return;
+        setAddColOpen(true);
+    }
+
     // Who to ask when an action is refused. A review inside a project inherits
     // that project's admin contacts; a standalone review's contact is its
     // creator, which only the people roster knows — so it is fetched the first
@@ -1542,7 +1554,7 @@ export function TRView({ reviewId, projectId }: Props) {
                                     )}
                                     {!loading && (
                                         <TabPillButton
-                                            onClick={() => setAddColOpen(true)}
+                                            onClick={openAddColumns}
                                             disabled={
                                                 savingColumn ||
                                                 savingColumnsConfig
@@ -1627,7 +1639,7 @@ export function TRView({ reviewId, projectId }: Props) {
                                 }}
                                 onUpdateColumn={handleUpdateColumn}
                                 onDeleteColumn={handleDeleteColumn}
-                                onAddColumn={() => setAddColOpen(true)}
+                                onAddColumn={openAddColumns}
                                 onAddDocuments={() => {
                                     if (
                                         !requireStructure(
@@ -1652,7 +1664,7 @@ export function TRView({ reviewId, projectId }: Props) {
                             }}
                             initialChatId={selectedChatId}
                             onChatIdChange={setSelectedChatId}
-                            canSend={canEditContent}
+                            canSend={roleKnown ? canEditContent : null}
                         />
                     )}
                 </div>
@@ -1795,6 +1807,9 @@ export function TRView({ reviewId, projectId }: Props) {
                 resource={review}
                 fetchAccess={getTabularReviewPeople}
                 currentUserEmail={user?.email ?? null}
+                // Both identifiers, so a roster row without an email still
+                // cannot offer the caller a Remove that locks them out.
+                currentUserId={user?.id ?? null}
                 breadcrumb={[
                     "Tabular Reviews",
                     review?.title || "Untitled Review",
@@ -1806,13 +1821,17 @@ export function TRView({ reviewId, projectId }: Props) {
                     ownerLabel: "Review owners",
                     inheritedFromProjectId: review?.project_id ?? null,
                     canManage: can(reviewRole, "access.manage"),
+                    // The mutation is what AccessModal reports on. Reloading
+                    // the roster afterwards is bookkeeping, so its failure
+                    // must not travel back up as "Could not change that role"
+                    // for a grant the server already accepted.
                     onGrant: async (email, role) => {
                         await grantTabularReviewAccess(reviewId, email, role);
-                        await refreshGrants();
+                        await refreshGrants().catch(() => {});
                     },
                     onRevoke: async (email) => {
                         await revokeTabularReviewAccess(reviewId, email);
-                        await refreshGrants();
+                        await refreshGrants().catch(() => {});
                     },
                 }}
             />

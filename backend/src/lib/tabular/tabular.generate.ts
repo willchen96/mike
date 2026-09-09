@@ -19,6 +19,7 @@
 
 import { type UserApiKeys } from "../llm";
 import { ensureReviewAccess, filterAccessibleDocumentIds } from "../access";
+import { can } from "../permissions";
 import { loadReviewRows, type ReviewRow } from "./tabular.rows";
 import {
     validateSelectedModel,
@@ -45,6 +46,7 @@ export async function prepareTabularGenerate(
 ): Promise<
     | { ok: true; data: PreparedGenerate }
     | { ok: false; kind: "not_found" }
+    | { ok: false; kind: "forbidden" }
     | { ok: false; kind: "no_columns" }
     | ({ ok: false; kind: "model" } & Omit<ModelValidationFailure, "ok">)
 > {
@@ -58,6 +60,13 @@ export async function prepareTabularGenerate(
     if (reviewError || !review) return { ok: false, kind: "not_found" };
     const access = await ensureReviewAccess(review, userId, userEmail, db);
     if (!access.ok) return { ok: false, kind: "not_found" };
+    // GENERATION IS A WRITE. It claims the review's generation lease, calls a
+    // paid model with the caller's keys, persists a cell per column per row
+    // and stamps an audit event in the caller's name. `access.ok` alone let a
+    // review VIEWER do all of that — read-only access is not permission to
+    // rewrite the review's contents.
+    if (!can(access.projectRole, "content.edit"))
+        return { ok: false, kind: "forbidden" };
 
     const columns: Column[] = review.columns_config ?? [];
     if (columns.length === 0) return { ok: false, kind: "no_columns" };

@@ -4,6 +4,7 @@ vi.mock("../../supabase", () => ({ createServerSupabase: vi.fn() }));
 vi.mock("../../storage", () => ({ deleteFile: vi.fn() }));
 
 import {
+    NonRetryableJobError,
     processClaimedJob,
     retryDelayMs,
     runDbJobTick,
@@ -166,6 +167,27 @@ describe("processClaimedJob fencing", () => {
         );
         expect(db.updates[0].payload.status).toBe("failed");
         expect(db.updates[0].filters).toEqual({ ...FENCE, attempts: 3 });
+    });
+
+    it("fails a NonRetryableJobError immediately, with attempts left", async () => {
+        // A job the domain REFUSES is not a job the network flaked on.
+        // Account deletion for the only admin of a live organization will be
+        // refused identically on every one of its 20 attempts; retrying it
+        // for hours buries the reason and leaves the user's request in limbo.
+        const db = makeDb();
+        await processClaimedJob(
+            db as never,
+            {
+                "test.kind": async () => {
+                    throw new NonRetryableJobError("refused by the domain");
+                },
+            },
+            JOB({ attempts: 1, max_attempts: 20 }),
+        );
+        expect(db.updates[0].payload.status).toBe("failed");
+        expect(db.updates[0].payload.last_error).toBe("refused by the domain");
+        expect(db.updates[0].payload.finished_at).toBeTruthy();
+        expect(db.updates[0].filters).toEqual(FENCE);
     });
 
     it("fences the unknown-kind write to this claim", async () => {

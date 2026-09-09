@@ -89,8 +89,14 @@ interface Props {
      * Whether the caller may write into this chat. False renders a read-only
      * composer — sending, attaching, and drop-uploads stay off, matching
      * what the server would refuse for a project viewer.
+     *
+     * `null` means the answer has not arrived. The composer is closed exactly
+     * as for `false`, but the placeholder stays neutral: telling an owner
+     * "Viewing only — sending needs edit access" for the length of a fetch,
+     * on every cold load, is a wrong statement about their access, not a
+     * loading state.
      */
-    canSend?: boolean;
+    canSend?: boolean | null;
     hideAddDocButton?: boolean;
     hideWorkflowButton?: boolean;
     projectName?: string;
@@ -669,9 +675,11 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
                             rows={1}
                             disabled={!canSend}
                             placeholder={
-                                canSend
-                                    ? "How can I help?"
-                                    : "Viewing only — sending needs edit access"
+                                canSend === null
+                                    ? "Loading…"
+                                    : canSend
+                                      ? "How can I help?"
+                                      : "Viewing only — sending needs edit access"
                             }
                             value={value}
                             onChange={handleChange}

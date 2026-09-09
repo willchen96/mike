@@ -39,6 +39,30 @@ type DbError = { code?: string; message: string } | null;
 /** How long a pending invitation stays acceptable. */
 export const INVITATION_TTL_DAYS = 14;
 
+/**
+ * Every table that carries its own `org_id` — the complete inventory of what
+ * an organization can directly own.
+ *
+ * ONE list, because two different call sites ask the same question and used
+ * to disagree about the answer: `deleteOrg` below (may this org be deleted?)
+ * and account deletion (`listOrgsBlockingAccountDeletion` in
+ * lib/userDataCleanup.ts). The account-deletion probe omitted `chats`, so an
+ * org whose only remaining content was a chat looked empty and was deleted —
+ * while `deleteOrg` refused the very same delete over the API.
+ *
+ * Every one of these foreign keys is ON DELETE RESTRICT, so an incomplete
+ * probe does not silently detach content: the database refuses the delete and
+ * the caller gets a raw constraint error instead of an intentional 409. The
+ * probe exists to answer first.
+ */
+export const ORG_CONTENT_TABLES = [
+    "projects",
+    "documents",
+    "chats",
+    "tabular_reviews",
+    "workflows",
+] as const;
+
 export type InvitationStatus =
     | "pending"
     | "accepted"
@@ -223,15 +247,8 @@ export async function deleteOrg(
         .maybeSingle();
     if (!org) return { ok: false, kind: "not_found" };
 
-    const resourceTables = [
-        "projects",
-        "documents",
-        "chats",
-        "tabular_reviews",
-        "workflows",
-    ] as const;
     const inventories = await Promise.all(
-        resourceTables.map(async (table) => ({
+        ORG_CONTENT_TABLES.map(async (table) => ({
             table,
             result: await db.from(table).select("id").eq("org_id", params.orgId),
         })),

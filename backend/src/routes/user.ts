@@ -47,6 +47,8 @@ import {
     deleteAllUserTabularReviews,
     deleteUserAccountData,
     deleteUserProjects,
+    listOrgsBlockingAccountDeletion,
+    type AccountDeletionOrgBlocker,
 } from "../lib/userDataCleanup";
 import {
     acceptInvitation,
@@ -1762,6 +1764,36 @@ userRouter.patch(
     },
 );
 
+/**
+ * Turn the sole-admin blockers into instructions the user can actually act
+ * on. The two reasons need DIFFERENT actions — appointing a successor fixes
+ * an org that still has members, and does nothing for an org whose only
+ * problem is that it still owns matters — so a single "make another member
+ * an admin" sentence sent the second group off to look for members who do
+ * not exist. A mixed batch gets both sentences, each naming its own orgs.
+ */
+export function describeAccountDeletionBlockers(
+    blockers: AccountDeletionOrgBlocker[],
+): string {
+    const named = (reason: AccountDeletionOrgBlocker["reason"]) =>
+        blockers
+            .filter((blocker) => blocker.reason === reason)
+            .map((blocker) => blocker.name)
+            .join(", ");
+    const sentences: string[] = [];
+    const withMembers = named("members");
+    if (withMembers)
+        sentences.push(
+            `You are the only admin of ${withMembers}. Make another member an admin, or delete the organization, before deleting your account.`,
+        );
+    const withContent = named("content");
+    if (withContent)
+        sentences.push(
+            `You are the only admin of ${withContent}, which still owns content. Delete or move the organization's projects, workflows, documents and reviews, or delete the organization, before deleting your account.`,
+        );
+    return sentences.join(" ");
+}
+
 // DELETE /user/account
 userRouter.delete(
     "/account",
@@ -1773,15 +1805,37 @@ userRouter.delete(
         const token = res.locals.token as string | undefined;
         const db = createServerSupabase();
         try {
+            // ORGANIZATIONS FIRST. An account that is the only admin of an
+            // organization which still has members or content cannot be
+            // deleted: promoting an arbitrary successor hands a firm's
+            // matters to whoever joined first (and silently clears their
+            // `deny` overrides), while removing the member outright is
+            // refused by org_member_protect_resource_ownership and leaves the
+            // organization memberless, invisible and undeletable. Answer 409
+            // and let the user choose a successor. This check runs BEFORE the
+            // enqueue so nothing is scheduled, revoked, or destroyed.
+            const blockingOrgs = await listOrgsBlockingAccountDeletion(
+                db,
+                userId,
+            );
+            if (blockingOrgs.length > 0) {
+                return void res.status(409).json({
+                    code: "org_successor_required",
+                    detail: describeAccountDeletionBlockers(blockingOrgs),
+                    organizations: blockingOrgs,
+                });
+            }
+
             // DATA FIRST, AUTH LAST — main's ordering, kept.
             //
-            // documents.user_id references auth.users ON DELETE CASCADE (and
-            // document_versions cascades from documents), so deleting the auth
-            // user first destroys every row that records where this account's
-            // files live. The cascade would then find nothing to clean up and
-            // the objects would be orphaned in storage forever. The auth user
-            // is therefore deleted by the job, as its final step, once the
-            // data is actually gone.
+            // documents.user_id references auth.users ON DELETE SET NULL (an
+            // organization's documents outlive their uploader), so deleting
+            // the auth user first would not erase this account's rows — it
+            // would anonymise them, leaving personal documents with a null
+            // user_id that the by-user deletes no longer match and whose
+            // storage objects nothing would ever sweep. The auth user is
+            // therefore deleted by the job, as its final step, once the data
+            // is actually gone.
             //
             // What the user experiences is unchanged: their sessions are
             // revoked here, immediately, so the account is unusable from the

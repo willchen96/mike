@@ -57,7 +57,7 @@ function mockProfile() {
     } as unknown as ReturnType<typeof useUserProfile>);
 }
 
-function renderInput(canSend: boolean, onSubmit = vi.fn()) {
+function renderInput(canSend: boolean | null, onSubmit = vi.fn()) {
     render(
         <ChatInput
             onSubmit={onSubmit}
@@ -117,6 +117,33 @@ describe("ChatInput canSend gating", () => {
         fireEvent.drop(window, { dataTransfer });
 
         expect(uploadProjectDocument).not.toHaveBeenCalled();
+    });
+
+    it("stays neutral while the caller's standing is unknown", () => {
+        // null is "not known yet", not "not allowed". The composer is closed
+        // the same way, but accusing an owner of viewer status for the length
+        // of a fetch — which is what every cold load did — is a wrong
+        // statement, not a loading state.
+        renderInput(null);
+
+        const textarea = screen.getByPlaceholderText("Loading…");
+        expect(textarea).toBeDisabled();
+        expect(
+            screen.queryByPlaceholderText(
+                "Viewing only — sending needs edit access",
+            ),
+        ).toBeNull();
+        expect(
+            screen.getByRole("button", { name: "Send message" }),
+        ).toBeDisabled();
+    });
+
+    it("does not submit on Enter while the standing is unknown", () => {
+        const onSubmit = renderInput(null);
+        const textarea = screen.getByRole("combobox");
+
+        fireEvent.keyDown(textarea, { key: "Enter" });
+        expect(onSubmit).not.toHaveBeenCalled();
     });
 
     it("keeps the default composer when canSend is omitted", () => {

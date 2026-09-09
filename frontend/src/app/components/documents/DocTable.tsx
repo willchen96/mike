@@ -4061,6 +4061,29 @@ export function DocTable({
                                                     <PillButton
                                                         tone="black"
                                                         size="sm"
+                                                        // Uploading here is
+                                                        // editor-tier, and the
+                                                        // empty state was the
+                                                        // one Upload that
+                                                        // still looked live to
+                                                        // a viewer.
+                                                        disabled={
+                                                            !allowed(
+                                                                "content.edit",
+                                                            )
+                                                        }
+                                                        aria-disabled={
+                                                            !allowed(
+                                                                "content.edit",
+                                                            ) || undefined
+                                                        }
+                                                        title={
+                                                            allowed(
+                                                                "content.edit",
+                                                            )
+                                                                ? undefined
+                                                                : "Only an editor can add documents"
+                                                        }
                                                         onClick={(event) => {
                                                             event.stopPropagation();
                                                             openAddDocuments();
@@ -4499,7 +4522,22 @@ export function DocTable({
                                                         ? handleDownloadSelectedDocs
                                                         : undefined
                                                 }
+                                                newSubfolderDisabled={!allowed("docs.organize")}
                                                 onNewSubfolder={menuFolderAppliesToSelection ? undefined : () => {
+                                                    // The name prompt itself is
+                                                    // only offered to a role
+                                                    // that may create the
+                                                    // folder; the submit gate
+                                                    // in handleCreateFolder
+                                                    // stays as the backstop.
+                                                    if (
+                                                        !requireCapability(
+                                                            "docs.organize",
+                                                            "create folders",
+                                                            "editor",
+                                                        )
+                                                    )
+                                                        return;
                                                     setCreatingFolderIn(contextMenu.folderId);
                                                     setNewFolderName("");
                                                     if (contextMenu.folderId) {

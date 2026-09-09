@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { createServerSupabase } from "../supabase";
+import { ensureDocAccess } from "../access";
 import { attachActiveVersionPaths } from "../documentVersions";
 import {
   type DocStore,
@@ -550,6 +551,7 @@ export async function buildDocContext(
   db: ReturnType<typeof createServerSupabase>,
   chatId?: string | null,
   messageTable = "chat_messages",
+  userEmail?: string | null,
 ): Promise<{ docIndex: DocIndex; docStore: DocStore }> {
   const docIndex: DocIndex = {};
   const docStore: DocStore = new Map();
@@ -600,14 +602,22 @@ export async function buildDocContext(
 
   const ids = [...documentIds];
   if (ids.length > 0) {
+    // Uploading is not the same as being allowed to read: scoping this to
+    // `user_id = me` dropped every document the caller did not personally
+    // upload — a colleague's file in a shared org matter, or any document
+    // whose uploader's account was deleted (user_id → NULL) — so the model
+    // answered "I can't see that document" about a file the caller has full
+    // access to. The verdict is per document, not per chat: being cited in a
+    // readable chat never grants access to the cited file.
     const { data: docs } = await db
       .from("documents")
-      .select("id, current_version_id, status, library_kind")
+      .select(
+        "id, current_version_id, status, library_kind, user_id, project_id, org_id, workflow_id",
+      )
       .in("id", ids)
-      .eq("user_id", userId)
       .eq("status", "ready");
 
-    const docList = (docs ?? []) as unknown as {
+    const candidates = (docs ?? []) as unknown as {
       id: string;
       filename?: string | null;
       file_type?: string | null;
@@ -615,7 +625,52 @@ export async function buildDocContext(
       active_version_number?: number | null;
       storage_path?: string | null;
       library_kind?: string | null;
+      user_id: string | null;
+      project_id: string | null;
+      org_id?: string | null;
+      workflow_id?: string | null;
     }[];
+    // ONE VERDICT PER CONTAINER, not per document. ensureDocAccess resolves
+    // a document through its project, then its workflow, then its org — and
+    // each of those is two or three round trips. A turn that cites fifteen
+    // files from the same matter used to pay for fifteen identical project
+    // lookups before the model saw a single byte. Whether the container
+    // admits the caller does not depend on which document inside it is
+    // asked about, so ask once per container and reuse the answer; a
+    // document with no container at all still resolves individually, which
+    // costs nothing (it is a `user_id === caller` comparison in memory).
+    const containerKey = (doc: {
+      project_id: string | null;
+      workflow_id?: string | null;
+      org_id?: string | null;
+    }) =>
+      doc.project_id
+        ? `project:${doc.project_id}`
+        : doc.workflow_id
+          ? `workflow:${doc.workflow_id}`
+          : doc.org_id
+            ? `org:${doc.org_id}`
+            : null;
+
+    const verdictByContainer = new Map<string, boolean>();
+    for (const doc of candidates) {
+      const key = containerKey(doc);
+      if (!key || verdictByContainer.has(key)) continue;
+      // The representative carries the container this verdict is about; its
+      // `user_id` only ever decides the ROLE, never `ok`, so reusing one
+      // document's answer for its siblings cannot widen access.
+      const verdict = await ensureDocAccess(doc, userId, userEmail ?? null, db);
+      verdictByContainer.set(key, verdict.ok);
+    }
+
+    const docList: typeof candidates = [];
+    for (const doc of candidates) {
+      const key = containerKey(doc);
+      const ok = key
+        ? (verdictByContainer.get(key) ?? false)
+        : (await ensureDocAccess(doc, userId, userEmail ?? null, db)).ok;
+      if (ok) docList.push(doc);
+    }
     await attachActiveVersionPaths(db, docList);
     for (let i = 0; i < docList.length; i++) {
       const doc = docList[i];

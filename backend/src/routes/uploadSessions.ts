@@ -184,9 +184,16 @@ export async function validateDestinationAccess(
       const projectId = destination.project_id as string;
       const access = await checkProjectAccess(projectId, userId, userEmail, db);
       // Uploading into a project is content work: a viewer can open the
-      // project but must not be able to open an upload session into it.
-      if (!access.ok || !can(access.projectRole, "content.edit")) {
+      // project but must not be able to open an upload session into it. That
+      // viewer is refused, not told the project vanished.
+      if (!access.ok) {
         res.status(404).json({ detail: "Project not found" });
+        return false;
+      }
+      if (!can(access.projectRole, "content.edit")) {
+        res.status(403).json({
+          detail: "You do not have permission to write in this project.",
+        });
         return false;
       }
       const folderIds = Array.from(
@@ -269,12 +276,24 @@ export async function validateDestinationAccess(
       access.ok &&
       (creatorScopedAllowed(access, document.user_id) ||
         (Boolean(document.workflow_id) && canEditContent));
-    if (
-      !access.ok ||
-      !canEditContent ||
-      (manifest.purpose === "document_version_replace" && !canReplace)
-    ) {
+    // Split, the way the project branch above already splits: no verdict at
+    // all is a 404, and a caller who can open the document but not write to
+    // it is refused by name. Collapsing both into 404 told every Viewer
+    // their document had disappeared the moment they tried to upload.
+    if (!access.ok) {
       res.status(404).json({ detail: "Document not found" });
+      return false;
+    }
+    if (!canEditContent) {
+      res.status(403).json({
+        detail: "You do not have permission to edit content in this project.",
+      });
+      return false;
+    }
+    if (manifest.purpose === "document_version_replace" && !canReplace) {
+      res.status(403).json({
+        detail: "You do not have permission to replace this version.",
+      });
       return false;
     }
     if (manifest.purpose === "document_version_create") return true;

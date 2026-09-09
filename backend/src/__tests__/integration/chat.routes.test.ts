@@ -1483,6 +1483,48 @@ describe("chat writes are gated on content.edit (org RBAC)", () => {
         expect(res.body).toHaveProperty("detail");
     });
 
+    // A Viewer can open the project, so answering "Project not found" told
+    // them their matter had vanished. The refusal has to say it is one.
+    it("403s a project Viewer creating a chat in that project", async () => {
+        mockedCreate.mockImplementation(
+            () =>
+                makeRbacDb(null, "colleague-1", {
+                    grantRole: "viewer",
+                    project: { org_id: null },
+                    chat: { org_id: null },
+                }) as never,
+        );
+
+        const res = await request(app)
+            .post("/chat/create")
+            .set("Authorization", "Bearer test")
+            .send({ project_id: "proj-1" });
+
+        expect(res.status).toBe(403);
+        expect(res.body.detail).toBe(
+            "You do not have permission to write in this project.",
+        );
+    });
+
+    it("keeps 404 when the project is invisible to the caller", async () => {
+        mockedCreate.mockImplementation(
+            () =>
+                makeRbacDb(null, "colleague-1", {
+                    grantRole: null,
+                    project: { org_id: null },
+                    chat: { org_id: null },
+                }) as never,
+        );
+
+        const res = await request(app)
+            .post("/chat/create")
+            .set("Authorization", "Bearer test")
+            .send({ project_id: "proj-1" });
+
+        expect(res.status).toBe(404);
+        expect(res.body.detail).toBe("Project not found");
+    });
+
     it("does not elevate a project chat's creator above project access", async () => {
         mockedCreate.mockImplementation(() => makeRbacDb(null, "u1") as never);
 
@@ -1518,6 +1560,27 @@ describe("chat writes are gated on content.edit (org RBAC)", () => {
 
         expect(res.status).toBe(200);
         expect(res.body.title).toBe("Generated Title");
+    });
+
+    // The update's error used to be ignored, so a failed write still
+    // answered 200 with the new title: the sidebar renamed the chat and the
+    // next reload silently put the old name back.
+    it("reports a failed title write instead of answering 200", async () => {
+        await seedResolvableModel();
+        mockedCreate.mockImplementation(
+            () =>
+                makeRbacDb("admin", "colleague-1", {
+                    chatWriteError: "title update failed",
+                }) as never,
+        );
+
+        const res = await request(app)
+            .post("/chat/chat-1/generate-title")
+            .set("Authorization", "Bearer test")
+            .send({ message: "hello there" });
+
+        expect(res.status).toBe(500);
+        expect(res.body.detail).toBe("Something went wrong. Please try again.");
     });
 
     it("still lets a project viewer GET the chat (reads stay project.view)", async () => {
@@ -1737,6 +1800,158 @@ describe("chat grants, deletion and roster", () => {
         expect(res.body.detail).toBe(
             "future@example.com does not belong to a Mike user.",
         );
+    });
+
+    // The creator's email now comes from one filtered row instead of a scan
+    // of every profile in the deployment; this pins that the row it reads is
+    // still the right one, since the "creator already has access" refusal is
+    // the only thing that email decides.
+    it("400s when a grant targets the chat creator's own email", async () => {
+        mockedCreate.mockImplementation(
+            () =>
+                makeRbacDb(null, "colleague-1", {
+                    chat: { project_id: null, org_id: null },
+                    chatGrantRole: "owner",
+                    profiles: [
+                        {
+                            user_id: "decoy",
+                            email: "decoy@example.com",
+                            display_name: "Decoy",
+                        },
+                        {
+                            user_id: "colleague-1",
+                            email: "colleague@example.com",
+                            display_name: "Creator",
+                        },
+                    ],
+                }) as never,
+        );
+
+        const res = await request(app)
+            .post("/chat/chat-1/access")
+            .set("Authorization", "Bearer test")
+            .send({ email: "Colleague@Example.com", role: "viewer" });
+
+        expect(res.status).toBe(400);
+        expect(res.body.detail).toBe(
+            "The chat creator already has owner access",
+        );
+    });
+
+    it("500s when the creator's profile read fails, without writing a grant", async () => {
+        // A FAILED READ IS NOT "the creator has no email". Swallowing the
+        // error sent `creatorEmail: null` into upsertContentGrant — and that
+        // email is the only thing standing between the creator and a guest
+        // grant on their own chat. So a transient database fault quietly
+        // created exactly the row the check exists to prevent.
+        const grantWrites: string[] = [];
+        mockedCreate.mockImplementation(() => {
+            const db = makeRbacDb(null, "colleague-1", {
+                chat: { project_id: null, org_id: null },
+                chatGrantRole: "owner",
+                profiles: [
+                    {
+                        user_id: "colleague-1",
+                        email: "colleague@example.com",
+                        display_name: "Creator",
+                    },
+                ],
+            });
+            const originalFrom = db.from;
+            db.from = vi.fn((table: string) => {
+                if (table === "user_profiles") {
+                    // ONLY the creator lookup fails — it is the read keyed by
+                    // `user_id`. Every other profile read (the one that
+                    // resolves the RECIPIENT's account) still works, so the
+                    // request cannot fall into a 500 for some other reason.
+                    const profiles = [
+                        {
+                            user_id: "colleague-1",
+                            email: "colleague@example.com",
+                            display_name: "Creator",
+                        },
+                        {
+                            user_id: "mate",
+                            email: "mate@example.com",
+                            display_name: "Mate",
+                        },
+                    ];
+                    const filters: Record<string, unknown> = {};
+                    const q: Record<string, unknown> = {};
+                    for (const method of ["select", "is", "order", "limit"])
+                        q[method] = () => q;
+                    q.eq = (column: string, value: unknown) => {
+                        filters[column] = value;
+                        return q;
+                    };
+                    q.in = (column: string, values: unknown[]) => {
+                        filters[column] = values;
+                        return q;
+                    };
+                    const settle = () =>
+                        "user_id" in filters
+                            ? {
+                                  data: null,
+                                  error: { message: "connection reset" },
+                              }
+                            : {
+                                  data: profiles.filter((row) =>
+                                      Object.entries(filters).every(
+                                          ([column, value]) =>
+                                              Array.isArray(value)
+                                                  ? value.includes(
+                                                        row[
+                                                            column as keyof typeof row
+                                                        ],
+                                                    )
+                                                  : row[
+                                                        column as keyof typeof row
+                                                    ] === value,
+                                      ),
+                                  ),
+                                  error: null,
+                              };
+                    q.maybeSingle = () => {
+                        const { data, error } = settle();
+                        return Promise.resolve({
+                            data: data?.[0] ?? null,
+                            error,
+                        });
+                    };
+                    q.single = q.maybeSingle;
+                    q.then = (resolve: (v: unknown) => unknown) =>
+                        Promise.resolve(settle()).then(resolve);
+                    return q;
+                }
+                const query = originalFrom(table) as Record<string, unknown>;
+                if (table === "chat_access_grants")
+                    for (const method of ["upsert", "insert"] as const) {
+                        const original = query[method] as (
+                            ...args: unknown[]
+                        ) => unknown;
+                        query[method] = (...args: unknown[]) => {
+                            grantWrites.push(method);
+                            return original(...args);
+                        };
+                    }
+                return query;
+            }) as never;
+            return db as never;
+        });
+
+        const res = await request(app)
+            .post("/chat/chat-1/access")
+            .set("Authorization", "Bearer test")
+            .send({ email: "mate@example.com", role: "viewer" });
+
+        expect.soft(res.status).toBe(500);
+        expect.soft(res.body.detail).toBe(
+            "Something went wrong. Please try again.",
+        );
+        // The internal message never reaches the client...
+        expect.soft(JSON.stringify(res.body)).not.toContain("connection reset");
+        // ...and nothing was written.
+        expect.soft(grantWrites).toEqual([]);
     });
 
     it("403s a directly granted member trying to manage grants", async () => {

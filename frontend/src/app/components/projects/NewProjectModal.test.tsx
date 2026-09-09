@@ -14,6 +14,7 @@ import {
     listOrgMembers,
     listOrgs,
     lookupUserByEmail,
+    uploadProjectDocuments,
 } from "@/app/lib/mikeApi";
 import { NewProjectModal } from "./NewProjectModal";
 
@@ -30,6 +31,7 @@ vi.mock("@/app/lib/mikeApi", async (importOriginal) => ({
     grantProjectAccess: vi.fn(),
     addDocumentToProject: vi.fn(),
     uploadProjectDocument: vi.fn(),
+    uploadProjectDocuments: vi.fn(),
     listOrgs: vi.fn(),
     listOrgMembers: vi.fn(),
     lookupUserByEmail: vi.fn(),
@@ -115,6 +117,7 @@ describe("NewProjectModal sharing", () => {
         vi.mocked(listOrgMembers).mockResolvedValue([]);
         vi.mocked(createProject).mockResolvedValue(CREATED as never);
         vi.mocked(grantProjectAccess).mockResolvedValue({} as never);
+        vi.mocked(uploadProjectDocuments).mockResolvedValue([]);
         vi.mocked(lookupUserByEmail).mockImplementation(async (email) => ({
             exists: true,
             email,
@@ -485,5 +488,200 @@ describe("NewProjectModal sharing", () => {
             "blocked@elite.test",
             "deny",
         );
+    });
+
+    async function attachPendingFile(filename: string) {
+        const fileInput = document.querySelector(
+            'input[type="file"]',
+        ) as HTMLInputElement;
+        expect(fileInput).not.toBeNull();
+        fireEvent.change(fileInput, {
+            target: { files: [new File(["contents"], filename)] },
+        });
+        await screen.findByRole("button", { name: /Upload \(1\)/ });
+    }
+
+    it("uploads an attached file once when a refused grant is retried", async () => {
+        // The grant refusal used to return with the pending files still
+        // queued, so the retry — which correctly skipped creation — re-ran the
+        // upload and the project ended up with the same document twice.
+        const user = userEvent.setup({ delay: null });
+        const onCreated = vi.fn();
+        render(
+            <NewProjectModal open onClose={vi.fn()} onCreated={onCreated} />,
+        );
+        vi.mocked(grantProjectAccess).mockRejectedValueOnce(
+            new MikeApiError({ status: 403, message: "Not allowed" }),
+        );
+        vi.mocked(uploadProjectDocuments).mockResolvedValue([
+            {
+                clientId: "c1",
+                filename: "brief.pdf",
+                status: "completed",
+                result: null,
+                errorCode: null,
+            },
+        ]);
+
+        await fillAndAdd(user, "counsel@firm.test", "editor");
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        await attachPendingFile("brief.pdf");
+
+        await user.click(
+            screen.getByRole("button", { name: "Create project" }),
+        );
+        expect(
+            await screen.findByText(
+                /Project created, but access was not granted to counsel@firm\.test/,
+            ),
+        ).toBeInTheDocument();
+        // Grants run first, so a refusal leaves no upload to redo.
+        expect(uploadProjectDocuments).not.toHaveBeenCalled();
+
+        await user.click(
+            screen.getByRole("button", { name: "Create project" }),
+        );
+        await waitFor(() => expect(onCreated).toHaveBeenCalled());
+        expect(createProject).toHaveBeenCalledTimes(1);
+        expect(uploadProjectDocuments).toHaveBeenCalledTimes(1);
+    });
+
+    it("tells the caller to refetch when a created project is never handed over", async () => {
+        const user = userEvent.setup({ delay: null });
+        const onClose = vi.fn();
+        const onCreated = vi.fn();
+        render(<NewProjectModal open onClose={onClose} onCreated={onCreated} />);
+        vi.mocked(grantProjectAccess).mockRejectedValue(
+            new MikeApiError({ status: 403, message: "Not allowed" }),
+        );
+
+        await fillAndAdd(user, "counsel@firm.test", "editor");
+        await submit(user);
+        await screen.findByText(/Project created, but access was not granted/);
+
+        await user.click(screen.getByRole("button", { name: "Close" }));
+        expect(onCreated).not.toHaveBeenCalled();
+        expect(onClose).toHaveBeenCalledWith(true);
+    });
+
+    it("cannot be dismissed while the project is being created", async () => {
+        const user = userEvent.setup({ delay: null });
+        const onClose = vi.fn();
+        // Never settles: the create is still in flight when the user tries to
+        // leave, and dismissing then would strand the outcome.
+        vi.mocked(createProject).mockReturnValue(new Promise(() => {}) as never);
+        render(<NewProjectModal open onClose={onClose} onCreated={vi.fn()} />);
+
+        await user.type(screen.getByPlaceholderText("Add project name"), "P");
+        await submit(user);
+        await waitFor(() => expect(createProject).toHaveBeenCalled());
+
+        await user.click(screen.getByRole("button", { name: "Close" }));
+        fireEvent.keyDown(document, { key: "Escape" });
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("keeps two files that happen to share a name", async () => {
+        // The picker deduplicated by NAME, so the second `contract.pdf` — a
+        // normal thing to attach from two different folders — was dropped
+        // without a word.
+        const user = userEvent.setup({ delay: null });
+        renderModal();
+
+        await user.type(screen.getByPlaceholderText("Add project name"), "P");
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        await user.click(screen.getByRole("button", { name: "Next" }));
+
+        const input = document.querySelector(
+            'input[type="file"]',
+        ) as HTMLInputElement;
+        // Two separate picks, as a user attaching from two folders makes
+        // them: the name test compared each new file against the ones
+        // already staged, so the second one never arrived.
+        fireEvent.change(input, {
+            target: { files: [new File(["a"], "contract.pdf")] },
+        });
+        fireEvent.change(input, {
+            target: { files: [new File(["b"], "contract.pdf")] },
+        });
+
+        expect(
+            await screen.findByRole("button", { name: /Upload \(2\)/ }),
+        ).toBeInTheDocument();
+
+        await user.click(
+            screen.getByRole("button", { name: "Create project" }),
+        );
+
+        await waitFor(() => expect(uploadProjectDocuments).toHaveBeenCalled());
+        const [, sentFiles] = vi.mocked(uploadProjectDocuments).mock.calls[0];
+        expect(sentFiles).toHaveLength(2);
+        // Each carries its own id, so an outcome can be traced back to the
+        // File that produced it rather than to a name they share.
+        expect(sentFiles[0].clientId).toBeTruthy();
+        expect(sentFiles[0].clientId).not.toBe(sentFiles[1].clientId);
+    });
+
+    it("says the attached files are still pending when a grant is refused", async () => {
+        // Grants run before the attachments, so a refusal there means nothing
+        // the user picked has been sent — an error that mentions only the
+        // sharing reads as though the files went in.
+        const user = userEvent.setup({ delay: null });
+        renderModal();
+        vi.mocked(grantProjectAccess).mockRejectedValue(
+            new MikeApiError({ status: 403, message: "Not allowed" }),
+        );
+
+        await fillAndAdd(user, "counsel@firm.test", "editor");
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        const input = document.querySelector(
+            'input[type="file"]',
+        ) as HTMLInputElement;
+        fireEvent.change(input, {
+            target: { files: [new File(["a"], "a.pdf"), new File(["b"], "b.pdf")] },
+        });
+        await user.click(
+            await screen.findByRole("button", { name: "Create project" }),
+        );
+
+        expect(
+            await screen.findByText(
+                /The 2 selected files are still pending and will be attached when you try again\./,
+            ),
+        ).toBeInTheDocument();
+        expect(uploadProjectDocuments).not.toHaveBeenCalled();
+    });
+
+    it("retires Back once the project exists", async () => {
+        // The retry reuses the created project, so a Personal → organization
+        // switch on the second attempt left the project where it was and
+        // applied the new organization's overrides to it.
+        const user = userEvent.setup({ delay: null });
+        renderModal();
+        vi.mocked(grantProjectAccess).mockRejectedValue(
+            new MikeApiError({ status: 403, message: "Not allowed" }),
+        );
+
+        await fillAndAdd(user, "counsel@firm.test", "editor");
+        await user.click(screen.getByRole("button", { name: "Next" }));
+        expect(screen.getByRole("button", { name: "Back" })).toBeEnabled();
+
+        await user.click(
+            await screen.findByRole("button", { name: "Create project" }),
+        );
+        await screen.findByText(/Project created, but access was not granted/);
+
+        expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
+    });
+
+    it("says so when the organization list cannot be loaded", async () => {
+        vi.mocked(listOrgs).mockRejectedValue(
+            new MikeApiError({ status: 500, message: "boom" }),
+        );
+        render(<NewProjectModal open onClose={vi.fn()} onCreated={vi.fn()} />);
+
+        expect(
+            await screen.findByText("Your organizations could not be loaded."),
+        ).toBeInTheDocument();
     });
 });

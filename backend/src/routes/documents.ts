@@ -48,6 +48,15 @@ import {
 } from "../lib/documentDisplay";
 
 export const documentsRouter = Router();
+
+/**
+ * "Not found" is for rows the caller cannot see at all. A Viewer who can open
+ * a document but not change it gets a refusal that names the reason, so the
+ * UI stops telling people their document disappeared.
+ */
+const DOCUMENT_EDIT_FORBIDDEN =
+  "You do not have permission to edit content in this project.";
+
 const isDev = process.env.NODE_ENV !== "production";
 const devLog = (...args: Parameters<typeof console.log>) => {
   if (isDev) console.log(...args);
@@ -155,19 +164,33 @@ documentsRouter.get("/:documentId", requireAuth, async (req, res) => {
 });
 
 // DELETE /single-documents/:documentId
+// Scoped by the same rule as DELETE .../versions/:versionId, not by
+// `user_id = me`: that older scope meant an org admin could not remove a
+// colleague's document from a matter the firm owns, and — once account
+// deletion started blanking documents.user_id instead of destroying org
+// content — that NOBODY could remove a departed colleague's document.
 documentsRouter.delete("/:documentId", requireAuth, async (req, res) => {
   const userId = res.locals.userId as string;
+  const userEmail = res.locals.userEmail as string | undefined;
   const { documentId } = req.params;
   const db = createServerSupabase();
 
-  const { data: doc, error } = await db
+  const { data: doc } = await db
     .from("documents")
-    .select("id")
+    .select("id, user_id, project_id, org_id, workflow_id")
     .eq("id", documentId)
-    .eq("user_id", userId)
     .single();
-  if (error || !doc)
+  if (!doc) return void res.status(404).json({ detail: "Document not found" });
+  const access = await ensureDocAccess(doc, userId, userEmail, db);
+  if (!access.ok)
     return void res.status(404).json({ detail: "Document not found" });
+  if (
+    !creatorScopedAllowed(access, doc.user_id) &&
+    !(doc.workflow_id && can(access.projectRole, "content.edit"))
+  )
+    return void res.status(403).json({
+      detail: "You do not have permission to delete this document.",
+    });
 
   await deleteDocumentAndVersionFiles(db, documentId);
   res.status(204).send();
@@ -842,8 +865,12 @@ documentsRouter.patch(
     if (!doc)
       return void res.status(404).json({ detail: "Document not found" });
     const access = await ensureDocAccess(doc, userId, userEmail, db);
-    if (!access.ok || !can(access.projectRole, "content.edit"))
+    // A document a Viewer can open has not disappeared — say so, instead of
+    // reporting the read-only tier as a missing row.
+    if (!access.ok)
       return void res.status(404).json({ detail: "Document not found" });
+    if (!can(access.projectRole, "content.edit"))
+      return void res.status(403).json({ detail: DOCUMENT_EDIT_FORBIDDEN });
 
     const raw = req.body?.filename;
     const filename =
@@ -886,12 +913,19 @@ documentsRouter.delete(
     if (!doc)
       return void res.status(404).json({ detail: "Document not found" });
     const access = await ensureDocAccess(doc, userId, userEmail, db);
-    if (
-      !access.ok ||
-      (!creatorScopedAllowed(access, doc.user_id) &&
-        !(doc.workflow_id && can(access.projectRole, "content.edit")))
-    )
+    // Same split as the whole-document DELETE above: a caller with no verdict
+    // is told the row does not exist, and a caller who can open the document
+    // but not delete this version is REFUSED by name. Collapsing both into
+    // 404 told a Viewer their version had vanished.
+    if (!access.ok)
       return void res.status(404).json({ detail: "Document not found" });
+    if (
+      !creatorScopedAllowed(access, doc.user_id) &&
+      !(doc.workflow_id && can(access.projectRole, "content.edit"))
+    )
+      return void res.status(403).json({
+        detail: "You do not have permission to delete this version.",
+      });
 
     const { data: versions, error: versionsErr } = await db
       .from("document_versions")
@@ -1103,8 +1137,10 @@ async function handleEditResolution(
   devLog(`[edit-resolution] fetched doc`, { doc, docErr });
   if (!doc) return void res.status(404).json({ detail: "Document not found" });
   const access = await ensureDocAccess(doc, userId, userEmail, db);
-  if (!access.ok || !can(access.projectRole, "content.edit"))
+  if (!access.ok)
     return void res.status(404).json({ detail: "Document not found" });
+  if (!can(access.projectRole, "content.edit"))
+    return void res.status(403).json({ detail: DOCUMENT_EDIT_FORBIDDEN });
 
   const active = await loadActiveVersion(documentId, db);
   const latestPath = active?.storage_path ?? null;

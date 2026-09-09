@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -125,10 +126,44 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
   const [removeSelectedOpen, setRemoveSelectedOpen] = useState(false);
   const [removingSelected, setRemovingSelected] = useState(false);
   const [removeMember, setRemoveMember] = useState<OrgMember | null>(null);
+  const [pendingSelfRoleChange, setPendingSelfRoleChange] = useState<{
+    member: OrgMember;
+    role: OrgRole;
+  } | null>(null);
+
+  /**
+   * Which read of each list is the current one.
+   *
+   * Two independent readers write these lists — the full `load` and the
+   * `refreshPeople` that runs whenever the Add-member modal opens or closes —
+   * and nothing ordered them. Opening the modal on a still-loading page fires
+   * both, and whichever response arrives LAST wins regardless of which was
+   * asked first: a three-person roster was seen collapsing to one, because
+   * the older answer landed second. Every read takes a ticket and applies its
+   * result only while that ticket is still the newest, so a slow answer to an
+   * old question is discarded instead of overwriting a newer one.
+   */
+  const membersRequestRef = useRef(0);
+  const invitationsRequestRef = useRef(0);
+
+  /**
+   * `member_count` is derived from the roster, so it moves with it or not at
+   * all — writing the count from a read whose rows were discarded would put
+   * the header and the table into two different truths.
+   */
+  const applyMembers = useCallback((ticket: number, next: OrgMember[]) => {
+    if (ticket !== membersRequestRef.current) return;
+    setMembers(next);
+    setOrg((current) =>
+      current ? { ...current, member_count: next.length } : current,
+    );
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    const membersTicket = ++membersRequestRef.current;
+    const invitationsTicket = ++invitationsRequestRef.current;
     try {
       const nextOrg = await getOrg(orgId);
       const [nextMembers, nextResources, nextInvitations] = await Promise.all([
@@ -138,10 +173,11 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
           ? listOrgInvitations(orgId)
           : Promise.resolve([] as OrgInvitation[]),
       ]);
-      setOrg({ ...nextOrg, member_count: nextMembers.length });
-      setMembers(nextMembers);
+      setOrg(nextOrg);
+      applyMembers(membersTicket, nextMembers);
       setResources(nextResources);
-      setInvitations(nextInvitations);
+      if (invitationsTicket === invitationsRequestRef.current)
+        setInvitations(nextInvitations);
     } catch (error) {
       console.error("Failed to load organization", error);
       setLoadError(
@@ -150,18 +186,72 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [orgId]);
+  }, [applyMembers, orgId]);
 
   const refreshInvitations = useCallback(async () => {
     if (org?.role !== "admin") return;
-    setInvitations(await listOrgInvitations(orgId));
+    const ticket = ++invitationsRequestRef.current;
+    const nextInvitations = await listOrgInvitations(orgId);
+    if (ticket !== invitationsRequestRef.current) return;
+    setInvitations(nextInvitations);
   }, [org?.role, orgId]);
+
+  const refreshMembers = useCallback(async () => {
+    const ticket = ++membersRequestRef.current;
+    applyMembers(ticket, await listOrgMembers(orgId));
+  }, [applyMembers, orgId]);
+
+  /**
+   * An invitation is accepted somewhere else entirely — in the recipient's
+   * browser — so nothing on this page hears about it. Both lists it lands in
+   * therefore have to be re-read together whenever the admin looks: the
+   * invitation leaves "Pending invitations" and the same person appears on the
+   * People roster. Reading only the invitations, which is what the Add member
+   * modal used to do, left the roster a reload behind.
+   *
+   * One failing does not cancel the other — but neither is it swallowed. A
+   * console line is not a user interface: the admin was left reading a roster
+   * that had silently stopped tracking the server, with the page looking
+   * exactly as it does when the refresh worked. It says so now, in the same
+   * place every other failed action on this page speaks.
+   */
+  const refreshPeople = useCallback(async () => {
+    const results = await Promise.allSettled([
+      refreshInvitations(),
+      refreshMembers(),
+    ]);
+    const failure = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (!failure) return;
+    console.error("Failed to refresh organization people", failure.reason);
+    setActionError(
+      userFacingApiError(
+        failure.reason,
+        "This organization's people could not be refreshed. Reload to see the current list.",
+      ),
+    );
+  }, [refreshInvitations, refreshMembers]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const isAdmin = org?.role === "admin";
+
+  /**
+   * Demoting yourself is the one role change that rewrites what this page is
+   * allowed to do, so it is confirmed before it runs rather than silently
+   * pulling the admin controls out from under the click.
+   */
+  function requestRoleChange(member: OrgMember, role: OrgRole) {
+    if (!isAdmin || member.role === role || busyMemberId) return;
+    if (member.user_id === user?.id && role !== "admin") {
+      setPendingSelfRoleChange({ member, role });
+      return;
+    }
+    void changeRole(member, role);
+  }
 
   async function changeRole(member: OrgMember, role: OrgRole) {
     if (!isAdmin || member.role === role || busyMemberId) return;
@@ -174,6 +264,14 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
           row.user_id === member.user_id ? { ...row, role } : row,
         ),
       );
+      // The membership row is not the only place this role lives: `org.role`
+      // gates every admin-only control and request on the page. Without this
+      // the demoted admin keeps a UI they no longer have rights for, and each
+      // action 403s until a reload.
+      if (member.user_id === user?.id) {
+        setOrg((current) => (current ? { ...current, role } : current));
+        if (role !== "admin") setInvitations([]);
+      }
     } catch (error) {
       setActionError(userFacingApiError(error, "Could not change that role."));
     } finally {
@@ -215,7 +313,7 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
       selectedMemberIds.includes(member.id),
     );
     if (selectedMembers.some((member) => member.user_id === user?.id)) {
-      setActionError("An organization must keep at least one admin.");
+      setActionError("Use Leave organization to remove yourself.");
       return;
     }
     setRemoveSelectedOpen(true);
@@ -298,7 +396,12 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
                 ? "Add member"
                 : "Only organization admins can add members",
               disabled: !isAdmin,
-              onClick: () => setInviteOpen(true),
+              onClick: () => {
+                setInviteOpen(true);
+                // The modal shows the invitation list this page loaded, which
+                // by now may name people who have already accepted.
+                void refreshPeople();
+              },
             },
             isAdmin
               ? {
@@ -342,7 +445,7 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
           isAdmin={isAdmin}
           busyMemberId={busyMemberId}
           onRetry={load}
-          onRoleChange={changeRole}
+          onRoleChange={requestRoleChange}
           onRemove={setRemoveMember}
         />
       ) : activeTab === "projects" ? (
@@ -384,8 +487,16 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
             open={inviteOpen}
             org={org}
             invitations={invitations}
-            onClose={() => setInviteOpen(false)}
-            onChanged={refreshInvitations}
+            onClose={() => {
+              setInviteOpen(false);
+              // An invitation sent or accepted while the modal was open
+              // changes BOTH lists behind it — a new invitation is pending, an
+              // accepted one is gone and its sender is now on the roster — so
+              // the admin returns to a re-read of both, not of the roster
+              // alone with a stale "Pending invitations" beside it.
+              void refreshPeople();
+            }}
+            onChanged={refreshPeople}
           />
           <OrganizationSettingsModal
             open={settingsOpen}
@@ -420,6 +531,19 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
         confirmStatus={busyMemberId ? "loading" : "idle"}
         onCancel={() => setRemoveMember(null)}
         onConfirm={() => void confirmRemoveMember()}
+      />
+      <ConfirmPopup
+        open={pendingSelfRoleChange !== null}
+        title="Give up admin access?"
+        message="You will lose admin access to this organization and can no longer manage its people, settings or invitations."
+        confirmLabel="Continue"
+        confirmStatus={busyMemberId ? "loading" : "idle"}
+        onCancel={() => setPendingSelfRoleChange(null)}
+        onConfirm={() => {
+          const pending = pendingSelfRoleChange;
+          setPendingSelfRoleChange(null);
+          if (pending) void changeRole(pending.member, pending.role);
+        }}
       />
       <ConfirmPopup
         open={removeSelectedOpen}
@@ -463,7 +587,7 @@ function PeopleTable({
   isAdmin: boolean;
   busyMemberId: string | null;
   onRetry: () => Promise<void>;
-  onRoleChange: (member: OrgMember, role: OrgRole) => Promise<void>;
+  onRoleChange: (member: OrgMember, role: OrgRole) => void;
   onRemove: (member: OrgMember) => void;
 }) {
   const [roleFilter, setRoleFilter] = useState<OrgRole | null>(null);
@@ -658,7 +782,7 @@ function PeopleTable({
                     label={label}
                     editable={isAdmin}
                     disabled={busyMemberId === member.user_id}
-                    onChange={(role) => void onRoleChange(member, role)}
+                    onChange={(role) => onRoleChange(member, role)}
                   />
                 </TableCell>
                 <TableCell className="w-36">

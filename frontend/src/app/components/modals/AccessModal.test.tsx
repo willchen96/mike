@@ -540,6 +540,80 @@ describe("AccessModal — per-recipient roles", () => {
         expect(creatorRow).not.toBeNull();
         expect(within(creatorRow!).getByText("Owner")).toBeInTheDocument();
     });
+
+    it("gives the signed-in manager no way to remove or re-role themselves", async () => {
+        // The viewer's own grant row offered a Remove action — one click,
+        // no confirmation, instant self-lockout — and a role picker whose
+        // every option the server refuses.
+        render(
+            <AccessModal
+                open
+                onClose={vi.fn()}
+                resource={PROJECT}
+                fetchAccess={() =>
+                    Promise.resolve({
+                        owner: {
+                            user_id: "u1",
+                            email: "creator@firm.example",
+                            display_name: "Creator",
+                            role: "owner" as const,
+                        },
+                        members: [
+                            {
+                                email: "me@firm.example",
+                                display_name: "Me",
+                                role: "owner" as const,
+                            },
+                            {
+                                email: "counsel@outside.example",
+                                display_name: null,
+                                role: "viewer" as const,
+                            },
+                        ],
+                    })
+                }
+                currentUserEmail="me@firm.example"
+                breadcrumb={["Projects", "Matter", "Access"]}
+                access={{
+                    grants: [
+                        { email: "me@firm.example", role: "owner" },
+                        { email: "counsel@outside.example", role: "viewer" },
+                    ],
+                    orgId: null,
+                    canManage: true,
+                    onGrant: vi.fn() as never,
+                    onRevoke: vi.fn(),
+                }}
+            />,
+        );
+
+        const ownRow = (await screen.findByText("You")).closest<HTMLElement>(
+            '[role="listitem"]',
+        );
+        expect(ownRow).not.toBeNull();
+        expect(
+            within(ownRow!).queryByRole("button", {
+                name: "Actions for me@firm.example",
+            }),
+        ).not.toBeInTheDocument();
+        expect(
+            within(ownRow!).queryByRole("button", {
+                name: "Role for me@firm.example",
+            }),
+        ).not.toBeInTheDocument();
+        expect(within(ownRow!).getByText("Owner")).toBeInTheDocument();
+
+        expect(
+            screen.getByRole("button", {
+                name: "Actions for counsel@outside.example",
+            }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", {
+                name: "Role for counsel@outside.example",
+            }),
+        ).toBeInTheDocument();
+    });
 });
 
 describe("OrganizationAccessEditor — row actions", () => {
@@ -584,7 +658,10 @@ describe("OrganizationAccessEditor — row actions", () => {
             expect.objectContaining({ email: "owner@firm.example" }),
         );
 
-        await user.click(screen.getByRole("button", { name: "Deny list" }));
+        // The deny list opens itself because it has an entry, and says so.
+        expect(
+            screen.getByRole("button", { name: "Deny list (1)" }),
+        ).toHaveAttribute("aria-expanded", "true");
         const denyList = screen.getByRole("list", {
             name: "Deny list entries",
         });

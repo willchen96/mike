@@ -47,6 +47,12 @@ interface Props {
     onShowAllVersions?: () => void;
     onUploadNewVersion?: () => void;
     onNewSubfolder?: () => void;
+    /**
+     * Offered but refused: the caller's role cannot organize folders here.
+     * Shown disabled rather than hidden, so the menu is the same shape for
+     * everybody and the reason is legible — the same treatment Delete has.
+     */
+    newSubfolderDisabled?: boolean;
     deleting?: boolean;
     deleteDisabled?: boolean;
     onEditDetails?: () => void;
@@ -82,6 +88,7 @@ export const RowActionMenuItems = forwardRef<
     onShowAllVersions,
     onUploadNewVersion,
     onNewSubfolder,
+    newSubfolderDisabled = false,
     deleting,
     deleteDisabled = false,
     onEditDetails,
@@ -125,8 +132,18 @@ export const RowActionMenuItems = forwardRef<
             )}
             {onNewSubfolder && (
                 <LiquidDropdownButton
-                    onClick={() => { onClose(); onNewSubfolder(); }}
-                    className={ROW_ACTION_LEFT_ITEM_CLASS}
+                    onClick={() => {
+                        if (newSubfolderDisabled) return;
+                        onClose();
+                        onNewSubfolder();
+                    }}
+                    disabled={newSubfolderDisabled}
+                    aria-disabled={newSubfolderDisabled || undefined}
+                    className={cn(
+                        ROW_ACTION_LEFT_ITEM_CLASS,
+                        newSubfolderDisabled &&
+                            "cursor-not-allowed opacity-40 hover:bg-transparent",
+                    )}
                 >
                     <SubfolderSvgIcon className="h-3.5 w-3.5 shrink-0" />
                     {newSubfolderLabel}

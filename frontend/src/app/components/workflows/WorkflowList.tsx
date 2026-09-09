@@ -171,6 +171,7 @@ export function WorkflowList({
     error: workflowsError,
     loadMoreError,
     loadMore,
+    retry: refreshWorkflows,
     selectedWorkflowIds,
     setSelectedWorkflowIds,
     selectAllMatching,
@@ -610,7 +611,13 @@ export function WorkflowList({
 
       <NewWorkflowModal
         open={newModalOpen}
-        onClose={() => setNewModalOpen(false)}
+        onClose={(createdWithoutHandoff) => {
+          setNewModalOpen(false);
+          // The workflow exists but never reached onCreated (its access
+          // grants failed), so nothing has inserted a row for it. Refetch
+          // rather than leave it invisible until a page reload.
+          if (createdWithoutHandoff) refreshWorkflows();
+        }}
         onCreated={(workflow) => {
           setWorkflows((current) => [workflow, ...current]);
           setNewModalOpen(false);

@@ -367,10 +367,13 @@ describe("apiRequest plumbing (via thin wrappers)", () => {
         });
     });
 
-    it("labels a 4xx with its status when the detail is unusable", async () => {
-        // The non-5xx sibling of the test above: a client error whose detail
-        // is not a usable string gets the status-labelled fallback, never the
-        // internal-error copy reserved for 5xx.
+    it("treats a 4xx with an unusable detail as a malformed response", async () => {
+        // The non-5xx sibling of the test above, and the one that reached a
+        // user: a 4xx message is shown VERBATIM by userFacingApiError, on the
+        // assumption that a 4xx says something actionable. The old
+        // status-labelled fallback was not that — it put "Account not deleted
+        // / API error: 409" on screen. A body with no detail is a malformed
+        // error response and says the malformed-response sentence.
         fetchMock.mockResolvedValue(
             jsonResponse({ detail: { nested: true } }, { status: 404 }),
         );
@@ -378,7 +381,25 @@ describe("apiRequest plumbing (via thin wrappers)", () => {
         await expect(getUserProfile()).rejects.toMatchObject({
             status: 404,
             code: null,
-            message: "API error: 404",
+            message: "The request could not be completed. Please try again.",
+        });
+    });
+
+    it("uses the same wording whether the body is empty JSON or not JSON", async () => {
+        // A 409 with `{}` (the shape that produced "API error: 409") and a
+        // 409 with no JSON at all are the same failure to the reader.
+        fetchMock.mockResolvedValue(jsonResponse({}, { status: 409 }));
+        await expect(getUserProfile()).rejects.toMatchObject({
+            status: 409,
+            message: "The request could not be completed. Please try again.",
+        });
+
+        fetchMock.mockResolvedValue(
+            new Response("<html>gateway</html>", { status: 409 }),
+        );
+        await expect(getUserProfile()).rejects.toMatchObject({
+            status: 409,
+            message: "The request could not be completed. Please try again.",
         });
     });
 

@@ -39,6 +39,15 @@ function Probe() {
     return (
         <div>
             <button onClick={() => void saveChat()}>save</button>
+            <button onClick={() => void saveChat("p1", "editor")}>
+                save in project as editor
+            </button>
+            <button onClick={() => void saveChat("p1", "owner")}>
+                save in project as owner
+            </button>
+            <button onClick={() => void saveChat("p1")}>
+                save in project with unknown role
+            </button>
             <button
                 onClick={() => {
                     renameChat("chat-9", "New title").catch(() => {
@@ -66,6 +75,17 @@ beforeEach(() => {
     renameChatApi.mockResolvedValue(undefined);
 });
 
+async function renderProbe() {
+    render(
+        <ChatHistoryProvider>
+            <Probe />
+        </ChatHistoryProvider>,
+    );
+    await waitFor(() =>
+        expect(screen.getByTestId("loaded")).toHaveTextContent("true"),
+    );
+}
+
 describe("saveChat's optimistic row", () => {
     it("carries the creator's owner standing, as the server would serve it", async () => {
         render(
@@ -85,6 +105,42 @@ describe("saveChat's optimistic row", () => {
             expect(screen.getByTestId("role")).toHaveTextContent("owner"),
         );
         expect(screen.getByTestId("is-owner")).toHaveTextContent("true");
+    });
+
+    // A PROJECT chat's role is not the creator's to claim: the server derives
+    // it from the project (ensureSharedRowAccess). Stamping owner offered an
+    // editor the Delete item in the sidebar, and the server answered 403.
+    it("stamps a project chat with the caller's project role, not owner", async () => {
+        await renderProbe();
+
+        fireEvent.click(screen.getByText("save in project as editor"));
+
+        await waitFor(() =>
+            expect(screen.getByTestId("role")).toHaveTextContent("editor"),
+        );
+        expect(screen.getByTestId("is-owner")).toHaveTextContent("false");
+    });
+
+    it("keeps owner standing for a project owner", async () => {
+        await renderProbe();
+
+        fireEvent.click(screen.getByText("save in project as owner"));
+
+        await waitFor(() =>
+            expect(screen.getByTestId("role")).toHaveTextContent("owner"),
+        );
+        expect(screen.getByTestId("is-owner")).toHaveTextContent("true");
+    });
+
+    it("falls back to editor, not owner, when the project role is unknown", async () => {
+        await renderProbe();
+
+        fireEvent.click(screen.getByText("save in project with unknown role"));
+
+        await waitFor(() =>
+            expect(screen.getByTestId("role")).toHaveTextContent("editor"),
+        );
+        expect(screen.getByTestId("is-owner")).toHaveTextContent("false");
     });
 
     it("rethrows a refused rename so the row can say why", async () => {

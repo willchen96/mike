@@ -186,6 +186,54 @@ describe("SidebarChatItem role gates", () => {
         ).toBeInTheDocument();
     });
 
+    it("marks a colleague's chat as shared", async () => {
+        // get_chats_overview now lists colleagues' organization-project chats
+        // in the same sidebar list as the caller's own, with nothing in the
+        // row telling them apart — so a rename or a delete could land on
+        // somebody else's thread by mistake.
+        render(
+            <SidebarChatItem
+                chat={chat({ is_owner: false, access_role: "editor" })}
+                isActive
+                onSelect={vi.fn()}
+            />,
+        );
+
+        // Plain text, not a pill badge (AGENTS.md: informational labels are
+        // text), at a size and colour that meets the contrast baseline —
+        // text-[10px] text-gray-400 measured about 2.6:1.
+        const marker = screen.getByText("Shared");
+        expect(marker).toHaveClass("text-xs", "text-gray-500");
+        // The marker renders in a sibling element, so it reached neither the
+        // row's tooltip nor its accessible name: a screen-reader user heard
+        // exactly what the thread's owner hears.
+        expect(
+            screen.getByRole("button", { name: "Quarterly filing (Shared)" }),
+        ).toHaveAttribute("title", "Quarterly filing (Shared)");
+    });
+
+    it("does not mark the caller's own chat", () => {
+        render(
+            <SidebarChatItem
+                chat={chat({ is_owner: true })}
+                isActive
+                onSelect={vi.fn()}
+            />,
+        );
+
+        expect(screen.queryByText("Shared")).not.toBeInTheDocument();
+    });
+
+    it("claims nothing about a row that carries no is_owner at all", () => {
+        // A row with no ownership field has told us nothing; "Shared" would
+        // be a claim we cannot make, the same reason roleFrom fails closed.
+        render(
+            <SidebarChatItem chat={chat({})} isActive onSelect={vi.fn()} />,
+        );
+
+        expect(screen.queryByText("Shared")).not.toBeInTheDocument();
+    });
+
     it("surfaces a failed delete instead of swallowing it", async () => {
         deleteChat.mockRejectedValue(new Error("boom"));
         render(

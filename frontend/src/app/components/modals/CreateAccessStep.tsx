@@ -222,6 +222,7 @@ export function CreateAccessStep({
                 loading={loading}
                 canManage={!inheritedFromProject}
                 currentUserEmail={currentUserEmail}
+                currentUserId={currentUserId}
                 newRole={newRole}
                 onNewRoleChange={setNewRole}
                 onAdd={!inheritedFromProject ? addDirect : undefined}

@@ -31,6 +31,7 @@ import {
   type ProjectPeople,
 } from "@/app/lib/mikeApi";
 import { can, roleFromLoaded } from "@/app/lib/permissions";
+import { userFacingApiError } from "@/app/lib/userFacingError";
 import { UseWorkflowModal } from "@/app/components/workflows/UseWorkflowModal";
 import { WFEditColumnModal } from "@/app/components/workflows/WFEditColumnModal";
 import { WFColumnViewModal } from "@/app/components/workflows/WFColumnViewModal";
@@ -170,6 +171,11 @@ export function WorkflowDetailPage({ id, workflowType }: Props) {
   // Share / use / details popovers
   const [shareOpen, setShareOpen] = useState(false);
   const [workflowShares, setWorkflowShares] = useState<WorkflowShare[]>([]);
+  // A roster re-read that failed after a change the server accepted. Shown
+  // beside the list rather than in place of the success.
+  const [shareRefreshError, setShareRefreshError] = useState<string | null>(
+    null,
+  );
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [useOpen, setUseOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -270,6 +276,25 @@ export function WorkflowDetailPage({ id, workflowType }: Props) {
     setWorkflowShares(shares);
     return shares;
   }, [id]);
+
+  /**
+   * Re-read the roster after a change the server has already accepted, and
+   * say so when that read fails instead of leaving the modal showing the
+   * roles as they were before the change.
+   */
+  const refreshShares = useCallback(async () => {
+    try {
+      await fetchWorkflowShares();
+      setShareRefreshError(null);
+    } catch (error) {
+      setShareRefreshError(
+        userFacingApiError(
+          error,
+          "The change was saved, but this list could not be reloaded. Reopen Access to see the current one.",
+        ),
+      );
+    }
+  }, [fetchWorkflowShares]);
 
   const fetchWorkflowAccess = useCallback(async (): Promise<ProjectPeople> => {
     return getWorkflowPeople(id);
@@ -502,7 +527,10 @@ export function WorkflowDetailPage({ id, workflowType }: Props) {
           [
             canShare
               ? {
-                  onClick: () => setShareOpen(true),
+                  onClick: () => {
+                    setShareRefreshError(null);
+                    setShareOpen(true);
+                  },
                   title: "Open workflow access",
                   iconOnly: true,
                   icon: <Users className="h-4 w-4" />,
@@ -578,6 +606,9 @@ export function WorkflowDetailPage({ id, workflowType }: Props) {
           resource={{ id }}
           fetchAccess={fetchWorkflowAccess}
           currentUserEmail={user?.email ?? null}
+          // Both identifiers, so a roster row without an email still cannot
+          // offer the caller a Remove that locks them out of their own row.
+          currentUserId={user?.id ?? null}
           breadcrumb={["Workflows", workflow.metadata.title, "Access"]}
           access={{
             grants: workflowShares.map((share) => ({
@@ -587,9 +618,21 @@ export function WorkflowDetailPage({ id, workflowType }: Props) {
             orgId: workflow.org_id ?? null,
             ownerLabel: "Workflow owners",
             canManage: canShare,
+            error: shareRefreshError,
+            // The refresh is deliberately not part of the mutation's result:
+            // AccessModal reports a rejection as "Could not change that role"
+            // / "Could not remove access", so a failing re-read would blame
+            // the grant that actually succeeded.
+            //
+            // It is not nothing, either. `.catch(() => {})` left the list
+            // showing the roles as they were BEFORE a change the server had
+            // accepted, with no sign that the screen had stopped tracking the
+            // server — the next click would then be aimed at a row whose role
+            // is not the role it shows. The mutation still reads as a
+            // success; the stale list says it is stale.
             onGrant: async (email, role) => {
               await shareWorkflow(id, { emails: [email], role });
-              await fetchWorkflowShares();
+              await refreshShares();
             },
             onRevoke: async (email) => {
               const share = workflowShares.find(
@@ -598,7 +641,7 @@ export function WorkflowDetailPage({ id, workflowType }: Props) {
                   email.trim().toLowerCase(),
               );
               if (share) await deleteWorkflowShare(id, share.id);
-              await fetchWorkflowShares();
+              await refreshShares();
             },
           }}
         />
